@@ -103,6 +103,10 @@ def create_container(container_binary: str, container_name: str, base_image: str
         ])
 
     container_cmd.extend([
+        "--security-opt", "label=disable",
+        "--security-opt", "seccomp=unconfined", 
+        "--cap-add=all",
+        "--privileged",
         "-v", f"{home_dir}/.claude.json:/root/.claude.json:Z",
         "-v", f"{home_dir}/.claude/:/root/.claude/:Z",
         "-v", f"{work_dir}:{target_dir}:Z",

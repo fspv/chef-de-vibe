@@ -686,6 +686,47 @@ else:
         self.assertIn("--log-driver", container_cmd)
         self.assertIn("none", container_cmd)
 
+    def test_security_options_included(self) -> None:
+        """Test that security options are included in container creation."""
+        # Create simple dummy podman for session workflow
+        podman_script = """#!/usr/bin/env python3
+import sys
+if len(sys.argv) >= 3 and sys.argv[1] == "container" and sys.argv[2] == "exists":
+    sys.exit(1)  # Container doesn't exist
+elif len(sys.argv) >= 2 and sys.argv[1] == "run" and "-d" in sys.argv:
+    sys.exit(0)  # Container creation success
+elif len(sys.argv) >= 2 and sys.argv[1] == "exec":
+    sys.exit(0)  # Execution success
+else:
+    sys.exit(1)
+"""
+        self.create_dummy_binary("podman", podman_script)
+
+        returncode, stdout, stderr = self.run_script([])
+
+        self.assertEqual(returncode, 0)
+        
+        # Parse the stderr output to find the "Running command:" line
+        stderr_lines = stderr.strip().split('\n')
+        container_cmd = None
+        for line in stderr_lines:
+            if line.startswith("Running command:"):
+                container_cmd = line[len("Running command: "):].split()
+                break
+        
+        self.assertIsNotNone(container_cmd, "Should find container creation command in stderr")
+        
+        # Check that all security options are present
+        self.assertIn("--security-opt", container_cmd)
+        self.assertIn("label=disable", container_cmd)
+        self.assertIn("seccomp=unconfined", container_cmd)
+        self.assertIn("--cap-add=all", container_cmd)
+        self.assertIn("--privileged", container_cmd)
+        
+        # Verify the security-opt flags have their values
+        security_opt_count = container_cmd.count("--security-opt")
+        self.assertEqual(security_opt_count, 2, "Should have exactly 2 --security-opt flags")
+
     def test_debug_mode_various_values(self) -> None:
         """Test various DEBUG environment variable values."""
         # Create simple dummy podman for session workflow
