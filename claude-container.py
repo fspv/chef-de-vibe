@@ -27,10 +27,10 @@ def parse_args():
 def get_session_info(args):
     """Get session ID and determine if we need to add --session-id to claude args."""
     if args.resume:
-        # Use session ID from --resume argument, don't modify claude args
+        # Use session ID from --resume argument, session args already present
         return args.resume, False
     elif args.session_id:
-        # Use provided session ID, don't modify claude args
+        # Use provided session ID, session args already present
         return args.session_id, False
     else:
         # Generate new UUID session ID and add it to claude args
@@ -120,7 +120,7 @@ def execute_in_container(
 def main():
     # Get environment variables
     base_image = os.environ.get(
-        "CLAUDE_CONTAINER_IMAGE", "nuhotetotniksvoboden/claudecodeui:latest"
+        "CLAUDE_CONTAINER_IMAGE", "docker.io/nuhotetotniksvoboden/claudecodeui:latest"
     )
     claude_binary = os.environ.get("CLAUDE_BINARY", "claude")
     container_binary = os.environ.get("CONTAINER_BINARY", "podman")
@@ -138,8 +138,8 @@ def main():
         session_id, add_session_id = get_session_info(args)
         container_name = f"claude-session-{session_id}"
         
-        # Prepare claude arguments
-        claude_args = remaining_args.copy()
+        # Prepare claude arguments - use ALL original arguments
+        claude_args = sys.argv[1:].copy()
         if add_session_id:
             claude_args.extend(["--session-id", session_id])
 

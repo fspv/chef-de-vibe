@@ -1070,9 +1070,7 @@ else:
         self.assertEqual(output["container"], "claude-session-my-custom-session")
         
         claude_args = output["claude_args"]
-        self.assertIn("test", claude_args)
-        self.assertIn("command", claude_args)
-        self.assertNotIn("--session-id", claude_args)  # Should not be added for explicit --session-id
+        self.assertEqual(claude_args, ["--session-id", "my-custom-session", "test", "command"])  # All original args should be preserved
 
     def test_container_creation_failure(self) -> None:
         """Test handling of container creation failure."""
