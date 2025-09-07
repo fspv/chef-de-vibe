@@ -1465,7 +1465,7 @@ else:
             self.assertTrue(output["has_settings_mount"], "Should mount settings.json with dangerous flag")
 
     def test_settings_mount_path_correctness(self) -> None:
-        """Test that settings.json is mounted from correct source path."""
+        """Test that settings.json and hook script are mounted from correct source paths."""
         # Create dummy podman that captures all volume mounts
         podman_script = """#!/usr/bin/env python3
 import sys
@@ -1498,19 +1498,26 @@ else:
             output = json.loads(stdout.strip())
             volumes = output["volumes"]
             
-            # Find the settings.json mount
+            # Find the settings.json and hook script mounts
             settings_mount = None
+            hook_mount = None
             for volume in volumes:
                 if ":/root/.claude/settings.json:Z" in volume:
                     settings_mount = volume
-                    break
+                elif ":/bin/claude-hook-pretooluse.sh:Z" in volume:
+                    hook_mount = volume
             
             self.assertIsNotNone(settings_mount, "Should have settings.json volume mount")
+            self.assertIsNotNone(hook_mount, "Should have hook script volume mount")
             
-            # Check that the source path ends with claude-settings.json
-            source_path = settings_mount.split(":")[0]
-            self.assertTrue(source_path.endswith("claude-settings.json"), 
-                          f"Settings source should end with claude-settings.json, got: {source_path}")
+            # Check that the source paths are correct
+            settings_source = settings_mount.split(":")[0]
+            hook_source = hook_mount.split(":")[0]
+            
+            self.assertEqual(settings_source, "/root/.claude/settings.json",
+                          f"Settings source should be /root/.claude/settings.json, got: {settings_source}")
+            self.assertEqual(hook_source, "/bin/claude-hook-pretooluse.sh",
+                          f"Hook source should be /bin/claude-hook-pretooluse.sh, got: {hook_source}")
 
     def test_flag_removal_from_claude_args(self) -> None:
         """Test that --dangerously-skip-permissions is removed from arguments passed to Claude."""

@@ -117,9 +117,9 @@ def create_container(container_binary: str, container_name: str, base_image: str
 
     # Add Claude settings override if skip_permissions is enabled
     if skip_permissions:
-        settings_source = os.path.join(os.path.dirname(__file__), "claude-settings.json")
         container_cmd.extend([
-            "-v", f"{settings_source}:/root/.claude/settings.json:Z"
+            "-v", "/root/.claude/settings.json:/root/.claude/settings.json:Z",
+            "-v", "/bin/claude-hook-pretooluse.sh:/bin/claude-hook-pretooluse.sh:Z"
         ])
 
     container_cmd.extend([
@@ -196,6 +196,9 @@ def main():
         
         # Check if we should skip permissions
         skip_permissions = args.dangerously_skip_permissions
+        
+        if skip_permissions:
+            print("WARNING: Dangerously skip permissions is enabled. This will auto-approve all permission requests.", file=sys.stderr)
         
         # Handle git worktree creation if current directory is a git repo
         work_dir = current_dir
