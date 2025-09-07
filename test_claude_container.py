@@ -1349,6 +1349,416 @@ else:
         self.assertEqual(len(session_dirs), 1)
 
 
+class TestDangerousSkipPermissions(unittest.TestCase):
+    """Test --dangerously-skip-permissions functionality."""
+
+    def setUp(self) -> None:
+        """Set up test environment."""
+        self.test_dir = tempfile.mkdtemp()
+        self.original_env = os.environ.copy()
+
+        # Create dummy binaries directory
+        self.dummy_bin_dir = Path(self.test_dir) / "bin"
+        self.dummy_bin_dir.mkdir(parents=True, exist_ok=True)
+
+        # Add dummy bin to PATH
+        os.environ["PATH"] = f"{self.dummy_bin_dir}:{os.environ.get('PATH', '')}"
+
+        # Get script path
+        self.script_path = Path(__file__).parent / "claude-container.py"
+
+    def tearDown(self) -> None:
+        """Clean up test environment."""
+        # Restore original environment
+        os.environ.clear()
+        os.environ.update(self.original_env)
+
+        # Clean up test directory
+        subprocess.run(["rm", "-rf", self.test_dir], check=True)
+
+    def create_dummy_binary(self, name: str, content: str) -> Path:
+        """Create a dummy executable binary."""
+        binary_path = self.dummy_bin_dir / name
+        binary_path.write_text(content)
+        binary_path.chmod(0o755)
+        return binary_path
+
+    def run_script(
+        self, args: List[str] = None, env: Dict[str, str] = None
+    ) -> Tuple[int, str, str]:
+        """Run the claude-container.py script and capture output."""
+        cmd = [sys.executable, str(self.script_path)]
+        if args:
+            cmd.extend(args)
+
+        # Merge environment variables
+        run_env = os.environ.copy()
+        if env:
+            run_env.update(env)
+
+        # Run from test_dir (non-git directory) to avoid git worktree logic
+        result = subprocess.run(cmd, capture_output=True, text=True, env=run_env, cwd=self.test_dir)
+        return result.returncode, result.stdout, result.stderr
+
+    def test_flag_parsing_without_dangerous_flag(self) -> None:
+        """Test that normal execution works without --dangerously-skip-permissions flag."""
+        # Create simple dummy podman for session workflow
+        podman_script = """#!/usr/bin/env python3
+import sys
+import json
+if len(sys.argv) >= 3 and sys.argv[1] == "container" and sys.argv[2] == "exists":
+    sys.exit(1)  # Container doesn't exist
+elif len(sys.argv) >= 2 and sys.argv[1] == "run" and "-d" in sys.argv:
+    # Check if settings.json mount is present
+    has_settings_mount = False
+    for i, arg in enumerate(sys.argv):
+        if arg == "-v" and i + 1 < len(sys.argv):
+            if "claude-settings.json:/root/.claude/settings.json:Z" in sys.argv[i + 1]:
+                has_settings_mount = True
+                break
+    print(json.dumps({"has_settings_mount": has_settings_mount}))
+    sys.exit(0)
+elif len(sys.argv) >= 2 and sys.argv[1] == "exec":
+    sys.exit(0)
+else:
+    sys.exit(1)
+"""
+        self.create_dummy_binary("podman", podman_script)
+
+        returncode, stdout, stderr = self.run_script(["--test", "arg"])
+
+        self.assertEqual(returncode, 0)
+        if stdout.strip():
+            output = json.loads(stdout.strip())
+            self.assertFalse(output["has_settings_mount"], "Should not mount settings.json without dangerous flag")
+
+    def test_flag_parsing_with_dangerous_flag(self) -> None:
+        """Test that --dangerously-skip-permissions flag is properly parsed and processed."""
+        # Create dummy podman that captures volume mounts
+        podman_script = """#!/usr/bin/env python3
+import sys
+import json
+if len(sys.argv) >= 3 and sys.argv[1] == "container" and sys.argv[2] == "exists":
+    sys.exit(1)  # Container doesn't exist
+elif len(sys.argv) >= 2 and sys.argv[1] == "run" and "-d" in sys.argv:
+    # Check if settings.json mount is present
+    has_settings_mount = False
+    for i, arg in enumerate(sys.argv):
+        if arg == "-v" and i + 1 < len(sys.argv):
+            if "claude-settings.json:/root/.claude/settings.json:Z" in sys.argv[i + 1]:
+                has_settings_mount = True
+                break
+    print(json.dumps({"has_settings_mount": has_settings_mount}))
+    sys.exit(0)
+elif len(sys.argv) >= 2 and sys.argv[1] == "exec":
+    sys.exit(0)
+else:
+    sys.exit(1)
+"""
+        self.create_dummy_binary("podman", podman_script)
+
+        returncode, stdout, stderr = self.run_script(["--dangerously-skip-permissions", "--test", "arg"])
+
+        self.assertEqual(returncode, 0)
+        if stdout.strip():
+            output = json.loads(stdout.strip())
+            self.assertTrue(output["has_settings_mount"], "Should mount settings.json with dangerous flag")
+
+    def test_settings_mount_path_correctness(self) -> None:
+        """Test that settings.json is mounted from correct source path."""
+        # Create dummy podman that captures all volume mounts
+        podman_script = """#!/usr/bin/env python3
+import sys
+import json
+if len(sys.argv) >= 3 and sys.argv[1] == "container" and sys.argv[2] == "exists":
+    sys.exit(1)  # Container doesn't exist
+elif len(sys.argv) >= 2 and sys.argv[1] == "run" and "-d" in sys.argv:
+    # Extract all volume mounts
+    volumes = []
+    i = 0
+    while i < len(sys.argv):
+        if sys.argv[i] == "-v" and i + 1 < len(sys.argv):
+            volumes.append(sys.argv[i + 1])
+            i += 2
+        else:
+            i += 1
+    print(json.dumps({"volumes": volumes}))
+    sys.exit(0)
+elif len(sys.argv) >= 2 and sys.argv[1] == "exec":
+    sys.exit(0)
+else:
+    sys.exit(1)
+"""
+        self.create_dummy_binary("podman", podman_script)
+
+        returncode, stdout, stderr = self.run_script(["--dangerously-skip-permissions", "--test"])
+
+        self.assertEqual(returncode, 0)
+        if stdout.strip():
+            output = json.loads(stdout.strip())
+            volumes = output["volumes"]
+            
+            # Find the settings.json mount
+            settings_mount = None
+            for volume in volumes:
+                if ":/root/.claude/settings.json:Z" in volume:
+                    settings_mount = volume
+                    break
+            
+            self.assertIsNotNone(settings_mount, "Should have settings.json volume mount")
+            
+            # Check that the source path ends with claude-settings.json
+            source_path = settings_mount.split(":")[0]
+            self.assertTrue(source_path.endswith("claude-settings.json"), 
+                          f"Settings source should end with claude-settings.json, got: {source_path}")
+
+    def test_flag_removal_from_claude_args(self) -> None:
+        """Test that --dangerously-skip-permissions is removed from arguments passed to Claude."""
+        # Create dummy podman that captures claude arguments
+        podman_script = """#!/usr/bin/env python3
+import sys
+import json
+if len(sys.argv) >= 3 and sys.argv[1] == "container" and sys.argv[2] == "exists":
+    sys.exit(1)  # Container doesn't exist
+elif len(sys.argv) >= 2 and sys.argv[1] == "run" and "-d" in sys.argv:
+    sys.exit(0)  # Container creation success
+elif len(sys.argv) >= 2 and sys.argv[1] == "exec":
+    # Extract claude args (everything after container name and claude binary)
+    claude_idx = -1
+    for i, arg in enumerate(sys.argv):
+        if arg == "claude":
+            claude_idx = i
+            break
+    claude_args = sys.argv[claude_idx + 1:] if claude_idx >= 0 else []
+    print(json.dumps({"claude_args": claude_args}))
+    sys.exit(0)
+else:
+    sys.exit(1)
+"""
+        self.create_dummy_binary("podman", podman_script)
+
+        returncode, stdout, stderr = self.run_script([
+            "--dangerously-skip-permissions", 
+            "--test", 
+            "arg1", 
+            "--other-flag",
+            "value"
+        ])
+
+        self.assertEqual(returncode, 0)
+        if stdout.strip():
+            output = json.loads(stdout.strip())
+            claude_args = output["claude_args"]
+            
+            # Flag should be removed from Claude arguments
+            self.assertNotIn("--dangerously-skip-permissions", claude_args, 
+                           "Dangerous flag should not be passed to Claude")
+            
+            # Other arguments should be preserved
+            self.assertIn("--test", claude_args)
+            self.assertIn("arg1", claude_args)
+            self.assertIn("--other-flag", claude_args)
+            self.assertIn("value", claude_args)
+
+    def test_flag_with_other_session_args(self) -> None:
+        """Test that --dangerously-skip-permissions works with other session management flags."""
+        # Create dummy podman that captures volume mounts and claude args
+        podman_script = """#!/usr/bin/env python3
+import sys
+import json
+if len(sys.argv) >= 3 and sys.argv[1] == "container" and sys.argv[2] == "exists":
+    sys.exit(0)  # Container exists (for --resume test)
+elif len(sys.argv) >= 2 and sys.argv[1] == "run" and "-d" in sys.argv:
+    # This should not be called since container exists
+    sys.exit(1)  
+elif len(sys.argv) >= 2 and sys.argv[1] == "exec":
+    # Extract claude args
+    claude_idx = -1
+    for i, arg in enumerate(sys.argv):
+        if arg == "claude":
+            claude_idx = i
+            break
+    claude_args = sys.argv[claude_idx + 1:] if claude_idx >= 0 else []
+    print(json.dumps({"claude_args": claude_args}))
+    sys.exit(0)
+else:
+    sys.exit(1)
+"""
+        self.create_dummy_binary("podman", podman_script)
+
+        # Test with --resume
+        returncode, stdout, stderr = self.run_script([
+            "--resume", 
+            "test-session", 
+            "--dangerously-skip-permissions",
+            "--test",
+            "command"
+        ])
+
+        self.assertEqual(returncode, 0)
+        if stdout.strip():
+            output = json.loads(stdout.strip())
+            claude_args = output["claude_args"]
+            
+            # Dangerous flag should be removed
+            self.assertNotIn("--dangerously-skip-permissions", claude_args)
+            # Other args should be preserved
+            self.assertIn("--test", claude_args)
+            self.assertIn("command", claude_args)
+            # --resume args should be preserved
+            self.assertIn("--resume", claude_args)
+            self.assertIn("test-session", claude_args)
+
+    def test_multiple_dangerous_flags(self) -> None:
+        """Test handling of multiple --dangerously-skip-permissions flags (edge case)."""
+        # Create dummy podman that captures claude arguments  
+        podman_script = """#!/usr/bin/env python3
+import sys
+import json
+if len(sys.argv) >= 3 and sys.argv[1] == "container" and sys.argv[2] == "exists":
+    sys.exit(1)  # Container doesn't exist
+elif len(sys.argv) >= 2 and sys.argv[1] == "run" and "-d" in sys.argv:
+    sys.exit(0)  # Container creation success
+elif len(sys.argv) >= 2 and sys.argv[1] == "exec":
+    # Extract claude args
+    claude_idx = -1
+    for i, arg in enumerate(sys.argv):
+        if arg == "claude":
+            claude_idx = i
+            break
+    claude_args = sys.argv[claude_idx + 1:] if claude_idx >= 0 else []
+    print(json.dumps({"claude_args": claude_args}))
+    sys.exit(0)
+else:
+    sys.exit(1)
+"""
+        self.create_dummy_binary("podman", podman_script)
+
+        returncode, stdout, stderr = self.run_script([
+            "--dangerously-skip-permissions",
+            "--test", 
+            "--dangerously-skip-permissions",  # Duplicate flag
+            "arg"
+        ])
+
+        self.assertEqual(returncode, 0)
+        if stdout.strip():
+            output = json.loads(stdout.strip())
+            claude_args = output["claude_args"]
+            
+            # Both instances of the flag should be removed
+            self.assertNotIn("--dangerously-skip-permissions", claude_args)
+            # Other arguments should be preserved
+            self.assertIn("--test", claude_args)
+            self.assertIn("arg", claude_args)
+
+
+class TestHookScript(unittest.TestCase):
+    """Test the claude-hook-pretooluse.sh script functionality."""
+
+    def setUp(self) -> None:
+        """Set up test environment."""
+        self.script_path = Path(__file__).parent / "claude-hook-pretooluse.sh"
+
+    def test_hook_script_exists(self) -> None:
+        """Test that hook script file exists and is executable."""
+        self.assertTrue(self.script_path.exists(), "Hook script should exist")
+        # Check if file is executable
+        self.assertTrue(os.access(self.script_path, os.X_OK), "Hook script should be executable")
+
+    def test_hook_script_output_format(self) -> None:
+        """Test that hook script outputs correct JSON format."""
+        result = subprocess.run([str(self.script_path)], capture_output=True, text=True)
+        
+        self.assertEqual(result.returncode, 0, "Hook script should execute successfully")
+        
+        # Parse output as JSON
+        try:
+            output = json.loads(result.stdout)
+        except json.JSONDecodeError as e:
+            self.fail(f"Hook script output is not valid JSON: {e}\nOutput: {result.stdout}")
+
+        # Verify structure
+        self.assertIn("hookSpecificOutput", output, "Output should contain hookSpecificOutput")
+        hook_output = output["hookSpecificOutput"]
+        
+        # Verify required fields
+        self.assertIn("hookEventName", hook_output)
+        self.assertIn("permissionDecision", hook_output)
+        self.assertIn("permissionDecisionReason", hook_output)
+        
+        # Verify values
+        self.assertEqual(hook_output["hookEventName"], "PreToolUse")
+        self.assertEqual(hook_output["permissionDecision"], "allow")
+        self.assertIn("--dangerously-skip-permissions", hook_output["permissionDecisionReason"])
+
+    def test_hook_script_no_args_required(self) -> None:
+        """Test that hook script works without any arguments."""
+        result = subprocess.run([str(self.script_path)], capture_output=True, text=True)
+        
+        self.assertEqual(result.returncode, 0, "Hook script should work without arguments")
+        self.assertTrue(result.stdout.strip(), "Hook script should produce output")
+
+    def test_hook_script_stderr_clean(self) -> None:
+        """Test that hook script doesn't produce stderr output."""
+        result = subprocess.run([str(self.script_path)], capture_output=True, text=True)
+        
+        self.assertEqual(result.stderr.strip(), "", "Hook script should not produce stderr output")
+
+
+class TestSettingsJsonFile(unittest.TestCase):
+    """Test the claude-settings.json configuration file."""
+
+    def setUp(self) -> None:
+        """Set up test environment."""
+        self.settings_path = Path(__file__).parent / "claude-settings.json"
+
+    def test_settings_file_exists(self) -> None:
+        """Test that settings file exists."""
+        self.assertTrue(self.settings_path.exists(), "Settings file should exist")
+
+    def test_settings_file_valid_json(self) -> None:
+        """Test that settings file contains valid JSON."""
+        try:
+            with open(self.settings_path, 'r') as f:
+                settings = json.load(f)
+        except json.JSONDecodeError as e:
+            self.fail(f"Settings file is not valid JSON: {e}")
+        except Exception as e:
+            self.fail(f"Error reading settings file: {e}")
+
+        # Verify structure
+        self.assertIn("hooks", settings, "Settings should contain hooks configuration")
+
+    def test_settings_pretooluse_hook_configuration(self) -> None:
+        """Test that PreToolUse hook is properly configured."""
+        with open(self.settings_path, 'r') as f:
+            settings = json.load(f)
+
+        hooks = settings["hooks"]
+        self.assertIn("PreToolUse", hooks, "Should configure PreToolUse hook")
+        
+        pretooluse_hooks = hooks["PreToolUse"]
+        self.assertIsInstance(pretooluse_hooks, list, "PreToolUse should be a list")
+        self.assertEqual(len(pretooluse_hooks), 1, "Should have exactly one PreToolUse hook")
+        
+        hook_config = pretooluse_hooks[0]
+        self.assertIn("matcher", hook_config)
+        self.assertIn("hooks", hook_config)
+        
+        # Verify matcher
+        self.assertEqual(hook_config["matcher"], "*", "Should match all events")
+        
+        # Verify hook command
+        hook_commands = hook_config["hooks"]
+        self.assertIsInstance(hook_commands, list, "Hooks should be a list")
+        self.assertEqual(len(hook_commands), 1, "Should have exactly one hook command")
+        
+        command_config = hook_commands[0]
+        self.assertEqual(command_config["type"], "command")
+        self.assertEqual(command_config["command"], "/bin/claude-hook-pretooluse.sh")
+
+
 def run_tests() -> None:
     """Run all tests."""
     # Create test suite
@@ -1359,6 +1769,9 @@ def run_tests() -> None:
     suite.addTests(loader.loadTestsFromTestCase(TestClaudeContainer))
     suite.addTests(loader.loadTestsFromTestCase(TestSessionManagement))
     suite.addTests(loader.loadTestsFromTestCase(TestGitWorktree))
+    suite.addTests(loader.loadTestsFromTestCase(TestDangerousSkipPermissions))
+    suite.addTests(loader.loadTestsFromTestCase(TestHookScript))
+    suite.addTests(loader.loadTestsFromTestCase(TestSettingsJsonFile))
 
     # Run tests
     runner = unittest.TextTestRunner(verbosity=2)

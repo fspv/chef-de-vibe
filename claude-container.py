@@ -56,6 +56,8 @@ def parse_args():
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--resume", type=str, help="Resume session with session ID")
     parser.add_argument("--session-id", type=str, help="Session ID")
+    parser.add_argument("--dangerously-skip-permissions", action="store_true", 
+                        help="Skip permission checks by auto-approving all requests")
     
     # Parse known args to avoid errors with other claude arguments
     known_args, remaining_args = parser.parse_known_args()
@@ -86,7 +88,8 @@ def container_exists(container_binary: str, container_name: str) -> bool:
 
 
 def create_container(container_binary: str, container_name: str, base_image: str, 
-                    home_dir: str, work_dir: str, target_dir: str, debug_mode: bool):
+                    home_dir: str, work_dir: str, target_dir: str, debug_mode: bool, 
+                    skip_permissions: bool = False):
     """Create a new container with sleep infinity command."""
     container_cmd = [
         container_binary,
@@ -110,6 +113,16 @@ def create_container(container_binary: str, container_name: str, base_image: str
         "-v", f"{home_dir}/.claude.json:/root/.claude.json:Z",
         "-v", f"{home_dir}/.claude/:/root/.claude/:Z",
         "-v", f"{work_dir}:{target_dir}:Z",
+    ])
+
+    # Add Claude settings override if skip_permissions is enabled
+    if skip_permissions:
+        settings_source = os.path.join(os.path.dirname(__file__), "claude-settings.json")
+        container_cmd.extend([
+            "-v", f"{settings_source}:/root/.claude/settings.json:Z"
+        ])
+
+    container_cmd.extend([
         "-w", target_dir,  # Set working directory inside container
         base_image,
         "sleep", "infinity"
@@ -181,13 +194,20 @@ def main():
         session_id, add_session_id = get_session_info(args)
         container_name = f"claude-session-{session_id}"
         
+        # Check if we should skip permissions
+        skip_permissions = args.dangerously_skip_permissions
+        
         # Handle git worktree creation if current directory is a git repo
         work_dir = current_dir
         if is_git_repository(current_dir):
             work_dir = create_git_worktree(session_id, current_dir, git_worktrees_dir)
         
-        # Prepare claude arguments - use ALL original arguments
-        claude_args = sys.argv[1:].copy()
+        # Prepare claude arguments - use ALL original arguments except --dangerously-skip-permissions
+        claude_args = []
+        for arg in sys.argv[1:]:
+            if arg != "--dangerously-skip-permissions":
+                claude_args.append(arg)
+        
         if add_session_id:
             claude_args.extend(["--session-id", session_id])
 
@@ -198,7 +218,7 @@ def main():
         # Create container if it doesn't exist
         if not container_exists(container_binary, container_name):
             create_container(container_binary, container_name, base_image, 
-                           home_dir, work_dir, current_dir, debug_mode)
+                           home_dir, work_dir, current_dir, debug_mode, skip_permissions)
 
         print(f"Container {container_name} already exists, reusing it", file=sys.stderr)
 
