@@ -1,4 +1,5 @@
-FROM nuhotetotniksvoboden/claudecodeui:latest
+ARG CLAUDECODEUI_VERSION=latest
+FROM nuhotetotniksvoboden/claudecodeui:${CLAUDECODEUI_VERSION}
 
 RUN apk add podman podman-compose fuse-overlayfs cni-plugins shadow iptables
 
