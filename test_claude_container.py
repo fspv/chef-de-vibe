@@ -60,7 +60,8 @@ class TestClaudeContainer(unittest.TestCase):
         if env:
             run_env.update(env)
 
-        result = subprocess.run(cmd, capture_output=True, text=True, env=run_env)
+        # Run from test_dir (non-git directory) to avoid git worktree logic
+        result = subprocess.run(cmd, capture_output=True, text=True, env=run_env, cwd=self.test_dir)
 
         return result.returncode, result.stdout, result.stderr
 
@@ -246,9 +247,8 @@ else:
         # Check for required volume mounts with :Z flag
         self.assertTrue(any(".claude.json:/root/.claude.json:Z" in v for v in volumes))
         self.assertTrue(any(".claude/:/root/.claude/:Z" in v for v in volumes))
-        # Current directory mount
-        cwd = os.getcwd()
-        self.assertTrue(any(f"{cwd}:{cwd}:Z" in v for v in volumes))
+        # Current directory mount (test_dir since we run from there)
+        self.assertTrue(any(f"{self.test_dir}:{self.test_dir}:Z" in v for v in volumes))
 
     def test_working_directory(self) -> None:
         """Test that working directory is set correctly."""
@@ -288,7 +288,7 @@ else:
                 workdir = container_cmd[i + 1]
                 break
         
-        self.assertEqual(workdir, os.getcwd())
+        self.assertEqual(workdir, self.test_dir)
 
     def test_missing_container_binary(self) -> None:
         """Test error handling when container binary is missing."""
@@ -485,17 +485,14 @@ else:
 """
         self.create_dummy_binary("podman", podman_script)
 
-        # Change to special directory and run
-        original_cwd = os.getcwd()
-        try:
-            os.chdir(special_dir)
-            returncode, stdout, stderr = self.run_script([])
+        # Run from special directory
+        cmd = [sys.executable, str(self.script_path)]
+        env = os.environ.copy()
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=special_dir)
 
-            self.assertEqual(returncode, 0)
-            # Check that the special directory path is used in the container creation command
-            self.assertIn(str(special_dir), stderr)
-        finally:
-            os.chdir(original_cwd)
+        self.assertEqual(result.returncode, 0)
+        # Check that the special directory path is used in the container creation command
+        self.assertIn(str(special_dir), result.stderr)
 
     def test_real_keyboard_interrupt(self) -> None:
         """Test real keyboard interrupt handling in wrapper."""
@@ -518,7 +515,7 @@ except KeyboardInterrupt:
         env = os.environ.copy()
 
         proc = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env, cwd=self.test_dir
         )
 
         # Give it a moment to start
@@ -825,7 +822,8 @@ class TestSessionManagement(unittest.TestCase):
         if env:
             run_env.update(env)
 
-        result = subprocess.run(cmd, capture_output=True, text=True, env=run_env)
+        # Run from test_dir (non-git directory) to avoid git worktree logic
+        result = subprocess.run(cmd, capture_output=True, text=True, env=run_env, cwd=self.test_dir)
         return result.returncode, result.stdout, result.stderr
 
     def test_new_session_creation(self) -> None:
@@ -1127,15 +1125,199 @@ else:
         self.assertIn("Failed to create container", stderr)
 
 
+class TestGitWorktree(unittest.TestCase):
+    """Test git worktree functionality."""
+
+    def setUp(self) -> None:
+        """Set up test environment with a git repository."""
+        self.test_dir = tempfile.mkdtemp()
+        self.original_env = os.environ.copy()
+
+        # Create a git repository in test directory
+        subprocess.run(["git", "init"], cwd=self.test_dir, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=self.test_dir, check=True)
+        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=self.test_dir, check=True)
+        
+        # Create initial commit
+        test_file = Path(self.test_dir) / "test.txt"
+        test_file.write_text("test content")
+        subprocess.run(["git", "add", "test.txt"], cwd=self.test_dir, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=self.test_dir, check=True, capture_output=True)
+
+        # Create dummy binaries directory
+        self.dummy_bin_dir = Path(self.test_dir) / "bin"
+        self.dummy_bin_dir.mkdir(parents=True, exist_ok=True)
+
+        # Add dummy bin to PATH
+        os.environ["PATH"] = f"{self.dummy_bin_dir}:{os.environ.get('PATH', '')}"
+
+        # Get script path
+        self.script_path = Path(__file__).parent / "claude-container.py"
+
+        # Set up worktree directory
+        self.worktree_dir = Path(self.test_dir) / "worktrees"
+        self.worktree_dir.mkdir()
+
+    def tearDown(self) -> None:
+        """Clean up test environment."""
+        # Restore original environment
+        os.environ.clear()
+        os.environ.update(self.original_env)
+
+        # Clean up test directory
+        subprocess.run(["rm", "-rf", self.test_dir], check=True)
+
+    def create_dummy_binary(self, name: str, content: str) -> Path:
+        """Create a dummy executable binary."""
+        binary_path = self.dummy_bin_dir / name
+        binary_path.write_text(content)
+        binary_path.chmod(0o755)
+        return binary_path
+
+    def run_script(
+        self, args: List[str] = None, env: Dict[str, str] = None
+    ) -> Tuple[int, str, str]:
+        """Run the claude-container.py script from the git repository."""
+        cmd = [sys.executable, str(self.script_path)]
+        if args:
+            cmd.extend(args)
+
+        # Merge environment variables
+        run_env = os.environ.copy()
+        if env:
+            run_env.update(env)
+
+        # Run from git repository directory
+        result = subprocess.run(cmd, capture_output=True, text=True, env=run_env, cwd=self.test_dir)
+        return result.returncode, result.stdout, result.stderr
+
+    def test_git_worktree_creation(self) -> None:
+        """Test that git worktrees are created for git repositories."""
+        # Create dummy podman that tracks volume mounts
+        podman_script = """#!/usr/bin/env python3
+import sys
+import json
+
+if len(sys.argv) >= 3 and sys.argv[1] == "container" and sys.argv[2] == "exists":
+    sys.exit(1)  # Container doesn't exist
+elif len(sys.argv) >= 2 and sys.argv[1] == "run" and "-d" in sys.argv:
+    # Extract volume mounts
+    volumes = []
+    i = 0
+    while i < len(sys.argv):
+        if sys.argv[i] == "-v" and i + 1 < len(sys.argv):
+            volumes.append(sys.argv[i + 1])
+            i += 2
+        else:
+            i += 1
+    print(json.dumps({"volumes": volumes}))
+    sys.exit(0)
+elif len(sys.argv) >= 2 and sys.argv[1] == "exec":
+    sys.exit(0)
+else:
+    sys.exit(1)
+"""
+        self.create_dummy_binary("podman", podman_script)
+
+        # Run script with git worktree directory set
+        env = {
+            "CONTAINER_BINARY": str(self.dummy_bin_dir / "podman"),
+            "GIT_WORKTREES_DIR": str(self.worktree_dir)
+        }
+        returncode, stdout, stderr = self.run_script(["test", "command"], env=env)
+
+        self.assertEqual(returncode, 0)
+        
+        # Parse volume mounts from output
+        if stdout.strip():
+            output = json.loads(stdout.strip())
+            volumes = output["volumes"]
+        else:
+            # If no JSON output, extract from stderr (container creation command)
+            volumes = []
+            stderr_lines = stderr.strip().split('\n')
+            for line in stderr_lines:
+                if line.startswith("Running command:"):
+                    cmd_parts = line[len("Running command: "):].split()
+                    i = 0
+                    while i < len(cmd_parts):
+                        if cmd_parts[i] == "-v" and i + 1 < len(cmd_parts):
+                            volumes.append(cmd_parts[i + 1])
+                            i += 2
+                        else:
+                            i += 1
+                    break
+
+        # Should mount the worktree directory, not the original git directory
+        git_mount = None
+        for volume in volumes:
+            if volume.endswith(f":{self.test_dir}:Z"):
+                git_mount = volume
+                break
+
+        self.assertIsNotNone(git_mount, "Should find git directory mount")
+        
+        # The mount source should be a worktree directory, not the original
+        mount_source = git_mount.split(":")[0]
+        self.assertTrue(mount_source.startswith(str(self.worktree_dir)))
+        # Should contain the session ID (UUID format or explicit session name)
+        self.assertNotEqual(mount_source, str(self.test_dir))
+
+        # Verify worktree was actually created (should have at least one directory)
+        session_dirs = list(self.worktree_dir.glob("*"))
+        self.assertEqual(len(session_dirs), 1, "Should create exactly one worktree")
+        
+        # Verify worktree contains the test file
+        worktree_test_file = session_dirs[0] / "test.txt"
+        self.assertTrue(worktree_test_file.exists())
+        self.assertEqual(worktree_test_file.read_text(), "test content")
+
+    def test_existing_worktree_reuse(self) -> None:
+        """Test that existing worktrees are reused."""
+        # Create dummy podman
+        podman_script = """#!/usr/bin/env python3
+import sys
+if len(sys.argv) >= 3 and sys.argv[1] == "container" and sys.argv[2] == "exists":
+    sys.exit(0)  # Container exists
+elif len(sys.argv) >= 2 and sys.argv[1] == "exec":
+    sys.exit(0)
+else:
+    sys.exit(1)
+"""
+        self.create_dummy_binary("podman", podman_script)
+
+        # Run script twice with same session ID
+        session_id = "test-session-123"
+        env = {
+            "CONTAINER_BINARY": str(self.dummy_bin_dir / "podman"),
+            "GIT_WORKTREES_DIR": str(self.worktree_dir)
+        }
+
+        # First run should create worktree
+        returncode1, stdout1, stderr1 = self.run_script(["--session-id", session_id], env=env)
+        self.assertEqual(returncode1, 0)
+        self.assertIn("Created git worktree", stderr1)
+
+        # Second run should reuse existing worktree
+        returncode2, stdout2, stderr2 = self.run_script(["--session-id", session_id], env=env)
+        self.assertEqual(returncode2, 0)
+        self.assertNotIn("Created git worktree", stderr2)  # Should not create again
+
+        # Verify only one worktree directory exists
+        session_dirs = list(self.worktree_dir.glob("test-session-123"))
+        self.assertEqual(len(session_dirs), 1)
+
+
 def run_tests() -> None:
     """Run all tests."""
     # Create test suite
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
     
-    # Add both test classes
+    # Add all test classes
     suite.addTests(loader.loadTestsFromTestCase(TestClaudeContainer))
     suite.addTests(loader.loadTestsFromTestCase(TestSessionManagement))
+    suite.addTests(loader.loadTestsFromTestCase(TestGitWorktree))
 
     # Run tests
     runner = unittest.TextTestRunner(verbosity=2)

@@ -13,6 +13,44 @@ import uuid
 from pathlib import Path
 
 
+def is_git_repository(directory: str) -> bool:
+    """Check if the directory is a git repository."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--git-dir"],
+        cwd=directory,
+        capture_output=True,
+        check=False
+    )
+    return result.returncode == 0
+
+
+def create_git_worktree(session_id: str, source_dir: str, worktree_base_dir: str) -> str:
+    """Create a git worktree for the given session if it doesn't exist.
+    
+    Returns the worktree directory path.
+    """
+    branch_name = session_id
+    worktree_dir = os.path.join(worktree_base_dir, branch_name)
+    
+    # Check if worktree directory already exists
+    if os.path.exists(worktree_dir):
+        return worktree_dir
+    
+    # Create the worktree base directory if it doesn't exist
+    os.makedirs(worktree_base_dir, exist_ok=True)
+    
+    # Create the worktree with a new branch in one command
+    subprocess.run(
+        ["git", "worktree", "add", "-b", branch_name, worktree_dir],
+        cwd=source_dir,
+        capture_output=True,
+        check=True
+    )
+    
+    print(f"Created git worktree: {worktree_dir}", file=sys.stderr)
+    return worktree_dir
+
+
 def parse_args():
     """Parse command line arguments to extract session-related flags."""
     parser = argparse.ArgumentParser(add_help=False)
@@ -48,7 +86,7 @@ def container_exists(container_binary: str, container_name: str) -> bool:
 
 
 def create_container(container_binary: str, container_name: str, base_image: str, 
-                    home_dir: str, current_dir: str, debug_mode: bool):
+                    home_dir: str, work_dir: str, target_dir: str, debug_mode: bool):
     """Create a new container with sleep infinity command."""
     container_cmd = [
         container_binary,
@@ -67,8 +105,8 @@ def create_container(container_binary: str, container_name: str, base_image: str
     container_cmd.extend([
         "-v", f"{home_dir}/.claude.json:/root/.claude.json:Z",
         "-v", f"{home_dir}/.claude/:/root/.claude/:Z",
-        "-v", f"{current_dir}:{current_dir}:Z",
-        "-w", current_dir,  # Set working directory inside container
+        "-v", f"{work_dir}:{target_dir}:Z",
+        "-w", target_dir,  # Set working directory inside container
         base_image,
         "sleep", "infinity"
     ])
@@ -125,6 +163,7 @@ def main():
     claude_binary = os.environ.get("CLAUDE_BINARY", "claude")
     container_binary = os.environ.get("CONTAINER_BINARY", "podman")
     debug_mode = os.environ.get("DEBUG", "").lower() in ("true", "1", "yes")
+    git_worktrees_dir = os.environ.get("GIT_WORKTREES_DIR", "/git-worktrees/")
 
     # Get directories
     home_dir = os.path.expanduser("~")
@@ -138,6 +177,11 @@ def main():
         session_id, add_session_id = get_session_info(args)
         container_name = f"claude-session-{session_id}"
         
+        # Handle git worktree creation if current directory is a git repo
+        work_dir = current_dir
+        if is_git_repository(current_dir):
+            work_dir = create_git_worktree(session_id, current_dir, git_worktrees_dir)
+        
         # Prepare claude arguments - use ALL original arguments
         claude_args = sys.argv[1:].copy()
         if add_session_id:
@@ -150,7 +194,7 @@ def main():
         # Create container if it doesn't exist
         if not container_exists(container_binary, container_name):
             create_container(container_binary, container_name, base_image, 
-                           home_dir, current_dir, debug_mode)
+                           home_dir, work_dir, current_dir, debug_mode)
 
         print(f"Container {container_name} already exists, reusing it", file=sys.stderr)
 
