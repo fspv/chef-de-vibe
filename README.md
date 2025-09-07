@@ -16,8 +16,7 @@ Run the container with the following command:
 podman run \
   --name chef-de-vibe --replace --privileged \
   -p 3001:3001 \
-  -v ${HOME}/.claude.json:/root/.claude.json \
-  -v ${HOME}/.claude/:/root/.claude/ \
+  -e HOME=${HOME} \
   -v ${HOME}:${HOME} \
   --restart unless-stopped \
   nuhotetotniksvoboden/chef-de-vibe:latest
@@ -29,8 +28,7 @@ Or with Docker:
 docker run \
   --name chef-de-vibe --replace --privileged \
   -p 3001:3001 \
-  -v ${HOME}/.claude.json:/root/.claude.json \
-  -v ${HOME}/.claude/:/root/.claude/ \
+  -e HOME=${HOME} \
   -v ${HOME}:${HOME} \
   --restart unless-stopped \
   nuhotetotniksvoboden/chef-de-vibe:latest
@@ -50,8 +48,6 @@ services:
     ports:
       - "3001:3001"
     volumes:
-      - ${HOME}/.claude.json:/root/.claude.json
-      - ${HOME}/.claude/:/root/.claude/
       - ${HOME}:${HOME}
     environment:
       - CLAUDE_CONTAINER_IMAGE=${CLAUDE_CONTAINER_IMAGE:-nuhotetotniksvoboden/claudecodeui:latest}

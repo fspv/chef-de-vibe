@@ -1,0 +1,1 @@
+- to run tests use `python3 test_claude_container.py`
