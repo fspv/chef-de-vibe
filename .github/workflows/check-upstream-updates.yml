@@ -37,6 +37,14 @@ jobs:
       if: steps.check_release.outputs.EXISTS == 'false'
       uses: docker/setup-buildx-action@v3
     
+    - name: Pull base image first (before login)
+      if: steps.check_release.outputs.EXISTS == 'false'
+      run: |
+        echo "Pulling base image: nuhotetotniksvoboden/claudecodeui:${{ steps.get_upstream_version.outputs.VERSION }}"
+        docker pull nuhotetotniksvoboden/claudecodeui:${{ steps.get_upstream_version.outputs.VERSION }} || \
+        (echo "Failed to pull version ${{ steps.get_upstream_version.outputs.VERSION }}, trying latest..." && \
+         docker pull nuhotetotniksvoboden/claudecodeui:latest)
+    
     - name: Log in to Docker Hub
       if: steps.check_release.outputs.EXISTS == 'false'
       uses: docker/login-action@v3
