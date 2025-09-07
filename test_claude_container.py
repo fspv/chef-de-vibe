@@ -315,7 +315,7 @@ raise KeyboardInterrupt()
         self.assertNotEqual(returncode, 0)
 
     def test_exit_code_propagation(self) -> None:
-        """Test that exit codes are properly propagated."""
+        """Test that exist code from claude is never propagated"""
         # Create podman that handles session workflow and exits with specific code in exec
         podman_script = """#!/usr/bin/env python3
 import sys
@@ -336,7 +336,7 @@ else:
         self.create_dummy_binary("podman", podman_script)
 
         returncode, stdout, stderr = self.run_script([])
-        self.assertEqual(returncode, 42)
+        self.assertEqual(returncode, 0)
 
     def test_all_arguments_passed(self) -> None:
         """Test that all arguments are passed through."""

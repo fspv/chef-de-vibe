@@ -226,9 +226,8 @@ def main():
         print(f"Container {container_name} already exists, reusing it", file=sys.stderr)
 
         # Execute claude command in the container
-        exit_code = execute_in_container(container_binary, container_name, claude_binary,
-                                       claude_args)
-        sys.exit(exit_code)
+        execute_in_container(container_binary, container_name, claude_binary, claude_args)
+        sys.exit(0)
 
     except KeyboardInterrupt:
         print("\nInterrupted by user", file=sys.stderr)
