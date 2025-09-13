@@ -1,0 +1,246 @@
+import { useState, useEffect } from 'react';
+import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
+import { SessionList } from './components/SessionList';
+import { ChatWindow } from './components/ChatWindow';
+import { DirectorySelectionDialog } from './components/DirectorySelectionDialog';
+import { useCreateSession, useSessions } from './hooks/useApi';
+import './App.css';
+
+const SIDEBAR_COLLAPSED_KEY = 'chef-de-vibe-sidebar-collapsed';
+
+function SessionView() {
+  const { sessionId } = useParams<{ sessionId: string }>();
+  const navigate = useNavigate();
+  const { createSession, loading: createLoading } = useCreateSession();
+  const { sessions } = useSessions();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true); // Hidden by default
+  const [showDirectorySelection, setShowDirectorySelection] = useState(false);
+  const [directoryPopup, setDirectoryPopup] = useState<string | null>(null);
+  const [copySuccess, setCopySuccess] = useState<string | null>(null);
+
+  // Load sidebar collapsed state from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+    if (stored !== null) {
+      setSidebarCollapsed(JSON.parse(stored));
+    }
+  }, []);
+
+  // Save sidebar state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, JSON.stringify(sidebarCollapsed));
+  }, [sidebarCollapsed]);
+
+  // Handle escape key to close popup or sidebar
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        // If directory popup is open, close it first
+        if (directoryPopup) {
+          setDirectoryPopup(null);
+          setCopySuccess(null);
+        } 
+        // If directory selection dialog is open, let it handle its own escape
+        else if (showDirectorySelection) {
+          // Do nothing, let DirectorySelectionDialog handle it
+        }
+        // Otherwise, close the sidebar if it's open
+        else if (!sidebarCollapsed) {
+          setSidebarCollapsed(true);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [sidebarCollapsed, directoryPopup, showDirectorySelection]);
+
+  // Handle swipe gestures for mobile
+  useEffect(() => {
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchEndX = 0;
+    let touchEndY = 0;
+    let isSwiping = false;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (!e.touches || e.touches.length === 0) return;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      isSwiping = true;
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isSwiping || !e.touches || e.touches.length === 0) return;
+      
+      touchEndX = e.touches[0].clientX;
+      touchEndY = e.touches[0].clientY;
+    };
+
+    const handleTouchEnd = () => {
+      if (!isSwiping) return;
+      isSwiping = false;
+
+      const deltaX = touchEndX - touchStartX;
+      const deltaY = touchEndY - touchStartY;
+      const minSwipeDistance = 100;
+      const maxVerticalMovement = 100;
+
+      // Ignore if vertical movement is too large (likely scrolling)
+      if (Math.abs(deltaY) > maxVerticalMovement) {
+        return;
+      }
+
+      // Swipe right to open sidebar (when closed)
+      if (deltaX > minSwipeDistance && sidebarCollapsed) {
+        // Only trigger if swipe starts from left edge of screen
+        if (touchStartX < 50) {
+          setSidebarCollapsed(false);
+        }
+      }
+      // Swipe left to close sidebar (when open)
+      else if (deltaX < -minSwipeDistance && !sidebarCollapsed) {
+        setSidebarCollapsed(true);
+      }
+    };
+
+    // Add touch event listeners
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    document.addEventListener('touchmove', handleTouchMove, { passive: true });
+    document.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    return () => {
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [sidebarCollapsed]);
+
+  const handleSessionSelect = (sessionId: string) => {
+    // Close sidebar on mobile when a chat is selected
+    setSidebarCollapsed(true);
+    navigate(`/session/${sessionId}`);
+  };
+
+  const handleNewChat = () => {
+    // Show directory selection dialog instead of immediately navigating
+    setShowDirectorySelection(true);
+    // Don't close sidebar when opening directory selection
+  };
+
+  const handleDirectorySelected = (directory: string) => {
+    setShowDirectorySelection(false);
+    // Close sidebar to give user space to start typing
+    setSidebarCollapsed(true);
+    // Navigate to root with the selected directory - we'll pass it via state
+    navigate('/', { state: { selectedDirectory: directory } });
+  };
+
+  const handleDirectorySelectionCancel = () => {
+    setShowDirectorySelection(false);
+  };
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed(!sidebarCollapsed);
+  };
+
+  const handleDirectoryPathClick = (directory: string | null) => {
+    setDirectoryPopup(directory);
+    if (directory === null) {
+      setCopySuccess(null);
+    }
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopySuccess(text);
+      setTimeout(() => setCopySuccess(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy: ', err);
+    }
+  };
+
+  const closePopup = () => {
+    setDirectoryPopup(null);
+    setCopySuccess(null);
+  };
+
+  const selectedSession = sessions.find(s => s.session_id === sessionId);
+
+  return (
+    <div className={`app ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+      <div className={`app-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
+        <SessionList
+          selectedSessionId={sessionId || null}
+          onSessionSelect={handleSessionSelect}
+          onNewChat={handleNewChat}
+          directoryPopup={directoryPopup}
+          onDirectoryPathClick={handleDirectoryPathClick}
+        />
+      </div>
+      
+      <button 
+        className={`sidebar-toggle ${sidebarCollapsed ? 'collapsed' : ''}`}
+        onClick={toggleSidebar}
+        title={sidebarCollapsed ? 'Show Sessions' : 'Hide Sessions'}
+      ></button>
+      
+      <div className="app-main">
+        <ChatWindow
+          sessionId={sessionId || null}
+          workingDirectory={selectedSession?.working_directory}
+          onCreateSession={createSession}
+          createLoading={createLoading}
+          navigate={navigate}
+          sidebarCollapsed={sidebarCollapsed}
+        />
+      </div>
+
+      {showDirectorySelection && (
+        <DirectorySelectionDialog
+          onSelectDirectory={handleDirectorySelected}
+          onCancel={handleDirectorySelectionCancel}
+        />
+      )}
+
+      {/* Directory Path Popup - rendered outside sidebar */}
+      {directoryPopup && (
+        <div className="directory-popup-overlay" onClick={closePopup}>
+          <div className="directory-popup" onClick={(e) => e.stopPropagation()}>
+            <div className="directory-popup-header">
+              <h3>Directory Path</h3>
+              <button className="popup-close-button" onClick={closePopup}>
+                ✕
+              </button>
+            </div>
+            <div className="directory-popup-content">
+              <div className="full-path-container">
+                <code className="full-path">{directoryPopup}</code>
+              </div>
+              <div className="popup-actions">
+                <button 
+                  className="copy-button"
+                  onClick={() => copyToClipboard(directoryPopup)}
+                >
+                  {copySuccess === directoryPopup ? '✓ Copied!' : '📋 Copy Path'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<SessionView />} />
+      <Route path="/session/:sessionId" element={<SessionView />} />
+    </Routes>
+  );
+}
+
+export default App;

@@ -1,0 +1,78 @@
+#!/bin/bash
+
+# claude-container - Run or connect to a container with stdin/stdout support
+# Usage: ./claude-container [command_args...]
+# Environment variables:
+#   CONTAINER_RUNTIME - Container runtime to use (default: docker)
+#   CONTAINER_ARGS - Additional arguments to pass to container run (e.g., "-p 8080:80 --env VAR=value")
+#
+# Examples:
+#   ./claude-container                                    # Run/attach to cat (echo server)
+#   CONTAINER_RUNTIME=docker CONTAINER_HOST=unix:///run/user/$UID/podman/podman.sock ./claude-container
+#   CONTAINER_ARGS="--env-host -v /run/user/$UID/podman/podman.sock:/run/user/$UID/podman/podman.sock"
+#
+# Note: Uses 'attach' to connect to stdin/stdout of the running process.
+#       Without TTY, disconnecting (Ctrl+D/EOF) keeps container running.
+
+set -e
+
+CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-docker}"
+
+SESSION_ID="$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1)"
+CONTAINER_NAME="claude-code-${SESSION_ID}"
+IMAGE="nuhotetotniksvoboden/claudecodeui:latest"
+
+DEFAULT_RUNTIME_ARGS="--rm -v $(pwd):$(pwd) -v ${HOME}/.claude.json:/root/.claude.json -v ${HOME}/.claude/:/root/.claude/ -w $(pwd)"
+
+# Combine default args with user-provided CONTAINER_ARGS (keeping the env var name for compatibility)
+RUNTIME_ARGS="${DEFAULT_RUNTIME_ARGS} ${CONTAINER_ARGS:-}"
+
+# Command arguments passed to the script
+COMMAND_ARGS="$@"
+
+# Function to check if container exists
+container_exists() {
+    ${CONTAINER_RUNTIME} ps -a --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"
+}
+
+# Function to check if container is running
+container_running() {
+    ${CONTAINER_RUNTIME} ps --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"
+}
+
+# Function to create and run new container
+create_container() {
+    echo "Creating new container: $CONTAINER_NAME (using $CONTAINER_RUNTIME)" >&2
+    echo "Using args: $RUNTIME_ARGS" >&2
+    echo "Command: ${COMMAND_ARGS}" >&2
+
+    # Determine the command to run
+    CONTAINER_CMD="$COMMAND_ARGS"
+
+    # Use -d for detached, --init for proper signal handling
+    ${CONTAINER_RUNTIME} run -i --init $RUNTIME_ARGS --name "$CONTAINER_NAME" "$IMAGE" claude $CONTAINER_CMD
+}
+
+# Function to start existing stopped container
+start_container() {
+    echo "Starting existing container: $CONTAINER_NAME" >&2
+    ${CONTAINER_RUNTIME} start "$CONTAINER_NAME" >/dev/null
+}
+
+# Main logic
+if container_exists; then
+    if container_running; then
+        echo "Container already running with existing process" >&2
+        # Warning: connecting to existing container with different command expectations
+        if [ -n "$COMMAND_ARGS" ]; then
+            echo "WARNING: Ignoring command args - connecting to existing process" >&2
+        fi
+    else
+        # Container exists but stopped - the process has exited
+        echo "Container stopped (process exited). Removing and recreating..." >&2
+        ${CONTAINER_RUNTIME} rm "$CONTAINER_NAME" >/dev/null
+        create_container
+    fi
+else
+    create_container
+fi

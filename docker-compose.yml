@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  chef-de-vibe:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - CLAUDE_BINARY_PATH=/usr/local/bin/claude
+      - HTTP_LISTEN_ADDRESS=0.0.0.0:3000
+      - CLAUDE_PROJECTS_DIR=/app/projects
+      - SHUTDOWN_TIMEOUT=30
+      - RUST_LOG=info
+    ports:
+      - "3000:3000"
+    volumes:
+      - chef_de_vibe_projects:/app/projects
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  chef_de_vibe_projects:
+    driver: local
