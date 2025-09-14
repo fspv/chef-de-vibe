@@ -10,6 +10,8 @@ interface SessionStatusIndicatorProps {
   workingDirectory: string;
   debugMode: boolean;
   onDebugModeChange: (value: boolean) => void;
+  autoScrollPaused: boolean;
+  onToggleAutoScroll: () => void;
 }
 
 export function SessionStatusIndicator({
@@ -21,7 +23,9 @@ export function SessionStatusIndicator({
   sessionId,
   workingDirectory,
   debugMode,
-  onDebugModeChange
+  onDebugModeChange,
+  autoScrollPaused,
+  onToggleAutoScroll
 }: SessionStatusIndicatorProps) {
   const [showDetails, setShowDetails] = useState(false);
 
@@ -60,13 +64,24 @@ export function SessionStatusIndicator({
 
   return (
     <>
-      <button
-        className={`session-status-indicator status-${statusColor}`}
-        onClick={() => setShowDetails(!showDetails)}
-        title={getStatusText()}
-      >
-        <span className="status-dot"></span>
-      </button>
+      {/* Status indicator and auto-scroll control container */}
+      <div className="status-controls-container">
+        <button
+          className={`session-status-indicator status-${statusColor}`}
+          onClick={() => setShowDetails(!showDetails)}
+          title={getStatusText()}
+        >
+          <span className="status-dot"></span>
+        </button>
+        
+        <button 
+          className={`auto-scroll-control-btn ${autoScrollPaused ? 'paused' : 'active'}`}
+          onClick={onToggleAutoScroll}
+          title={autoScrollPaused ? 'Resume auto-scroll' : 'Pause auto-scroll'}
+        >
+          {autoScrollPaused ? '⏵' : '⏸'}
+        </button>
+      </div>
 
       {showDetails && (
         <div className="session-details-overlay" onClick={() => setShowDetails(false)}>

@@ -1,10 +1,10 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useLocation } from 'react-router-dom';
 import { useSessionDetails } from '../hooks/useApi';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useApprovalWebSocket } from '../hooks/useApprovalWebSocket';
-import { MessageList } from './MessageList';
+import { MessageList, type MessageListRef } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { ApprovalDialog } from './ApprovalDialog';
 import { SessionStatusIndicator } from './SessionStatusIndicator';
@@ -28,6 +28,8 @@ export function ChatWindow({ sessionId, workingDirectory, onCreateSession, creat
   const { sessionDetails, loading, error } = useSessionDetails(sessionId);
   const [debugMode, setDebugMode] = useState(false);
   const [activeApprovalRequest, setActiveApprovalRequest] = useState<ApprovalRequest | null>(null);
+  const [autoScrollPaused, setAutoScrollPaused] = useState(false);
+  const messageListRef = useRef<MessageListRef>(null);
   
   // Helper function to ensure directory path starts with /
   const ensureAbsolutePath = (path: string | undefined | null): string => {
@@ -174,6 +176,14 @@ export function ChatWindow({ sessionId, workingDirectory, onCreateSession, creat
     setActiveApprovalRequest(null);
   }, []);
 
+  const handleAutoScrollStateChange = useCallback((_isAtBottom: boolean, autoScrollPaused: boolean) => {
+    setAutoScrollPaused(autoScrollPaused);
+  }, []);
+
+  const handleToggleAutoScroll = useCallback(() => {
+    messageListRef.current?.toggleAutoScroll();
+  }, []);
+
   if (!sessionId) {
     return (
       <div className="chat-window">
@@ -188,6 +198,8 @@ export function ChatWindow({ sessionId, workingDirectory, onCreateSession, creat
             workingDirectory={ensureAbsolutePath(selectedDirectory)}
             debugMode={debugMode}
             onDebugModeChange={setDebugMode}
+            autoScrollPaused={autoScrollPaused}
+            onToggleAutoScroll={handleToggleAutoScroll}
           />
         )}
         
@@ -259,14 +271,18 @@ export function ChatWindow({ sessionId, workingDirectory, onCreateSession, creat
           workingDirectory={ensureAbsolutePath(sessionDetails.working_directory)}
           debugMode={debugMode}
           onDebugModeChange={setDebugMode}
+          autoScrollPaused={autoScrollPaused}
+          onToggleAutoScroll={handleToggleAutoScroll}
         />
       )}
 
       <div className="chat-content">
         <MessageList 
+          ref={messageListRef}
           sessionMessages={sessionDetails.content} 
           webSocketMessages={webSocketMessages}
           debugMode={debugMode}
+          onAutoScrollStateChange={handleAutoScrollStateChange}
         />
       </div>
 

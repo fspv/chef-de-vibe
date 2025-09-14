@@ -856,11 +856,19 @@ html, body {
   position: relative;
 }
 
-/* Floating Session Status Indicator */
-.session-status-indicator {
+/* Status Controls Container */
+.status-controls-container {
   position: fixed;
   top: 20px;
   right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 100;
+}
+
+/* Floating Session Status Indicator */
+.session-status-indicator {
   width: 50px;
   height: 50px;
   border-radius: 50%;
@@ -871,7 +879,6 @@ html, body {
   justify-content: center;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
   transition: all 0.3s ease;
-  z-index: 100;
   background-color: white;
 }
 
@@ -916,6 +923,50 @@ html, body {
     transform: scale(1);
     opacity: 1;
   }
+}
+
+/* Auto-scroll Control Button (next to status indicator) */
+.auto-scroll-control-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+  user-select: none;
+}
+
+.auto-scroll-control-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.auto-scroll-control-btn:active {
+  transform: scale(0.95);
+}
+
+.auto-scroll-control-btn.active {
+  background-color: #28a745;
+  color: white;
+}
+
+.auto-scroll-control-btn.active:hover {
+  background-color: #218838;
+}
+
+.auto-scroll-control-btn.paused {
+  background-color: #ffc107;
+  color: #000;
+}
+
+.auto-scroll-control-btn.paused:hover {
+  background-color: #e0a800;
 }
 
 /* Session Details Popup */
@@ -1223,6 +1274,7 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  position: relative;
 }
 
 .message-list-header {
@@ -1252,6 +1304,82 @@ html, body {
   gap: 1rem;
   min-width: 0;
   overflow-wrap: break-word;
+}
+
+/* Scroll Control Styles */
+.scroll-controls {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 50;
+}
+
+.scroll-control-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+  user-select: none;
+}
+
+.scroll-control-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.scroll-control-btn:active {
+  transform: scale(0.95);
+}
+
+.auto-scroll-btn.active {
+  background-color: #28a745;
+  color: white;
+}
+
+.auto-scroll-btn.active:hover {
+  background-color: #218838;
+}
+
+.auto-scroll-btn.paused {
+  background-color: #ffc107;
+  color: #000;
+}
+
+.auto-scroll-btn.paused:hover {
+  background-color: #e0a800;
+}
+
+.scroll-to-bottom-btn {
+  background-color: #3498db;
+  color: white;
+}
+
+.scroll-to-bottom-btn:hover {
+  background-color: #2980b9;
+}
+
+@media (max-width: 768px) {
+  .scroll-controls {
+    bottom: 70px;
+    right: 15px;
+  }
+  
+  .scroll-control-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 14px;
+  }
 }
 
 .message-item {
@@ -1931,9 +2059,13 @@ html, body {
 
 /* Responsive Design */
 @media (max-width: 768px) {
-  .session-status-indicator {
+  .status-controls-container {
     top: 10px;
     right: 10px;
+    gap: 8px;
+  }
+  
+  .session-status-indicator {
     width: 40px;
     height: 40px;
   }
@@ -1941,6 +2073,12 @@ html, body {
   .session-status-indicator .status-dot {
     width: 24px;
     height: 24px;
+  }
+  
+  .auto-scroll-control-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 14px;
   }
   
   .session-details-overlay {
