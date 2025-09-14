@@ -15,7 +15,6 @@ import type { PermissionUpdate } from '@anthropic-ai/claude-code/sdk';
 
 interface ChatWindowProps {
   sessionId: string | null;
-  workingDirectory?: string;
   onCreateSession: (request: CreateSessionRequest) => Promise<CreateSessionResponse | null>;
   createLoading: boolean;
   navigate: (path: string, options?: { state?: unknown }) => void;
@@ -23,7 +22,7 @@ interface ChatWindowProps {
   onNewChat: () => void;
 }
 
-export function ChatWindow({ sessionId, workingDirectory, onCreateSession, createLoading, navigate, sidebarCollapsed, onNewChat }: ChatWindowProps) {
+export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate, sidebarCollapsed, onNewChat }: ChatWindowProps) {
   const location = useLocation();
   const { sessionDetails, loading, error } = useSessionDetails(sessionId);
   const [debugMode, setDebugMode] = useState(false);
@@ -127,7 +126,7 @@ export function ChatWindow({ sessionId, workingDirectory, onCreateSession, creat
       }
       sendMessage(message);
     }
-  }, [sessionId, sessionDetails, onCreateSession, navigate, sendMessage, workingDirectory, addMessage, debugMode, selectedDirectory]);
+  }, [sessionId, sessionDetails, onCreateSession, navigate, sendMessage, addMessage, debugMode, selectedDirectory]);
 
   // Clean up pending WebSockets on unmount
   useEffect(() => {

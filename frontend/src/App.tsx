@@ -5,7 +5,7 @@ import { SessionList } from './components/SessionList';
 import { ChatWindow } from './components/ChatWindow';
 import { HomePage } from './components/HomePage';
 import { NewChatDialog } from './components/NewChatDialog';
-import { useCreateSession, useSessions } from './hooks/useApi';
+import { useCreateSession } from './hooks/useApi';
 import type { CreateSessionRequest } from './types/api';
 import './App.css';
 
@@ -15,7 +15,6 @@ function SessionView() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
   const { createSession, loading: createLoading } = useCreateSession();
-  const { sessions } = useSessions();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true); // Hidden by default
   const [showNewChatDialog, setShowNewChatDialog] = useState(false);
   const [directoryPopup, setDirectoryPopup] = useState<string | null>(null);
@@ -186,7 +185,6 @@ function SessionView() {
     setCopySuccess(null);
   };
 
-  const selectedSession = sessions.find(s => s.session_id === sessionId);
 
   return (
     <div className={`app ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
@@ -210,7 +208,6 @@ function SessionView() {
         {sessionId ? (
           <ChatWindow
             sessionId={sessionId}
-            workingDirectory={selectedSession?.working_directory}
             onCreateSession={createSession}
             createLoading={createLoading}
             navigate={navigate}

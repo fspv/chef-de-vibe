@@ -68,6 +68,10 @@ export function useWebSocket(url: string | null) {
   }, []);
 
   useEffect(() => {
+    // Clear messages when URL changes to prevent old session messages from showing
+    setMessages([]);
+    setError(null);
+    
     if (url) {
       connect();
     } else {
