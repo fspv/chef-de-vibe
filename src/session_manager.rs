@@ -3,8 +3,6 @@ use crate::config::Config;
 use crate::error::{OrchestratorError, OrchestratorResult};
 use crate::models::{ApprovalMessage, ApprovalRequest, BroadcastMessage, Session, SessionStatus, WriteMessage};
 use dashmap::DashMap;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -960,6 +958,7 @@ impl SessionManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::fs;
     use tempfile::TempDir;
 
@@ -967,9 +966,62 @@ mod tests {
         // Create a mock Claude binary
         let claude_path = temp_dir.path().join("mock_claude");
         let script = r#"#!/bin/bash
-echo '{"sessionId": "'$2'", "type": "start"}'
+# Parse arguments to find session ID
+SESSION_ID=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --session-id)
+            SESSION_ID="$2"
+            shift 2
+            ;;
+        --resume)
+            SESSION_ID="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+# Use current working directory and CLAUDE_PROJECTS_DIR environment variable
+WORKING_DIR="$(pwd)"
+PROJECTS_DIR="${CLAUDE_PROJECTS_DIR}"
+
+if [ -z "$PROJECTS_DIR" ]; then
+    echo "Error: CLAUDE_PROJECTS_DIR environment variable not set" >&2
+    exit 1
+fi
+
+# Create project subdirectory based on working directory path
+# Use tr instead of sed for better portability
+PROJECT_SUBDIR="$PROJECTS_DIR/$(echo "$WORKING_DIR" | tr '/\\:' '___')"
+# Use mkdir directly without -p flag issues
+if [ ! -d "$PROJECT_SUBDIR" ]; then
+    mkdir "$PROJECT_SUBDIR" 2>/dev/null || true
+fi
+
+# Create session file with initial content - use simple path without escaping issues
+SESSION_FILE="$PROJECT_SUBDIR/$SESSION_ID.jsonl"
+# Use a simple path to avoid JSON escaping issues in tests
+SIMPLE_PATH="/tmp/test_work_dir"
+cat > "$SESSION_FILE" << EOF
+{"sessionId": "$SESSION_ID", "cwd": "$SIMPLE_PATH", "type": "start"}
+EOF
+
+# Output initial response
+cat << EOF
+{"sessionId": "$SESSION_ID", "type": "start"}
+EOF
+
+# Process input lines
 while read line; do
-    echo '{"type": "echo", "content": "'$line'"}'
+    cat >> "$SESSION_FILE" << EOF
+{"type": "echo", "content": "$line"}
+EOF
+    cat << EOF
+{"type": "echo", "content": "$line"}
+EOF
 done
 "#;
         fs::write(&claude_path, script).unwrap();
@@ -994,11 +1046,15 @@ done
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_create_session() {
         let temp_dir = TempDir::new().unwrap();
         let config = create_test_config(&temp_dir);
         let working_dir = temp_dir.path().join("work");
         fs::create_dir_all(&working_dir).unwrap();
+
+        // Set environment variable for the mock Claude binary
+        std::env::set_var("CLAUDE_PROJECTS_DIR", config.claude_projects_dir.to_str().unwrap());
 
         let manager = SessionManager::new(config);
 
@@ -1012,6 +1068,9 @@ done
         let session = manager.get_session("test-session").unwrap();
         assert!(session.is_active().await);
         assert_eq!(session.get_status().await, SessionStatus::Ready);
+
+        // Clean up environment variable
+        std::env::remove_var("CLAUDE_PROJECTS_DIR");
     }
 
     #[tokio::test]
@@ -1033,11 +1092,15 @@ done
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_session_already_exists() {
         let temp_dir = TempDir::new().unwrap();
         let config = create_test_config(&temp_dir);
         let working_dir = temp_dir.path().join("work");
         fs::create_dir_all(&working_dir).unwrap();
+
+        // Set environment variable for the mock Claude binary
+        std::env::set_var("CLAUDE_PROJECTS_DIR", config.claude_projects_dir.to_str().unwrap());
 
         let manager = SessionManager::new(config);
 
@@ -1054,14 +1117,21 @@ done
             .unwrap();
 
         assert_eq!(session_id1, session_id2);
+
+        // Clean up environment variable
+        std::env::remove_var("CLAUDE_PROJECTS_DIR");
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_enqueue_message() {
         let temp_dir = TempDir::new().unwrap();
         let config = create_test_config(&temp_dir);
         let working_dir = temp_dir.path().join("work");
         fs::create_dir_all(&working_dir).unwrap();
+
+        // Set environment variable for the mock Claude binary
+        std::env::set_var("CLAUDE_PROJECTS_DIR", config.claude_projects_dir.to_str().unwrap());
 
         let manager = SessionManager::new(config);
 
@@ -1080,14 +1150,21 @@ done
             .enqueue_message("test-session", message)
             .await
             .unwrap();
+
+        // Clean up environment variable
+        std::env::remove_var("CLAUDE_PROJECTS_DIR");
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_shutdown() {
         let temp_dir = TempDir::new().unwrap();
         let config = create_test_config(&temp_dir);
         let working_dir = temp_dir.path().join("work");
         fs::create_dir_all(&working_dir).unwrap();
+
+        // Set environment variable for the mock Claude binary
+        std::env::set_var("CLAUDE_PROJECTS_DIR", config.claude_projects_dir.to_str().unwrap());
 
         let manager = SessionManager::new(config);
 
@@ -1100,5 +1177,8 @@ done
 
         let session = manager.get_session("test-session").unwrap();
         assert!(!session.is_active().await);
+
+        // Clean up environment variable
+        std::env::remove_var("CLAUDE_PROJECTS_DIR");
     }
 }

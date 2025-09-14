@@ -2522,13 +2522,20 @@ pre {
   overflow: hidden;
 }
 
-/* Optional: Enhance the library's default styles with slightly better colors */
+/* Override react-diff-view font styles to match application */
+.diff-content .diff-line {
+  font-family: 'Courier New', Monaco, 'Lucida Console', monospace;
+  font-size: 0.85rem;
+}
+
 .diff-content .diff-gutter {
   font-family: 'Courier New', Monaco, 'Lucida Console', monospace;
+  font-size: 0.85rem;
 }
 
 .diff-content .diff-code {
   font-family: 'Courier New', Monaco, 'Lucida Console', monospace;
+  font-size: 0.85rem;
 }
 
 /* Syntax highlighting for diffs */

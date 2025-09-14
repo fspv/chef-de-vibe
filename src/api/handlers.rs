@@ -188,6 +188,7 @@ pub async fn get_session(
 mod tests {
     use super::*;
     use crate::config::Config;
+    use serial_test::serial;
     use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
@@ -196,9 +197,51 @@ mod tests {
         // Create mock Claude binary
         let claude_path = temp_dir.path().join("mock_claude");
         let script = r#"#!/bin/bash
-echo '{"sessionId": "'$2'", "type": "start"}'
+# Parse arguments to find session ID
+SESSION_ID=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --session-id)
+            SESSION_ID="$2"
+            shift 2
+            ;;
+        --resume)
+            SESSION_ID="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+# Use current working directory and CLAUDE_PROJECTS_DIR environment variable
+WORKING_DIR="$(pwd)"
+PROJECTS_DIR="${CLAUDE_PROJECTS_DIR}"
+
+if [ -z "$PROJECTS_DIR" ]; then
+    echo "Error: CLAUDE_PROJECTS_DIR environment variable not set" >&2
+    exit 1
+fi
+
+# Create project subdirectory based on working directory path
+# Use tr to replace path separators for better portability
+ENCODED_DIR=$(echo "$WORKING_DIR" | tr '/\\:' '___')
+PROJECT_SUBDIR="$PROJECTS_DIR/$ENCODED_DIR"
+
+# Create directory if it doesn't exist
+mkdir -p "$PROJECT_SUBDIR"
+
+# Create session file with initial content
+SESSION_FILE="$PROJECT_SUBDIR/$SESSION_ID.jsonl"
+echo "{\"sessionId\": \"$SESSION_ID\", \"cwd\": \"/tmp/test_work_dir\", \"type\": \"start\"}" > "$SESSION_FILE"
+
+# Output initial response
+echo "{\"sessionId\": \"$SESSION_ID\", \"type\": \"start\"}"
+
+# Process input lines (if any) - output to stdout but don't modify session file
 while read line; do
-    echo '{"type": "echo", "content": "'$line'"}'
+    echo "{\"type\": \"echo\", \"content\": \"$line\"}"
 done
 "#;
         fs::write(&claude_path, script).unwrap();
@@ -237,9 +280,13 @@ done
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_create_session_success() {
         let temp_dir = TempDir::new().unwrap();
         let state = create_test_state(&temp_dir);
+
+        // Set environment variable for the mock Claude binary
+        std::env::set_var("CLAUDE_PROJECTS_DIR", state.config.claude_projects_dir.to_str().unwrap());
 
         let working_dir = temp_dir.path().join("work");
         fs::create_dir_all(&working_dir).unwrap();
@@ -264,6 +311,9 @@ done
         assert_eq!(list_result.0.sessions.len(), 1);
         assert_eq!(list_result.0.sessions[0].session_id, "test-session");
         assert!(list_result.0.sessions[0].active);
+
+        // Clean up environment variable
+        std::env::remove_var("CLAUDE_PROJECTS_DIR");
     }
 
     #[tokio::test]
@@ -308,16 +358,20 @@ done
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_get_active_session() {
         let temp_dir = TempDir::new().unwrap();
         let state = create_test_state(&temp_dir);
+
+        // Set environment variable for the mock Claude binary
+        std::env::set_var("CLAUDE_PROJECTS_DIR", state.config.claude_projects_dir.to_str().unwrap());
 
         let working_dir = temp_dir.path().join("work");
         fs::create_dir_all(&working_dir).unwrap();
 
         // Create session first
         let request = CreateSessionRequest {
-            session_id: "test-session".to_string(),
+            session_id: "testsession".to_string(),
             working_dir: working_dir.clone(),
             resume: false,
             first_message: r#"{"role": "user", "content": "Hello"}"#.to_string(),
@@ -328,18 +382,21 @@ done
             .unwrap();
 
         // Now get the session
-        let result = get_session(State(state), Path("test-session".to_string()))
+        let result = get_session(State(state), Path("testsession".to_string()))
             .await
             .unwrap();
 
-        assert_eq!(result.0.session_id, "test-session");
+        assert_eq!(result.0.session_id, "testsession");
         assert_eq!(
             result.0.websocket_url,
-            Some("/api/v1/sessions/test-session/claude_ws".to_string())
+            Some("/api/v1/sessions/testsession/claude_ws".to_string())
         );
         assert_eq!(
             result.0.approval_websocket_url,
-            Some("/api/v1/sessions/test-session/claude_approvals_ws".to_string())
+            Some("/api/v1/sessions/testsession/claude_approvals_ws".to_string())
         );
+
+        // Clean up environment variable
+        std::env::remove_var("CLAUDE_PROJECTS_DIR");
     }
 }

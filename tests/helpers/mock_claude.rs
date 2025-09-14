@@ -56,12 +56,32 @@ done
 # Generate a new session ID if resuming
 if [[ "$RESUME" == "true" ]]; then
     NEW_SESSION_ID="resumed-$(date +%s)-$(shuf -i 100-999 -n 1)"
+    ACTUAL_SESSION_ID="$NEW_SESSION_ID"
     echo "{\"session_id\": \"$NEW_SESSION_ID\", \"type\": \"resume\", \"originalSessionId\": \"$SESSION_ID\"}"
 else
+    ACTUAL_SESSION_ID="$SESSION_ID"
     echo "{\"session_id\": \"$SESSION_ID\", \"type\": \"start\", \"cwd\": \"$(pwd)\"}"
 fi
 
+# Create session file for session file waiting logic
+WORKING_DIR="$(pwd)"
+PROJECTS_DIR="${CLAUDE_PROJECTS_DIR}"
+
+if [ -n "$PROJECTS_DIR" ]; then
+    # Create project subdirectory based on working directory path
+    ENCODED_DIR=$(echo "$WORKING_DIR" | tr '/\\:' '___')
+    PROJECT_SUBDIR="$PROJECTS_DIR/$ENCODED_DIR"
+    
+    # Create directory if it doesn't exist
+    mkdir -p "$PROJECT_SUBDIR"
+    
+    # Create session file with initial content using the actual session ID
+    SESSION_FILE="$PROJECT_SUBDIR/$ACTUAL_SESSION_ID.jsonl"
+    echo "{\"sessionId\": \"$ACTUAL_SESSION_ID\", \"cwd\": \"$WORKING_DIR\", \"type\": \"start\"}" > "$SESSION_FILE"
+fi
+
 # Simulate Claude's interactive behavior
+FIRST_MESSAGE=true
 while IFS= read -r line; do
     # Parse JSON input (basic simulation)
     if [[ "$line" == *"\"content\":"* ]]; then
@@ -70,6 +90,13 @@ while IFS= read -r line; do
         if [[ -n "$content" ]]; then
             # Simulate Claude's response
             echo "{\"type\": \"assistant\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"Mock Claude received: $content\"}]}}"
+            
+            # After the first message, send a ready signal for WebSocket clients
+            if [[ "$FIRST_MESSAGE" == "true" ]]; then
+                FIRST_MESSAGE=false
+                sleep 0.1
+                echo "{\"type\": \"session_ready\", \"message\": \"Session is ready for WebSocket connections\"}"
+            fi
         else
             # If simple extraction fails, just respond that we got a message
             echo "{\"type\": \"assistant\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"Mock Claude received multiline WebSocket message\"}]}}"
@@ -203,9 +230,28 @@ done
 # Generate a new session ID if resuming
 if [[ "$RESUME" == "true" ]]; then
     NEW_SESSION_ID="resumed-$(date +%s)-$(shuf -i 100-999 -n 1)"
+    ACTUAL_SESSION_ID="$NEW_SESSION_ID"
     echo "{\"session_id\": \"$NEW_SESSION_ID\", \"type\": \"resume\", \"originalSessionId\": \"$SESSION_ID\"}"
 else
+    ACTUAL_SESSION_ID="$SESSION_ID"
     echo "{\"session_id\": \"$SESSION_ID\", \"type\": \"start\", \"cwd\": \"$(pwd)\"}"
+fi
+
+# Create session file for session file waiting logic
+WORKING_DIR="$(pwd)"
+PROJECTS_DIR="${CLAUDE_PROJECTS_DIR}"
+
+if [ -n "$PROJECTS_DIR" ]; then
+    # Create project subdirectory based on working directory path
+    ENCODED_DIR=$(echo "$WORKING_DIR" | tr '/\\:' '___')
+    PROJECT_SUBDIR="$PROJECTS_DIR/$ENCODED_DIR"
+    
+    # Create directory if it doesn't exist
+    mkdir -p "$PROJECT_SUBDIR"
+    
+    # Create session file with initial content
+    SESSION_FILE="$PROJECT_SUBDIR/$ACTUAL_SESSION_ID.jsonl"
+    echo "{\"sessionId\": \"$ACTUAL_SESSION_ID\", \"cwd\": \"$WORKING_DIR\", \"type\": \"start\"}" > "$SESSION_FILE"
 fi
 
 # Validation function for control_response format
