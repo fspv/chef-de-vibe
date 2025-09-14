@@ -50,6 +50,8 @@ services:
       # If you want to use socket
       # - CONTAINER_HOST=unix:///run/user/1934/podman/podman.sock
       # If will be similar for docker integration
+      # To make git work in the conntainer
+      # - CONTAINER_ARGS="-v /home/dev/.gitconfig:/root/.gitconfig"
   # If you want to access it via tailscale
   #   network_mode: service:tailscale_chefdevibe
   #   depends_on:

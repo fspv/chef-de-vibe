@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
+import { v4 as uuidv4 } from 'uuid';
 import { SessionList } from './components/SessionList';
 import { ChatWindow } from './components/ChatWindow';
-import { DirectorySelectionDialog } from './components/DirectorySelectionDialog';
+import { NewChatDialog } from './components/NewChatDialog';
 import { useCreateSession, useSessions } from './hooks/useApi';
+import type { CreateSessionRequest } from './types/api';
 import './App.css';
 
 const SIDEBAR_COLLAPSED_KEY = 'chef-de-vibe-sidebar-collapsed';
@@ -14,7 +16,7 @@ function SessionView() {
   const { createSession, loading: createLoading } = useCreateSession();
   const { sessions } = useSessions();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true); // Hidden by default
-  const [showDirectorySelection, setShowDirectorySelection] = useState(false);
+  const [showNewChatDialog, setShowNewChatDialog] = useState(false);
   const [directoryPopup, setDirectoryPopup] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
 
@@ -25,6 +27,7 @@ function SessionView() {
       setSidebarCollapsed(JSON.parse(stored));
     }
   }, []);
+
 
   // Save sidebar state to localStorage whenever it changes
   useEffect(() => {
@@ -40,9 +43,9 @@ function SessionView() {
           setDirectoryPopup(null);
           setCopySuccess(null);
         } 
-        // If directory selection dialog is open, let it handle its own escape
-        else if (showDirectorySelection) {
-          // Do nothing, let DirectorySelectionDialog handle it
+        // If new chat dialog is open, let it handle its own escape
+        else if (showNewChatDialog) {
+          // Do nothing, let NewChatDialog handle it
         }
         // Otherwise, close the sidebar if it's open
         else if (!sidebarCollapsed) {
@@ -53,7 +56,7 @@ function SessionView() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [sidebarCollapsed, directoryPopup, showDirectorySelection]);
+  }, [sidebarCollapsed, directoryPopup, showNewChatDialog]);
 
   // Handle swipe gestures for mobile
   useEffect(() => {
@@ -123,21 +126,34 @@ function SessionView() {
   };
 
   const handleNewChat = () => {
-    // Show directory selection dialog instead of immediately navigating
-    setShowDirectorySelection(true);
-    // Don't close sidebar when opening directory selection
+    // Show new chat dialog
+    setShowNewChatDialog(true);
+    // Don't close sidebar when opening new chat dialog
   };
 
-  const handleDirectorySelected = (directory: string) => {
-    setShowDirectorySelection(false);
-    // Close sidebar to give user space to start typing
-    setSidebarCollapsed(true);
-    // Navigate to root with the selected directory - we'll pass it via state
-    navigate('/', { state: { selectedDirectory: directory } });
+  const handleStartChat = async (directory: string, firstMessage: string) => {
+    setShowNewChatDialog(false);
+    
+    // Create the session immediately with the first message
+    const newSessionId = uuidv4();
+    const request: CreateSessionRequest = {
+      session_id: newSessionId,
+      working_dir: directory,
+      resume: false,
+      first_message: firstMessage
+    };
+
+    const response = await createSession(request);
+    if (response) {
+      // Close sidebar to give user space
+      setSidebarCollapsed(true);
+      // Navigate to the new session
+      navigate(`/session/${response.session_id}`);
+    }
   };
 
-  const handleDirectorySelectionCancel = () => {
-    setShowDirectorySelection(false);
+  const handleNewChatCancel = () => {
+    setShowNewChatDialog(false);
   };
 
   const toggleSidebar = () => {
@@ -194,13 +210,14 @@ function SessionView() {
           createLoading={createLoading}
           navigate={navigate}
           sidebarCollapsed={sidebarCollapsed}
+          onNewChat={handleNewChat}
         />
       </div>
 
-      {showDirectorySelection && (
-        <DirectorySelectionDialog
-          onSelectDirectory={handleDirectorySelected}
-          onCancel={handleDirectorySelectionCancel}
+      {showNewChatDialog && (
+        <NewChatDialog
+          onStartChat={handleStartChat}
+          onCancel={handleNewChatCancel}
         />
       )}
 

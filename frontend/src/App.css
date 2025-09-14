@@ -116,7 +116,7 @@ html, body {
 }
 
 /* Directory Selection Dialog Styles */
-.directory-selection-overlay {
+.new-chat-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -130,7 +130,7 @@ html, body {
   padding: 20px;
 }
 
-.directory-selection-dialog {
+.new-chat-dialog {
   background-color: white;
   border-radius: 8px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
@@ -140,7 +140,7 @@ html, body {
   overflow-y: auto;
 }
 
-.directory-dialog-header {
+.new-chat-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -148,7 +148,7 @@ html, body {
   border-bottom: 1px solid #e9ecef;
 }
 
-.directory-dialog-header h3 {
+.new-chat-header h3 {
   margin: 0;
   font-size: 20px;
   color: #2c3e50;
@@ -170,15 +170,15 @@ html, body {
   color: #495057;
 }
 
-.directory-dialog-content {
+.new-chat-content {
   padding: 24px;
 }
 
-.directory-dialog-description {
+.new-chat-description {
   margin-bottom: 20px;
 }
 
-.directory-dialog-description p {
+.new-chat-description p {
   margin: 0;
   color: #6c757d;
   font-size: 14px;
@@ -197,11 +197,41 @@ html, body {
   font-size: 14px;
 }
 
-.directory-dialog-picker {
+.new-chat-picker {
   width: 100%;
 }
 
-.directory-dialog-actions {
+.message-input-container {
+  margin-bottom: 24px;
+}
+
+.message-input-container label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #495057;
+  font-size: 14px;
+}
+
+.first-message-input {
+  width: 100%;
+  min-height: 80px;
+  padding: 12px;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  resize: vertical;
+  transition: border-color 0.2s ease;
+}
+
+.first-message-input:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.new-chat-actions {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
@@ -1040,6 +1070,38 @@ html, body {
   overflow-x: hidden;
   padding: 1rem;
   max-width: 100%;
+}
+
+.chat-content.centered {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.start-chat-button {
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  background-color: #3498db;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.start-chat-button:hover:not(:disabled) {
+  background-color: #2980b9;
+  transform: translateY(-2px);
+}
+
+.start-chat-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.start-chat-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .chat-input {

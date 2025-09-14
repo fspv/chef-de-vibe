@@ -20,9 +20,10 @@ interface ChatWindowProps {
   createLoading: boolean;
   navigate: (path: string, options?: { state?: unknown }) => void;
   sidebarCollapsed: boolean;
+  onNewChat: () => void;
 }
 
-export function ChatWindow({ sessionId, workingDirectory, onCreateSession, createLoading, navigate, sidebarCollapsed }: ChatWindowProps) {
+export function ChatWindow({ sessionId, workingDirectory, onCreateSession, createLoading, navigate, sidebarCollapsed, onNewChat }: ChatWindowProps) {
   const location = useLocation();
   const { sessionDetails, loading, error } = useSessionDetails(sessionId);
   const [debugMode, setDebugMode] = useState(false);
@@ -58,7 +59,7 @@ export function ChatWindow({ sessionId, workingDirectory, onCreateSession, creat
       const newSessionId = uuidv4();
       const request: CreateSessionRequest = {
         session_id: newSessionId,
-        working_dir: selectedDirectory || '/tmp',
+        working_dir: ensureAbsolutePath(selectedDirectory),
         resume: false,
         first_message: message
       };
@@ -187,20 +188,14 @@ export function ChatWindow({ sessionId, workingDirectory, onCreateSession, creat
           />
         )}
         
-        <div className="chat-content">
-          <MessageList 
-            sessionMessages={[]} 
-            webSocketMessages={[]} 
-            debugMode={debugMode}
-          />
-        </div>
-        
-        <div className="chat-input">
-          <MessageInput
-            onSendMessage={handleSendMessage}
+        <div className="chat-content centered">
+          <button 
+            className="start-chat-button"
+            onClick={onNewChat}
             disabled={createLoading}
-            debugMode={debugMode}
-          />
+          >
+            Start New Chat
+          </button>
         </div>
       </div>
     );
