@@ -3,6 +3,7 @@ import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { SessionList } from './components/SessionList';
 import { ChatWindow } from './components/ChatWindow';
+import { HomePage } from './components/HomePage';
 import { NewChatDialog } from './components/NewChatDialog';
 import { useCreateSession, useSessions } from './hooks/useApi';
 import type { CreateSessionRequest } from './types/api';
@@ -203,16 +204,22 @@ function SessionView() {
       ></button>
       
       <div className="app-main">
-        <ChatWindow
-          sessionId={sessionId || null}
-          workingDirectory={selectedSession?.working_directory}
-          onCreateSession={createSession}
-          createLoading={createLoading}
-          navigate={navigate}
-          sidebarCollapsed={sidebarCollapsed}
-          onNewChat={handleNewChat}
-        />
-      </div>
+        {sessionId ? (
+          <ChatWindow
+            sessionId={sessionId}
+            workingDirectory={selectedSession?.working_directory}
+            onCreateSession={createSession}
+            createLoading={createLoading}
+            navigate={navigate}
+            sidebarCollapsed={sidebarCollapsed}
+            onNewChat={handleNewChat}
+          />
+        ) : (
+          <HomePage
+            onNewChat={handleNewChat}
+            sidebarCollapsed={sidebarCollapsed}
+          />
+        )}      </div>
 
       {showNewChatDialog && (
         <NewChatDialog

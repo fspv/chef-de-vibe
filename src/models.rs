@@ -144,6 +144,7 @@ pub enum AssistantContent {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GetSessionResponse {
     pub session_id: String,
+    pub working_directory: PathBuf,
     pub content: Vec<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub websocket_url: Option<String>,

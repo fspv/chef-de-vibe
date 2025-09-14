@@ -8,7 +8,7 @@ interface NewChatDialogProps {
 }
 
 export function NewChatDialog({ onStartChat, onCancel }: NewChatDialogProps) {
-  const [selectedDirectory, setSelectedDirectory] = useState('/tmp');
+  const [selectedDirectory, setSelectedDirectory] = useState('');
   const [firstMessage, setFirstMessage] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {

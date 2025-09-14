@@ -31,7 +31,7 @@ export function ChatWindow({ sessionId, workingDirectory, onCreateSession, creat
   
   // Helper function to ensure directory path starts with /
   const ensureAbsolutePath = (path: string | undefined | null): string => {
-    if (!path) return '/tmp';
+    if (!path) throw new Error('Working directory path is required but not provided');
     const cleanPath = path.trim();
     return cleanPath.startsWith('/') ? cleanPath : '/' + cleanPath;
   };
@@ -83,10 +83,13 @@ export function ChatWindow({ sessionId, workingDirectory, onCreateSession, creat
         navigate(`/session/${response.session_id}`);
       }
     } else if (sessionDetails && !sessionDetails.websocket_url) {
-      // Inactive session - need to resume
+      // Inactive session - need to resume  
+      if (!sessionDetails.working_directory) {
+        throw new Error('Cannot resume session: working directory not available');
+      }
       const request: CreateSessionRequest = {
         session_id: sessionId,
-        working_dir: workingDirectory || '/tmp',
+        working_dir: sessionDetails.working_directory,
         resume: true,
         first_message: message
       };

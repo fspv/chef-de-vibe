@@ -143,6 +143,7 @@ Note: `session_id` in response may differ from request when `resume: true`
 ```json
 {
   "session_id": "session-123",
+  "working_directory": "/home/user/project",
   "content": [
     {"type": "user", "message": {"role": "user", "content": "Hello"}},
     {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Hi there!"}]}}
@@ -156,6 +157,7 @@ Note: `session_id` in response may differ from request when `resume: true`
 ```json
 {
   "session_id": "session-123",
+  "working_directory": "/home/user/project",
   "content": [
     {"type": "user", "message": {"role": "user", "content": "Hello"}},
     {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Hi there!"}]}}
@@ -908,6 +910,7 @@ Content-Type: application/json
 
 {
   "session_id": "abc-123",
+  "working_directory": "/home/user/project",
   "content": [
     {"type": "user", "message": {"role": "user", "content": "Hello"}},
     {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Hi there!"}]}}

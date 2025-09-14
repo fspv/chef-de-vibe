@@ -177,6 +177,7 @@ pub async fn get_session(
 
     Ok(Json(GetSessionResponse {
         session_id: session_info.session_id,
+        working_directory: session_info.working_directory,
         content,
         websocket_url,
         approval_websocket_url,
