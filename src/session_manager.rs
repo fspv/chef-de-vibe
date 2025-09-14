@@ -375,10 +375,41 @@ impl SessionManager {
                     session_id.clone()
                 };
 
+                // Check if the process has already exited (immediate failure)
+                if let Some(pid) = session.get_process_id().await {
+                    debug!(
+                        session_id = %actual_session_id,
+                        process_id = pid,
+                        "Checking if Claude process is still running before waiting for session file"
+                    );
+                    
+                    // Give the process a moment to stabilize (100ms)
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    
+                    // Check if process is still alive
+                    if session.get_process_id().await.is_none() {
+                        error!(
+                            session_id = %actual_session_id,
+                            "Claude process exited immediately after spawn"
+                        );
+                        return Err(OrchestratorError::ClaudeSpawnFailed(
+                            "Claude binary failed to start - process exited immediately".into(),
+                        ));
+                    }
+                } else {
+                    error!(
+                        session_id = %actual_session_id,
+                        "No process ID found after spawn - Claude process may have failed to start"
+                    );
+                    return Err(OrchestratorError::ClaudeSpawnFailed(
+                        "Claude binary failed to start - no process ID available".into(),
+                    ));
+                }
+
                 // Wait for session file to be created and populated
                 debug!(
                     session_id = %actual_session_id,
-                    "Claude process is ready, now waiting for session file to be created"
+                    "Claude process is running, now waiting for session file to be created"
                 );
 
                 // Use a 20 second timeout for file creation
@@ -1178,6 +1209,71 @@ done
         let session = manager.get_session("test-session").unwrap();
         assert!(!session.is_active().await);
 
+        // Clean up environment variable
+        std::env::remove_var("CLAUDE_PROJECTS_DIR");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_claude_binary_immediate_failure() {
+        let temp_dir = TempDir::new().unwrap();
+        let working_dir = temp_dir.path().join("work");
+        fs::create_dir_all(&working_dir).unwrap();
+        
+        // Create a mock Claude binary that exits immediately
+        let claude_path = temp_dir.path().join("failing_claude");
+        let script = r#"#!/bin/bash
+exit 1
+"#;
+        fs::write(&claude_path, script).unwrap();
+        
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&claude_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&claude_path, perms).unwrap();
+        }
+        
+        let projects_dir = temp_dir.path().join("projects");
+        fs::create_dir_all(&projects_dir).unwrap();
+        
+        let config = Config {
+            claude_binary_path: claude_path,
+            http_listen_address: "127.0.0.1:8080".to_string(),
+            claude_projects_dir: projects_dir.clone(),
+            shutdown_timeout: std::time::Duration::from_secs(1),
+        };
+        
+        // Set environment variable for the mock Claude binary
+        std::env::set_var("CLAUDE_PROJECTS_DIR", projects_dir.to_str().unwrap());
+        
+        let manager = SessionManager::new(config);
+        
+        // Start timing
+        let start = std::time::Instant::now();
+        
+        // Try to create session - should fail immediately
+        let result = manager
+            .create_session("test-session".to_string(), &working_dir, false, r#"{"role": "user", "content": "Hello"}"#.to_string())
+            .await;
+            
+        let elapsed = start.elapsed();
+        
+        // Should fail
+        assert!(result.is_err());
+        
+        // Should fail quickly (less than 2 seconds, not wait for the 20 second timeout)
+        assert!(elapsed.as_secs() < 2, "Took too long to detect failure: {:?}", elapsed);
+        
+        match result.unwrap_err() {
+            OrchestratorError::ClaudeSpawnFailed(msg) => {
+                assert!(msg.contains("process exited immediately") || msg.contains("Failed to spawn Claude process"), 
+                       "Unexpected error message: {}", msg);
+            }
+            e => panic!("Expected ClaudeSpawnFailed error, got: {:?}", e),
+        }
+        
         // Clean up environment variable
         std::env::remove_var("CLAUDE_PROJECTS_DIR");
     }
