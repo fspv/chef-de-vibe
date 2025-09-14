@@ -3,10 +3,13 @@ use crate::config::Config;
 use crate::error::{OrchestratorError, OrchestratorResult};
 use crate::models::{ApprovalMessage, ApprovalRequest, BroadcastMessage, Session, SessionStatus, WriteMessage};
 use dashmap::DashMap;
-use std::path::Path;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
+use tokio::time::{timeout, Duration};
 use tracing::{info, warn, error, debug, instrument};
 use uuid::Uuid;
 
@@ -65,6 +68,120 @@ impl SessionManager {
             config: Arc::new(config),
             worker_handles: Arc::new(DashMap::new()),
         }
+    }
+
+    /// Waits for a session file to be created and contain non-empty content.
+    /// 
+    /// # Arguments
+    /// * `session_id` - The session ID to wait for
+    /// * `timeout_duration` - Maximum time to wait for the file
+    /// 
+    /// # Returns
+    /// Ok(()) if file exists and is non-empty, Err if timeout or other error
+    #[instrument(skip(self), fields(session_id = %session_id, timeout_seconds = timeout_duration.as_secs()))]
+    async fn wait_for_session_file(&self, session_id: &str, timeout_duration: Duration) -> OrchestratorResult<()> {
+        let filename = format!("{}.jsonl", session_id);
+        
+        debug!(
+            session_id = %session_id,
+            filename = %filename,
+            projects_dir = %self.config.claude_projects_dir.display(),
+            timeout_seconds = timeout_duration.as_secs(),
+            "Starting to wait for session file creation"
+        );
+
+        let check_file_ready = || async {
+            // Search for the session file in all subdirectories
+            let session_file_path = match self.find_session_file(&filename) {
+                Some(path) => path,
+                None => {
+                    debug!(
+                        session_id = %session_id,
+                        filename = %filename,
+                        "Session file not found in any project directory"
+                    );
+                    return false;
+                }
+            };
+
+            // Check if file has content (not empty)
+            match std::fs::metadata(&session_file_path) {
+                Ok(metadata) => {
+                    if metadata.len() == 0 {
+                        debug!(
+                            session_id = %session_id,
+                            file_path = %session_file_path.display(),
+                            "Session file exists but is empty"
+                        );
+                        return false;
+                    }
+                    
+                    info!(
+                        session_id = %session_id,
+                        file_path = %session_file_path.display(),
+                        file_size = metadata.len(),
+                        "Session file is ready with content"
+                    );
+                    true
+                }
+                Err(e) => {
+                    debug!(
+                        session_id = %session_id,
+                        file_path = %session_file_path.display(),
+                        error = %e,
+                        "Error reading session file metadata"
+                    );
+                    false
+                }
+            }
+        };
+
+        // Use timeout to wait for file to be ready
+        match timeout(timeout_duration, async {
+            let mut interval = tokio::time::interval(Duration::from_millis(100));
+            loop {
+                if check_file_ready().await {
+                    return Ok(());
+                }
+                interval.tick().await;
+            }
+        }).await {
+            Ok(result) => {
+                info!(
+                    session_id = %session_id,
+                    filename = %filename,
+                    "Successfully waited for session file to be ready"
+                );
+                result
+            }
+            Err(_) => {
+                error!(
+                    session_id = %session_id,
+                    filename = %filename,
+                    timeout_seconds = timeout_duration.as_secs(),
+                    "Timeout waiting for session file to be created and populated"
+                );
+                Err(OrchestratorError::InternalError(
+                    format!("Timeout waiting for session file {} to be created", session_id)
+                ))
+            }
+        }
+    }
+
+    /// Finds a session file by scanning all subdirectories in the projects directory
+    fn find_session_file(&self, filename: &str) -> Option<PathBuf> {
+        use walkdir::WalkDir;
+        
+        for entry in WalkDir::new(&self.config.claude_projects_dir)
+            .into_iter()
+            .filter_map(std::result::Result::ok)
+        {
+            let path = entry.path();
+            if path.file_name().and_then(|n| n.to_str()) == Some(filename) {
+                return Some(path.to_path_buf());
+            }
+        }
+        None
     }
 
     /// Creates or resumes a session with the given parameters.
@@ -253,19 +370,41 @@ impl SessionManager {
 
         match final_status {
             SessionStatus::Ready => {
-                // For resume case, get the actual session ID
+                // Get the actual session ID (may be different for resume case)
+                let actual_session_id = if resume {
+                    session.get_id().await
+                } else {
+                    session_id.clone()
+                };
+
+                // Wait for session file to be created and populated
+                debug!(
+                    session_id = %actual_session_id,
+                    "Claude process is ready, now waiting for session file to be created"
+                );
+
+                // Use a 20 second timeout for file creation
+                let file_timeout = Duration::from_secs(20);
+                if let Err(e) = self.wait_for_session_file(&actual_session_id, file_timeout).await {
+                    error!(
+                        session_id = %actual_session_id,
+                        error = %e,
+                        "Failed to wait for session file creation"
+                    );
+                    return Err(e);
+                }
+
                 if resume {
-                    let actual_id = session.get_id().await;
                     info!(
                         requested_session_id = %session_id,
-                        actual_session_id = %actual_id,
-                        "Session created successfully (resumed with different ID)"
+                        actual_session_id = %actual_session_id,
+                        "Session created successfully (resumed with different ID) and file is ready"
                     );
-                    Ok(actual_id)
+                    Ok(actual_session_id)
                 } else {
                     info!(
                         session_id = %session_id,
-                        "Session created successfully"
+                        "Session created successfully and file is ready"
                     );
                     Ok(session_id)
                 }

@@ -20,6 +20,9 @@ export function ApprovalDialog({ request, onApprove, onDeny, onClose }: Approval
   );
   const [inputError, setInputError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [selectedPermissions, setSelectedPermissions] = useState<boolean[]>(
+    request.permission_suggestions ? new Array(request.permission_suggestions.length).fill(false) : []
+  );
 
   const handleApprove = () => {
     try {
@@ -29,11 +32,21 @@ export function ApprovalDialog({ request, onApprove, onDeny, onClose }: Approval
         updatedInput = JSON.parse(modifiedInput);
       }
 
-      onApprove(request.id, request.input, updatedInput, request.permission_suggestions);
+      const selectedPermissionUpdates = request.permission_suggestions?.filter((_, index) => selectedPermissions[index]);
+
+      onApprove(request.id, request.input, updatedInput, selectedPermissionUpdates);
       onClose();
     } catch {
       setInputError('Invalid JSON format');
     }
+  };
+
+  const handlePermissionToggle = (index: number) => {
+    setSelectedPermissions(prev => {
+      const newSelected = [...prev];
+      newSelected[index] = !newSelected[index];
+      return newSelected;
+    });
   };
 
   const handleDeny = () => {
@@ -93,8 +106,50 @@ export function ApprovalDialog({ request, onApprove, onDeny, onClose }: Approval
                 <div className="suggestions-content">
                   {request.permission_suggestions.map((suggestion, index) => (
                     <div key={index} className="permission-suggestion">
-                      <h5>Permission Update {index + 1}</h5>
-                      <pre>{JSON.stringify(suggestion, null, 2)}</pre>
+                      <div className="permission-checkbox">
+                        <input
+                          type="checkbox"
+                          id={`permission-${index}`}
+                          checked={selectedPermissions[index]}
+                          onChange={() => handlePermissionToggle(index)}
+                        />
+                        <label htmlFor={`permission-${index}`}>
+                          Apply Permission Update {index + 1}
+                        </label>
+                      </div>
+                      <div className="permission-details">
+                        <div><strong>Type:</strong> {suggestion.type}</div>
+                        {'behavior' in suggestion && <div><strong>Behavior:</strong> {suggestion.behavior}</div>}
+                        <div><strong>Destination:</strong> {suggestion.destination}</div>
+                        {suggestion.type === 'addRules' || suggestion.type === 'replaceRules' || suggestion.type === 'removeRules' ? (
+                          <div>
+                            <strong>Rules:</strong>
+                            <ul>
+                              {suggestion.rules.map((rule, ruleIndex) => (
+                                <li key={ruleIndex}>
+                                  <strong>{rule.toolName}</strong>
+                                  {rule.ruleContent && <span>: {rule.ruleContent}</span>}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : suggestion.type === 'setMode' ? (
+                          <div><strong>Mode:</strong> {suggestion.mode}</div>
+                        ) : suggestion.type === 'addDirectories' || suggestion.type === 'removeDirectories' ? (
+                          <div>
+                            <strong>Directories:</strong>
+                            <ul>
+                              {suggestion.directories.map((dir, dirIndex) => (
+                                <li key={dirIndex}>{dir}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                      </div>
+                      <details className="raw-json">
+                        <summary>Raw JSON</summary>
+                        <pre>{JSON.stringify(suggestion, null, 2)}</pre>
+                      </details>
                     </div>
                   ))}
                 </div>
