@@ -2169,6 +2169,76 @@ html, body {
     font-size: 0.7rem;
     padding: 0.375rem 0.75rem;
   }
+  
+  /* Enhanced text wrapping for mobile devices */
+  .chat-content,
+  .messages-container,
+  .message-item {
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    overflow-x: hidden !important;
+  }
+  
+  /* Ensure text areas and inputs wrap properly */
+  textarea,
+  input[type="text"],
+  .tool-input-editor,
+  .first-message-input {
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    white-space: pre-wrap !important;
+  }
+  
+  /* Force all table content to wrap */
+  table,
+  th,
+  td {
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    max-width: 100% !important;
+  }
+  
+  /* Diff viewer mobile adjustments */
+  .diff-content,
+  .diff-code,
+  .diff-line {
+    word-break: break-all !important;
+    overflow-wrap: break-word !important;
+    white-space: pre-wrap !important;
+  }
+  
+  /* Todo layout fixes for mobile */
+  .todo-item {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.25rem !important;
+    padding: 0.75rem !important;
+  }
+  
+  .todo-content {
+    width: 100% !important;
+    margin-top: 0.25rem !important;
+  }
+  
+  /* Todo metadata row on mobile */
+  .todo-item > :not(.todo-content) {
+    display: inline-block !important;
+    margin-right: 0.5rem !important;
+    margin-bottom: 0.25rem !important;
+  }
+  
+  /* Stack todo header stats vertically */
+  .todo-stats {
+    flex-direction: column !important;
+    gap: 0.25rem !important;
+    align-items: flex-start !important;
+  }
+  
+  .todo-list-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.75rem !important;
+  }
 }
 
 /* Approval Dialog Styles */
@@ -2438,6 +2508,53 @@ html, body {
 pre {
   white-space: pre-wrap !important;
   word-break: break-word !important;
+  overflow-wrap: break-word !important;
+  max-width: 100% !important;
+}
+
+/* Comprehensive text wrapping for mobile */
+* {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Force word wrapping on all text content */
+.message-text,
+.text-content,
+.tool-input,
+.tool-result-text,
+.result-text,
+.generic-message-content,
+.unknown-message,
+.detail-value,
+.full-path,
+.session-summary,
+.directory-path,
+.path-text,
+.permission-json,
+.permission-json-line code,
+.tool-input-editor,
+code,
+pre {
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+  word-wrap: break-word !important;
+  white-space: pre-wrap !important;
+  max-width: 100% !important;
+  overflow-x: auto !important;
+}
+
+/* Special handling for monospace elements that might overflow */
+.session-id,
+.tool-id,
+.tool-use-id,
+.todo-id,
+.todo-form,
+.parent-tool-id,
+code,
+pre,
+.message-timestamp {
+  word-break: break-all !important;
   overflow-wrap: break-word !important;
   max-width: 100% !important;
 }
