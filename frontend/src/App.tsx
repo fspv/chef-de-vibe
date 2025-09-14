@@ -150,6 +150,9 @@ function SessionView() {
       setSidebarCollapsed(true);
       // Navigate to the new session
       navigate(`/session/${response.session_id}`);
+    } else {
+      // Show error alert with suggestion to check backend logs
+      alert('Failed to create new chat session. Please check the backend logs for more details. You may need to restart the backend service or check your working directory permissions.');
     }
   };
 

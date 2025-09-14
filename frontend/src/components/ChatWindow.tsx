@@ -218,8 +218,12 @@ export function ChatWindow({ sessionId, workingDirectory, onCreateSession, creat
     return (
       <div className="chat-window">
         <div className="error-chat">
-          <h3>Error loading session</h3>
+          <h3>Failed to resume chat session</h3>
           <p>{error}</p>
+          <p className="error-suggestion">
+            Please check the backend logs for more details. The session may have expired, 
+            been corrupted, or the backend service may need to be restarted.
+          </p>
         </div>
       </div>
     );
@@ -231,6 +235,10 @@ export function ChatWindow({ sessionId, workingDirectory, onCreateSession, creat
         <div className="error-chat">
           <h3>Session not found</h3>
           <p>The requested session could not be found.</p>
+          <p className="error-suggestion">
+            The session may have been deleted or expired. Check the backend logs for more details 
+            or try starting a new chat session.
+          </p>
         </div>
       </div>
     );

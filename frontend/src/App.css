@@ -1209,6 +1209,15 @@ html, body {
   color: #6c757d;
 }
 
+.error-suggestion {
+  margin-top: 16px;
+  font-size: 14px;
+  font-style: italic;
+  color: #7f8c8d;
+  max-width: 600px;
+  line-height: 1.5;
+}
+
 /* Message List Styles */
 .message-list {
   display: flex;
