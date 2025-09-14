@@ -8,13 +8,15 @@ interface MessageListProps {
   webSocketMessages: WebSocketMessage[];
   debugMode: boolean;
   onAutoScrollStateChange?: (isAtBottom: boolean, autoScrollPaused: boolean) => void;
+  onApprove?: (requestId: string, input: Record<string, unknown>, permissionUpdates?: Array<Record<string, unknown>>) => void;
+  onDeny?: (requestId: string) => void;
 }
 
 export interface MessageListRef {
   toggleAutoScroll: () => void;
 }
 
-export const MessageList = forwardRef<MessageListRef, MessageListProps>(({ sessionMessages, webSocketMessages, debugMode, onAutoScrollStateChange }, ref) => {
+export const MessageList = forwardRef<MessageListRef, MessageListProps>(({ sessionMessages, webSocketMessages, debugMode, onAutoScrollStateChange, onApprove, onDeny }, ref) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -90,6 +92,8 @@ export const MessageList = forwardRef<MessageListRef, MessageListProps>(({ sessi
               data={message}
               showRawJson={debugMode}
               messageSource="session"
+              onApprove={onApprove}
+              onDeny={onDeny}
             />
           ))}
           {webSocketMessages.map((wsMessage, index) => (
@@ -99,6 +103,8 @@ export const MessageList = forwardRef<MessageListRef, MessageListProps>(({ sessi
               timestamp={wsMessage.timestamp}
               showRawJson={debugMode}
               messageSource="websocket"
+              onApprove={onApprove}
+              onDeny={onDeny}
             />
           ))}
         </div>

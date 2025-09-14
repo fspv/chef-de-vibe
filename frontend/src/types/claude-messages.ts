@@ -22,6 +22,9 @@ export type {
   SDKCompactBoundaryMessage
 };
 
+// Extended SDKMessage type to include control requests
+export type ExtendedSDKMessage = SDKMessage | SDKControlRequestMessage;
+
 // Extended todo types to handle actual usage patterns
 export interface TodoItem {
   content: string;
@@ -95,13 +98,42 @@ export function isSDKCompactBoundaryMessage(message: unknown): message is SDKCom
          message.subtype === 'compact_boundary';
 }
 
-export function isSDKMessage(message: unknown): message is SDKMessage {
+export function isSDKMessage(message: unknown): message is SDKMessage | SDKControlRequestMessage {
   return isSDKUserMessage(message) ||
          isSDKAssistantMessage(message) ||
          isSDKResultMessage(message) ||
          isSDKSystemMessage(message) ||
          isSDKPartialAssistantMessage(message) ||
-         isSDKCompactBoundaryMessage(message);
+         isSDKCompactBoundaryMessage(message) ||
+         isSDKControlRequestMessage(message);
+}
+
+// Control request message type (for approval requests)
+export interface SDKControlRequestMessage {
+  type: 'control_request';
+  request_id: string;
+  request: {
+    subtype: 'can_use_tool';
+    tool_name: string;
+    input: Record<string, unknown>;
+    permission_suggestions?: Array<Record<string, unknown>>;
+  };
+}
+
+// Type guard for control request messages
+export function isSDKControlRequestMessage(message: unknown): message is SDKControlRequestMessage {
+  if (typeof message !== 'object' || message === null) {
+    return false;
+  }
+  
+  const obj = message as Record<string, unknown>;
+  
+  return (
+    obj.type === 'control_request' &&
+    typeof obj.request === 'object' &&
+    obj.request !== null &&
+    (obj.request as Record<string, unknown>).subtype === 'can_use_tool'
+  );
 }
 
 // Helper function to detect if raw data might be a Claude Code message
@@ -115,11 +147,12 @@ export function isLikelyClaudeCodeMessage(data: unknown): boolean {
   // Check for key indicators of Claude Code messages
   return (
     'type' in obj &&
-    ('session_id' in obj || 'sessionId' in obj) &&
+    ('session_id' in obj || 'sessionId' in obj || obj.type === 'control_request') &&
     (obj.type === 'user' || 
      obj.type === 'assistant' || 
      obj.type === 'result' || 
      obj.type === 'system' ||
-     obj.type === 'stream_event')
+     obj.type === 'stream_event' ||
+     obj.type === 'control_request')
   );
 }

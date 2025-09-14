@@ -6,6 +6,7 @@ import { ApprovalRequestMessageSchema } from '../types/approvalSchemas';
 export interface ApprovalWebSocketHookReturn {
   isConnected: boolean;
   pendingRequests: ApprovalRequest[];
+  approvalMessages: Array<{data: unknown; timestamp: number}>;
   error: string | null;
   sendApprovalResponse: (response: ApprovalResponseMessage) => void;
   reconnect: () => void;
@@ -14,6 +15,7 @@ export interface ApprovalWebSocketHookReturn {
 export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookReturn {
   const [isConnected, setIsConnected] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<ApprovalRequest[]>([]);
+  const [approvalMessages, setApprovalMessages] = useState<Array<{data: unknown; timestamp: number}>>([]);
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
@@ -21,9 +23,28 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
 
   const handleMessage = useCallback((event: MessageEvent) => {
     try {
-      const parsedMessage = ApprovalRequestMessageSchema.parse(JSON.parse(event.data));
+      const rawData = JSON.parse(event.data);
+      const parsedMessage = ApprovalRequestMessageSchema.parse(rawData);
       
-      // Convert the parsed message to internal ApprovalRequest format
+      // Convert the parsed message to control_request format for display
+      const controlRequestMessage = {
+        type: 'control_request',
+        request_id: parsedMessage.id,
+        request: {
+          subtype: 'can_use_tool',
+          tool_name: parsedMessage.request.tool_name,
+          input: parsedMessage.request.input,
+          permission_suggestions: parsedMessage.request.permission_suggestions
+        }
+      };
+      
+      // Add to approval messages for display
+      setApprovalMessages(prev => [...prev, { 
+        data: controlRequestMessage, 
+        timestamp: Date.now() 
+      }]);
+      
+      // Also keep the approval request for handling
       const approvalRequest: ApprovalRequest = {
         id: parsedMessage.id,
         tool_name: parsedMessage.request.tool_name,
@@ -128,8 +149,17 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(response));
       
+      // Remove from pending requests
       setPendingRequests(prev => 
         prev.filter(req => req.id !== response.id)
+      );
+      
+      // Remove from approval messages display
+      setApprovalMessages(prev =>
+        prev.filter(msg => {
+          const data = msg.data as any;
+          return data.request_id !== response.id;
+        })
       );
     }
   }, []);
@@ -155,6 +185,7 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
   return {
     isConnected,
     pendingRequests,
+    approvalMessages,
     error,
     sendApprovalResponse,
     reconnect,

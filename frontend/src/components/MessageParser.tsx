@@ -6,26 +6,57 @@ import {
   isSDKSystemMessage,
   isSDKPartialAssistantMessage,
   isSDKCompactBoundaryMessage,
+  isSDKControlRequestMessage,
   isLikelyClaudeCodeMessage,
-  type SDKMessage,
+  type ExtendedSDKMessage,
   type AnyTodoItem
 } from '../types/claude-messages';
 import { CollapsibleContent } from './CollapsibleContent';
 import { TodoList } from './TodoList';
 import { EditDiff } from './DiffViewer';
 import { isEditTool } from '../utils/diffUtils';
+import { ControlRequestMessage } from './ControlRequestMessage';
+
+// Helper to check if tool input is for Write tool
+function isWriteTool(toolName: string, input: unknown): boolean {
+  return toolName === 'Write' && 
+         typeof input === 'object' && 
+         input !== null &&
+         'file_path' in input &&
+         'content' in input;
+}
+
+// Component for displaying Write tool content
+function WriteToolDisplay({ input }: { input: any }) {
+  return (
+    <div className="write-tool-display">
+      <div className="write-tool-header">
+        <h4>📝 Writing File</h4>
+        <div className="file-path">📄 {input.file_path}</div>
+      </div>
+      <CollapsibleContent 
+        content={input.content}
+        className="file-content"
+        maxLines={20}
+        isCode={true}
+      />
+    </div>
+  );
+}
 
 interface MessageParserProps {
   data: unknown;
   timestamp?: number;
   showRawJson: boolean;
   messageSource: 'session' | 'websocket';
+  onApprove?: (requestId: string, input: Record<string, unknown>, permissionUpdates?: Array<Record<string, unknown>>) => void;
+  onDeny?: (requestId: string) => void;
 }
 
 interface ParsedMessageResult {
   isClaudeMessage: boolean;
   messageType: string;
-  message?: SDKMessage;
+  message?: ExtendedSDKMessage;
   rawData: unknown;
 }
 
@@ -57,7 +88,7 @@ function parseMessage(data: unknown): ParsedMessageResult {
   };
 }
 
-function getMessageTypeDescription(message: SDKMessage): string {
+function getMessageTypeDescription(message: ExtendedSDKMessage): string {
   if (isSDKUserMessage(message)) {
     return 'User Message';
   }
@@ -78,6 +109,9 @@ function getMessageTypeDescription(message: SDKMessage): string {
   }
   if (isSDKCompactBoundaryMessage(message)) {
     return 'Compact Boundary';
+  }
+  if (isSDKControlRequestMessage(message)) {
+    return 'Tool Approval Request';
   }
   return 'Unknown Message';
 }
@@ -108,7 +142,7 @@ function parseTodosFromToolUse(input: unknown): AnyTodoItem[] | null {
   });
 }
 
-export function MessageParser({ data, timestamp, showRawJson }: MessageParserProps) {
+export function MessageParser({ data, timestamp, showRawJson, onApprove, onDeny }: MessageParserProps) {
   const parsed = parseMessage(data);
 
   if (showRawJson) {
@@ -134,7 +168,7 @@ export function MessageParser({ data, timestamp, showRawJson }: MessageParserPro
 
   if (parsed.isClaudeMessage && parsed.message) {
     try {
-      return <FormattedClaudeMessage message={parsed.message} timestamp={timestamp} />;
+      return <FormattedClaudeMessage message={parsed.message} timestamp={timestamp} onApprove={onApprove} onDeny={onDeny} />;
     } catch (error) {
       console.error('Error rendering Claude message:', error, 'Message data:', parsed.message);
       return (
@@ -183,7 +217,12 @@ export function MessageParser({ data, timestamp, showRawJson }: MessageParserPro
   );
 }
 
-function FormattedClaudeMessage({ message, timestamp }: { message: SDKMessage; timestamp?: number }) {
+function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny }: { 
+  message: ExtendedSDKMessage; 
+  timestamp?: number;
+  onApprove?: (requestId: string, input: Record<string, unknown>, permissionUpdates?: Array<Record<string, unknown>>) => void;
+  onDeny?: (requestId: string) => void;
+}) {
   if (isSDKUserMessage(message)) {
     return (
       <div className="user-message">
@@ -242,6 +281,8 @@ function FormattedClaudeMessage({ message, timestamp }: { message: SDKMessage; t
                       })()
                     ) : isEditTool(String(block.name), block.input) ? (
                       <EditDiff toolInput={block.input} />
+                    ) : isWriteTool(String(block.name), block.input) ? (
+                      <WriteToolDisplay input={block.input} />
                     ) : (
                       <CollapsibleContent 
                         content={JSON.stringify(block.input, null, 2)}
@@ -326,6 +367,8 @@ function FormattedClaudeMessage({ message, timestamp }: { message: SDKMessage; t
                     })()
                   ) : isEditTool(String(block.name), block.input) ? (
                     <EditDiff toolInput={block.input} />
+                  ) : isWriteTool(String(block.name), block.input) ? (
+                    <WriteToolDisplay input={block.input} />
                   ) : (
                     <CollapsibleContent 
                       content={JSON.stringify(block.input, null, 2)}
@@ -436,6 +479,10 @@ function FormattedClaudeMessage({ message, timestamp }: { message: SDKMessage; t
         </div>
       </div>
     );
+  }
+
+  if (isSDKControlRequestMessage(message)) {
+    return <ControlRequestMessage message={message} timestamp={timestamp} onApprove={onApprove} onDeny={onDeny} />;
   }
 
   // Fallback for unknown message types

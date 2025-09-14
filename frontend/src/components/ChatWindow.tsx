@@ -6,12 +6,9 @@ import { useWebSocket } from '../hooks/useWebSocket';
 import { useApprovalWebSocket } from '../hooks/useApprovalWebSocket';
 import { MessageList, type MessageListRef } from './MessageList';
 import { MessageInput } from './MessageInput';
-import { ApprovalDialog } from './ApprovalDialog';
 import { SessionStatusIndicator } from './SessionStatusIndicator';
 import { api } from '../services/api';
-import { createApprovalManager } from '../services/approvalManager';
-import type { CreateSessionRequest, CreateSessionResponse, ApprovalRequest } from '../types/api';
-import type { PermissionUpdate } from '@anthropic-ai/claude-code/sdk';
+import type { CreateSessionRequest, CreateSessionResponse } from '../types/api';
 
 interface ChatWindowProps {
   sessionId: string | null;
@@ -26,7 +23,6 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
   const location = useLocation();
   const { sessionDetails, loading, error } = useSessionDetails(sessionId);
   const [debugMode, setDebugMode] = useState(false);
-  const [activeApprovalRequest, setActiveApprovalRequest] = useState<ApprovalRequest | null>(null);
   const [autoScrollPaused, setAutoScrollPaused] = useState(false);
   const messageListRef = useRef<MessageListRef>(null);
   
@@ -52,6 +48,30 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
   const approvalWs = useApprovalWebSocket(approvalWebSocketUrl);
   const [pendingWebSocket, setPendingWebSocket] = useState<WebSocket | null>(null);
   const [pendingApprovalWebSocket, setPendingApprovalWebSocket] = useState<WebSocket | null>(null);
+
+  // Approval handlers
+  const handleApprove = useCallback((requestId: string, input: Record<string, unknown>, permissionUpdates?: Array<Record<string, unknown>>) => {
+    // Send approval response through the approval websocket
+    approvalWs.sendApprovalResponse({
+      id: requestId,
+      response: {
+        behavior: 'allow',
+        updatedInput: input,
+        updatedPermissions: permissionUpdates as any // Type cast since we know the structure
+      }
+    });
+  }, [approvalWs]);
+
+  const handleDeny = useCallback((requestId: string) => {
+    // Send deny response through the approval websocket
+    approvalWs.sendApprovalResponse({
+      id: requestId,
+      response: {
+        behavior: 'deny',
+        message: 'User denied the request'
+      }
+    });
+  }, [approvalWs]);
 
   const handleSendMessage = useCallback(async (message: string) => {
     // Determine session state
@@ -140,40 +160,7 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
     };
   }, [pendingWebSocket, pendingApprovalWebSocket]);
 
-  // Create approval manager
-  const approvalManager = createApprovalManager(
-    approvalWs.pendingRequests,
-    approvalWs.isConnected,
-    approvalWs.error,
-    approvalWs.sendApprovalResponse,
-    approvalWs.reconnect
-  );
 
-  // Handle approval requests - show dialog for first pending request
-  useEffect(() => {
-    if (approvalWs.pendingRequests.length > 0 && !activeApprovalRequest) {
-      setActiveApprovalRequest(approvalWs.pendingRequests[0]);
-    } else if (approvalWs.pendingRequests.length === 0 && activeApprovalRequest) {
-      setActiveApprovalRequest(null);
-    }
-  }, [approvalWs.pendingRequests, activeApprovalRequest]);
-
-  const handleApproveRequest = useCallback((
-    wrapperId: string,
-    originalInput: Record<string, unknown>,
-    updatedInput?: Record<string, unknown>,
-    updatedPermissions?: PermissionUpdate[]
-  ) => {
-    approvalManager.approveRequest(wrapperId, originalInput, updatedInput, updatedPermissions);
-  }, [approvalManager]);
-
-  const handleDenyRequest = useCallback((wrapperId: string) => {
-    approvalManager.denyRequest(wrapperId);
-  }, [approvalManager]);
-
-  const handleCloseApprovalDialog = useCallback(() => {
-    setActiveApprovalRequest(null);
-  }, []);
 
   const handleAutoScrollStateChange = useCallback((_isAtBottom: boolean, autoScrollPaused: boolean) => {
     setAutoScrollPaused(autoScrollPaused);
@@ -279,9 +266,11 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
         <MessageList 
           ref={messageListRef}
           sessionMessages={sessionDetails.content} 
-          webSocketMessages={webSocketMessages}
+          webSocketMessages={[...webSocketMessages, ...approvalWs.approvalMessages]}
           debugMode={debugMode}
           onAutoScrollStateChange={handleAutoScrollStateChange}
+          onApprove={handleApprove}
+          onDeny={handleDeny}
         />
       </div>
 
@@ -293,14 +282,6 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
         />
       </div>
       
-      {activeApprovalRequest && (
-        <ApprovalDialog
-          request={activeApprovalRequest}
-          onApprove={handleApproveRequest}
-          onDeny={handleDenyRequest}
-          onClose={handleCloseApprovalDialog}
-        />
-      )}
     </div>
   );
 }

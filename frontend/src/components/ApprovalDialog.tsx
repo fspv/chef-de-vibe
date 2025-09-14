@@ -19,7 +19,6 @@ export function ApprovalDialog({ request, onApprove, onDeny, onClose }: Approval
     JSON.stringify(request.input, null, 2)
   );
   const [inputError, setInputError] = useState<string | null>(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [selectedPermissions, setSelectedPermissions] = useState<boolean[]>(
     request.permission_suggestions ? new Array(request.permission_suggestions.length).fill(false) : []
   );
@@ -95,65 +94,24 @@ export function ApprovalDialog({ request, onApprove, onDeny, onClose }: Approval
 
           {request.permission_suggestions && request.permission_suggestions.length > 0 && (
             <div className="permission-suggestions">
-              <button 
-                className="toggle-advanced"
-                onClick={() => setShowAdvanced(!showAdvanced)}
-              >
-                {showAdvanced ? '▼' : '▶'} Permission Suggestions
-              </button>
-              
-              {showAdvanced && (
-                <div className="suggestions-content">
-                  {request.permission_suggestions.map((suggestion, index) => (
-                    <div key={index} className="permission-suggestion">
-                      <div className="permission-checkbox">
-                        <input
-                          type="checkbox"
-                          id={`permission-${index}`}
-                          checked={selectedPermissions[index]}
-                          onChange={() => handlePermissionToggle(index)}
-                        />
-                        <label htmlFor={`permission-${index}`}>
-                          Apply Permission Update {index + 1}
-                        </label>
-                      </div>
-                      <div className="permission-details">
-                        <div><strong>Type:</strong> {suggestion.type}</div>
-                        {'behavior' in suggestion && <div><strong>Behavior:</strong> {suggestion.behavior}</div>}
-                        <div><strong>Destination:</strong> {suggestion.destination}</div>
-                        {suggestion.type === 'addRules' || suggestion.type === 'replaceRules' || suggestion.type === 'removeRules' ? (
-                          <div>
-                            <strong>Rules:</strong>
-                            <ul>
-                              {suggestion.rules.map((rule, ruleIndex) => (
-                                <li key={ruleIndex}>
-                                  <strong>{rule.toolName}</strong>
-                                  {rule.ruleContent && <span>: {rule.ruleContent}</span>}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : suggestion.type === 'setMode' ? (
-                          <div><strong>Mode:</strong> {suggestion.mode}</div>
-                        ) : suggestion.type === 'addDirectories' || suggestion.type === 'removeDirectories' ? (
-                          <div>
-                            <strong>Directories:</strong>
-                            <ul>
-                              {suggestion.directories.map((dir, dirIndex) => (
-                                <li key={dirIndex}>{dir}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : null}
-                      </div>
-                      <details className="raw-json">
-                        <summary>Raw JSON</summary>
-                        <pre>{JSON.stringify(suggestion, null, 2)}</pre>
-                      </details>
+              <h4>Permission Suggestions</h4>
+              <div className="suggestions-content">
+                {request.permission_suggestions.map((suggestion, index) => (
+                  <div key={index} className="permission-suggestion">
+                    <div className="permission-checkbox">
+                      <input
+                        type="checkbox"
+                        id={`permission-${index}`}
+                        checked={selectedPermissions[index]}
+                        onChange={() => handlePermissionToggle(index)}
+                      />
+                      <label htmlFor={`permission-${index}`}>
+                        <code className="permission-json">{JSON.stringify(suggestion)}</code>
+                      </label>
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>

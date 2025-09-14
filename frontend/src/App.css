@@ -2310,9 +2310,16 @@ html, body {
 
 .permission-suggestions {
   margin-bottom: 1.5rem;
+  padding: 1rem;
   border: 1px solid #e9ecef;
   border-radius: 4px;
   background-color: #f8f9fa;
+}
+
+.permission-suggestions h4 {
+  margin: 0 0 1rem 0;
+  color: #495057;
+  font-size: 1rem;
 }
 
 .toggle-advanced {
@@ -2341,15 +2348,27 @@ html, body {
 }
 
 .permission-suggestion {
-  background-color: #f8f9fa;
-  border: 1px solid #e9ecef;
-  border-radius: 4px;
-  padding: 0.75rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
 }
 
 .permission-suggestion:last-child {
   margin-bottom: 0;
+}
+
+.permission-json {
+  display: inline-block;
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 3px;
+  padding: 0.25rem 0.5rem;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  margin-left: 0.5rem;
+  white-space: nowrap;
+  overflow-x: auto;
+  max-width: calc(100% - 2rem);
 }
 
 .permission-suggestion h5 {
@@ -2606,4 +2625,201 @@ pre {
 
 .diff-content .diff-code-col {
   width: calc(100% - 60px);
+}
+/* Control request (approval) message styles */
+.control-request-message {
+  background-color: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 4px;
+  padding: 1rem;
+  margin: 0.5rem 0;
+}
+
+.control-request-message .message-role {
+  font-weight: bold;
+  color: #856404;
+  margin-bottom: 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.tool-approval-content {
+  background-color: white;
+  padding: 1rem;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+}
+
+.tool-approval-content .tool-name {
+  font-weight: bold;
+  margin-bottom: 0.75rem;
+  color: #495057;
+}
+
+.tool-approval-content .file-path {
+  font-family: monospace;
+  color: #6c757d;
+  margin-bottom: 0.5rem;
+}
+
+.write-tool-content {
+  margin-top: 0.5rem;
+}
+
+.write-tool-content .file-content {
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.permission-suggestions-inline {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e9ecef;
+}
+
+.permission-suggestions-inline h4 {
+  margin: 0 0 0.5rem 0;
+  color: #495057;
+  font-size: 0.9rem;
+}
+
+.permission-json-line {
+  background-color: #f8f9fa;
+  padding: 0.5rem;
+  margin: 0.25rem 0;
+  border-radius: 3px;
+  overflow-x: auto;
+}
+
+.permission-json-line code {
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+/* Approval actions and checkbox styles */
+.approval-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e9ecef;
+}
+
+.permission-checkbox-line {
+  display: flex;
+  align-items: center;
+  margin: 0.5rem 0;
+  padding: 0.25rem;
+}
+
+.permission-checkbox-line input[type='checkbox'] {
+  margin-right: 0.5rem;
+}
+
+.permission-checkbox-line label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  flex: 1;
+}
+
+.permission-checkbox-line code {
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  background-color: #f8f9fa;
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  overflow-x: auto;
+  white-space: nowrap;
+  display: block;
+  width: 100%;
+}
+
+.tool-input-editor {
+  width: 100%;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  padding: 0.5rem;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  background-color: #f8f9fa;
+  resize: vertical;
+}
+
+.tool-input-section {
+  margin: 1rem 0;
+}
+
+.tool-input-section h4 {
+  margin: 0 0 0.5rem 0;
+  color: #495057;
+}
+
+.input-error {
+  color: #dc3545;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+.edit-json-details {
+  margin-top: 1rem;
+  padding: 0.5rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.edit-json-details summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: #495057;
+  margin-bottom: 0.5rem;
+}
+
+.control-request-message.processed {
+  opacity: 0.7;
+}
+
+.approval-status {
+  text-align: center;
+  padding: 1rem;
+  color: #6c757d;
+  font-style: italic;
+  border-top: 1px solid #e9ecef;
+  margin-top: 1rem;
+}
+/* Write tool display styles */
+.write-tool-display {
+  margin-top: 0.5rem;
+  border: 1px solid #e9ecef;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.write-tool-header {
+  background-color: #f8f9fa;
+  padding: 0.75rem;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.write-tool-header h4 {
+  margin: 0 0 0.25rem 0;
+  color: #495057;
+  font-size: 0.9rem;
+}
+
+.write-tool-header .file-path {
+  font-family: monospace;
+  color: #6c757d;
+  font-size: 0.85rem;
+}
+
+.write-tool-display .file-content {
+  padding: 1rem;
+  background-color: white;
+  margin: 0;
 }
