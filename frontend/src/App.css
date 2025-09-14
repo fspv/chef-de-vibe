@@ -2284,3 +2284,181 @@ pre {
   overflow-wrap: break-word !important;
   max-width: 100% !important;
 }
+
+/* Diff Viewer Styles */
+.diff-viewer-container {
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  margin: 0.5rem 0;
+  overflow: hidden;
+  font-family: 'Courier New', Monaco, 'Lucida Console', monospace;
+}
+
+.diff-viewer-empty {
+  padding: 1rem;
+  text-align: center;
+  color: #6c757d;
+  font-style: italic;
+}
+
+.diff-file-header {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #dee2e6;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.diff-file-name {
+  font-weight: 600;
+  color: #495057;
+  font-family: 'Courier New', Monaco, 'Lucida Console', monospace;
+  background-color: rgba(255, 255, 255, 0.8);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid #dee2e6;
+}
+
+.diff-language-tag {
+  background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.diff-content {
+  background-color: #ffffff;
+}
+
+/* Edit Diff specific styles */
+.edit-diff {
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  margin: 0.5rem 0;
+  overflow: hidden;
+}
+
+.edit-diff-header {
+  background: linear-gradient(135deg, #e8f5e8 0%, #d4edda 100%);
+  border-bottom: 2px solid #28a745;
+  padding: 0.75rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  box-shadow: 0 2px 4px rgba(40, 167, 69, 0.1);
+}
+
+.edit-diff-header h4 {
+  margin: 0;
+  color: #28a745;
+  font-size: 1rem;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(40, 167, 69, 0.1);
+}
+
+.replace-all-indicator {
+  background-color: #ffc107;
+  color: #000;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+/* Custom enhancements for react-diff-view (library provides base styles) */
+.diff-content {
+  border-radius: 0 0 6px 6px;
+  overflow: hidden;
+}
+
+/* Optional: Enhance the library's default styles with slightly better colors */
+.diff-content .diff-gutter {
+  font-family: 'Courier New', Monaco, 'Lucida Console', monospace;
+}
+
+.diff-content .diff-code {
+  font-family: 'Courier New', Monaco, 'Lucida Console', monospace;
+}
+
+/* Syntax highlighting for diffs */
+.diff-code .token.comment {
+  color: #6a737d;
+  font-style: italic;
+}
+
+.diff-code .token.string {
+  color: #032f62;
+}
+
+.diff-code .token.number {
+  color: #005cc5;
+}
+
+.diff-code .token.keyword {
+  color: #d73a49;
+  font-weight: 600;
+}
+
+.diff-code .token.function {
+  color: #6f42c1;
+}
+
+.diff-code .token.class-name {
+  color: #6f42c1;
+}
+
+.diff-code .token.operator {
+  color: #d73a49;
+}
+
+.diff-code .token.punctuation {
+  color: #24292e;
+}
+
+.diff-code .token.property {
+  color: #005cc5;
+}
+
+.diff-code .token.tag {
+  color: #22863a;
+}
+
+.diff-code .token.attr-name {
+  color: #6f42c1;
+}
+
+.diff-code .token.attr-value {
+  color: #032f62;
+}
+
+.diff-code .token.variable {
+  color: #e36209;
+}
+
+/* Ensure diff content doesn't overflow */
+.diff-content table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.diff-content .diff-gutter-col {
+  width: 60px;
+}
+
+.diff-content .diff-code-col {
+  width: calc(100% - 60px);
+}

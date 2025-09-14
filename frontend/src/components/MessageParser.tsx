@@ -12,6 +12,8 @@ import {
 } from '../types/claude-messages';
 import { CollapsibleContent } from './CollapsibleContent';
 import { TodoList } from './TodoList';
+import { EditDiff } from './DiffViewer';
+import { isEditTool } from '../utils/diffUtils';
 
 interface MessageParserProps {
   data: unknown;
@@ -238,6 +240,8 @@ function FormattedClaudeMessage({ message, timestamp }: { message: SDKMessage; t
                           />
                         );
                       })()
+                    ) : isEditTool(String(block.name), block.input) ? (
+                      <EditDiff toolInput={block.input} />
                     ) : (
                       <CollapsibleContent 
                         content={JSON.stringify(block.input, null, 2)}
@@ -320,6 +324,8 @@ function FormattedClaudeMessage({ message, timestamp }: { message: SDKMessage; t
                         />
                       );
                     })()
+                  ) : isEditTool(String(block.name), block.input) ? (
+                    <EditDiff toolInput={block.input} />
                   ) : (
                     <CollapsibleContent 
                       content={JSON.stringify(block.input, null, 2)}
