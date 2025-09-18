@@ -41,6 +41,7 @@ impl MockClaude {
         }
     }
 
+    #[allow(dead_code)]
     pub fn setup_env_vars(&self) {
         env::set_var("CLAUDE_BINARY_PATH", &self.binary_path);
         env::set_var("CLAUDE_PROJECTS_DIR", &self.projects_dir);

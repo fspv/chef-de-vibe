@@ -123,7 +123,13 @@ fn spawn_broadcast_handler(
                     sender_client_id,
                 } => {
                     // Only send to clients that are NOT the sender
-                    if sender_client_id != &client_id {
+                    if sender_client_id == &client_id {
+                        debug!(
+                            client_id = %client_id,
+                            "Skipping client input broadcast (from this client)"
+                        );
+                        None
+                    } else {
                         debug!(
                             client_id = %client_id,
                             sender_client_id = %sender_client_id,
@@ -131,12 +137,6 @@ fn spawn_broadcast_handler(
                             "Received client input to broadcast (not from this client)"
                         );
                         Some(content.clone())
-                    } else {
-                        debug!(
-                            client_id = %client_id,
-                            "Skipping client input broadcast (from this client)"
-                        );
-                        None
                     }
                 }
                 BroadcastMessage::Disconnect => {
@@ -303,7 +303,7 @@ fn cleanup_client_connection(
     );
 
     // Client disconnected, clean up
-    let session_cleanup = session.clone();
+    let session_cleanup = session;
     let client_id_cleanup = client_id.to_string();
     let session_id_cleanup = session_id.to_string();
     tokio::spawn(async move {
@@ -357,7 +357,7 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
         // Close the WebSocket connection immediately
         let _ = socket.close().await;
         return;
-    };
+    }
 
     debug!(session_id = %session_id, "Session is active, proceeding with connection");
 
@@ -430,7 +430,7 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
                 info!(
                     session_id = %session_id,
                     client_id = %client_id_recv,
-                    close_code = close_frame.as_ref().map(|f| f.code.into()).unwrap_or(0),
+                    close_code = close_frame.as_ref().map_or(0, |f| f.code.into()),
                     "WebSocket client sent close message"
                 );
                 break;
@@ -728,7 +728,7 @@ async fn handle_approval_websocket(socket: WebSocket, session_id: String, state:
         error!(session_id = %session_id, "Approval WebSocket connection rejected: session not active");
         let _ = socket.close().await;
         return;
-    };
+    }
 
     debug!(session_id = %session_id, "Session is active, proceeding with approval connection");
 
@@ -845,7 +845,7 @@ async fn handle_approval_websocket(socket: WebSocket, session_id: String, state:
                 info!(
                     session_id = %session_id,
                     client_id = %client_id_recv,
-                    close_code = close_frame.as_ref().map(|f| f.code.into()).unwrap_or(0),
+                    close_code = close_frame.as_ref().map_or(0, |f| f.code.into()),
                     "Approval WebSocket client sent close message"
                 );
                 break;

@@ -42,13 +42,7 @@ impl<'a> SessionDiscovery<'a> {
         }
 
         // Scan disk for all sessions
-        let disk_sessions = match self.scan_disk_for_sessions() {
-            Ok(sessions) => sessions,
-            Err(e) => {
-                error!(error = %e, "Failed to scan disk for sessions");
-                return Err(e);
-            }
-        };
+        let disk_sessions = self.scan_disk_for_sessions();
 
         // Merge disk sessions with active status
         for mut session in disk_sessions {
@@ -122,7 +116,7 @@ impl<'a> SessionDiscovery<'a> {
         self.find_session_on_disk(session_id)
     }
 
-    fn scan_disk_for_sessions(&self) -> OrchestratorResult<Vec<SessionInfo>> {
+    fn scan_disk_for_sessions(&self) -> Vec<SessionInfo> {
         let mut sessions = Vec::new();
 
         for entry in WalkDir::new(&self.config.claude_projects_dir)
@@ -147,7 +141,7 @@ impl<'a> SessionDiscovery<'a> {
             }
         }
 
-        Ok(sessions)
+        sessions
     }
 
     fn find_session_on_disk(
@@ -223,8 +217,6 @@ impl<'a> SessionDiscovery<'a> {
         let mut summary: Option<String> = None;
         let mut earliest_timestamp: Option<String> = None;
         let mut latest_timestamp: Option<String> = None;
-        let mut _lines_processed = 0;
-
         // Extract session ID from filename
         let file_session_id = path
             .file_stem()
@@ -236,7 +228,6 @@ impl<'a> SessionDiscovery<'a> {
             .to_string();
 
         for (line_number, line) in reader.lines().enumerate() {
-            _lines_processed += 1;
             let line = line.map_err(|e| {
                 error!(
                     file_path = %path.display(),
@@ -304,7 +295,7 @@ impl<'a> SessionDiscovery<'a> {
         }
 
         // Validate session ID matches filename
-        match (session_id.clone(), working_dir.clone()) {
+        match (session_id, working_dir) {
             (Some(id), Some(dir)) => {
                 if id != file_session_id {
                     error!(
@@ -356,10 +347,7 @@ impl<'a> SessionDiscovery<'a> {
 
         let reader = BufReader::new(file);
         let mut content = Vec::new();
-        let mut _lines_processed = 0;
-
         for (line_number, line) in reader.lines().enumerate() {
-            _lines_processed += 1;
             let line = line.map_err(|e| {
                 error!(
                     file_path = %path.display(),

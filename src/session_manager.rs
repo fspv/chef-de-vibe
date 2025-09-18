@@ -34,8 +34,7 @@ fn compact_json_message(message: &str, context: &str) -> OrchestratorResult<Stri
                     "Failed to re-serialize JSON message"
                 );
                 Err(OrchestratorError::ProcessCommunicationError(format!(
-                    "Failed to compact JSON message for {}: {}",
-                    context, e
+                    "Failed to compact JSON message for {context}: {e}"
                 )))
             }
         },
@@ -47,8 +46,7 @@ fn compact_json_message(message: &str, context: &str) -> OrchestratorResult<Stri
                 "Invalid JSON in message"
             );
             Err(OrchestratorError::ProcessCommunicationError(format!(
-                "Invalid JSON in message for {}: {}",
-                context, e
+                "Invalid JSON in message for {context}: {e}"
             )))
         }
     }
@@ -84,7 +82,7 @@ impl SessionManager {
         session_id: &str,
         timeout_duration: Duration,
     ) -> OrchestratorResult<()> {
-        let filename = format!("{}.jsonl", session_id);
+        let filename = format!("{session_id}.jsonl");
 
         debug!(
             session_id = %session_id,
@@ -96,16 +94,13 @@ impl SessionManager {
 
         let check_file_ready = || async {
             // Search for the session file in all subdirectories
-            let session_file_path = match self.find_session_file(&filename) {
-                Some(path) => path,
-                None => {
-                    debug!(
-                        session_id = %session_id,
-                        filename = %filename,
-                        "Session file not found in any project directory"
-                    );
-                    return false;
-                }
+            let session_file_path = if let Some(path) = self.find_session_file(&filename) { path } else {
+                debug!(
+                    session_id = %session_id,
+                    filename = %filename,
+                    "Session file not found in any project directory"
+                );
+                return false;
             };
 
             // Check if file has content (not empty)
@@ -141,7 +136,7 @@ impl SessionManager {
         };
 
         // Use timeout to wait for file to be ready
-        match timeout(timeout_duration, async {
+        if let Ok(result) = timeout(timeout_duration, async {
             let mut interval = tokio::time::interval(Duration::from_millis(2000));
             loop {
                 if check_file_ready().await {
@@ -150,28 +145,23 @@ impl SessionManager {
                 interval.tick().await;
             }
         })
-        .await
-        {
-            Ok(result) => {
-                info!(
-                    session_id = %session_id,
-                    filename = %filename,
-                    "Successfully waited for session file to be ready"
-                );
-                result
-            }
-            Err(_) => {
-                error!(
-                    session_id = %session_id,
-                    filename = %filename,
-                    timeout_seconds = timeout_duration.as_secs(),
-                    "Timeout waiting for session file to be created and populated"
-                );
-                Err(OrchestratorError::InternalError(format!(
-                    "Timeout waiting for session file {} to be created",
-                    session_id
-                )))
-            }
+        .await {
+            info!(
+                session_id = %session_id,
+                filename = %filename,
+                "Successfully waited for session file to be ready"
+            );
+            result
+        } else {
+            error!(
+                session_id = %session_id,
+                filename = %filename,
+                timeout_seconds = timeout_duration.as_secs(),
+                "Timeout waiting for session file to be created and populated"
+            );
+            Err(OrchestratorError::InternalError(format!(
+                "Timeout waiting for session file {session_id} to be created"
+            )))
         }
     }
 
@@ -661,8 +651,7 @@ impl SessionManager {
                     && parsed_line
                         .get("request")
                         .and_then(|r| r.get("subtype"))
-                        .map(|st| st == &serde_json::Value::String("can_use_tool".to_string()))
-                        .unwrap_or(false)
+                        .is_some_and(|st| st == &serde_json::Value::String("can_use_tool".to_string()))
                 {
                     debug!(
                         session_id = %output_session_id,
@@ -912,7 +901,7 @@ impl SessionManager {
                             wrapper_id = %wrapper_id,
                             "Approval request not found in pending state"
                         );
-                        continue; // Skip this response if we can't find the original request
+                        // Skip this response if we can't find the original request
                     }
                 }
             }

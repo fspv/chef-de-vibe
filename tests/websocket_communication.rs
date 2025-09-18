@@ -1,12 +1,9 @@
 mod helpers;
 
-use axum;
 use chef_de_vibe::{
     api::handlers::AppState,
     config::Config,
-    models::{
-        CreateSessionRequest, CreateSessionResponse, GetSessionResponse, ListSessionsResponse,
-    },
+    models::{CreateSessionRequest, CreateSessionResponse},
     session_manager::SessionManager,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -20,7 +17,6 @@ use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::time::timeout;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
-use tracing::debug;
 use url::Url;
 
 fn generate_unique_session_id(test_name: &str) -> String {
@@ -81,12 +77,6 @@ impl TestServer {
         Self::new_internal(mock).await
     }
 
-    async fn new_with_approval_binary() -> Self {
-        init_logging();
-        let mock = MockClaude::new();
-        mock.setup_env_vars();
-        Self::new_internal(mock).await
-    }
 
     async fn new_internal(mock: MockClaude) -> Self {
         let config = Config::from_env().expect("Failed to load config");

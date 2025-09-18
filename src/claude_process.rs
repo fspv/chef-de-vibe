@@ -30,8 +30,7 @@ fn compact_json_message(message: &str, context: &str) -> OrchestratorResult<Stri
                     "Failed to re-serialize JSON message"
                 );
                 Err(OrchestratorError::ProcessCommunicationError(format!(
-                    "Failed to compact JSON message for {}: {}",
-                    context, e
+                    "Failed to compact JSON message for {context}: {e}"
                 )))
             }
         },
@@ -43,8 +42,7 @@ fn compact_json_message(message: &str, context: &str) -> OrchestratorResult<Stri
                 "Invalid JSON in message"
             );
             Err(OrchestratorError::ProcessCommunicationError(format!(
-                "Invalid JSON in message for {}: {}",
-                context, e
+                "Invalid JSON in message for {context}: {e}"
             )))
         }
     }
@@ -184,7 +182,7 @@ impl ClaudeProcess {
 
             // Compact the JSON to ensure it's a single line (Claude expects single-line JSON)
             let compacted_message =
-                compact_json_message(line, &format!("first_message_line_{}", line_idx))?;
+                compact_json_message(line, &format!("first_message_line_{line_idx}"))?;
 
             debug!(
                 session_id = %session_id,
@@ -201,8 +199,7 @@ impl ClaudeProcess {
                     "Failed to send first message line to Claude stdin"
                 );
                 return Err(OrchestratorError::ProcessCommunicationError(format!(
-                    "Failed to send first message line {} to Claude: {e}",
-                    line_idx
+                    "Failed to send first message line {line_idx} to Claude: {e}"
                 )));
             }
 
@@ -299,8 +296,7 @@ impl ClaudeProcess {
                     "Claude process exited immediately after spawn"
                 );
                 return Err(OrchestratorError::ProcessCommunicationError(format!(
-                    "Claude process exited immediately with status: {:?}",
-                    exit_status
+                    "Claude process exited immediately with status: {exit_status:?}"
                 )));
             }
             Err(e) => {
@@ -601,18 +597,15 @@ impl ClaudeProcess {
     #[instrument(skip(self))]
     #[allow(dead_code)] // Public API for Claude process management
     pub async fn read(&mut self) -> Option<String> {
-        match self.stdout_rx.recv().await {
-            Some(line) => {
-                debug!(
-                    line_length = line.len(),
-                    "Read line from Claude process stdout"
-                );
-                Some(line)
-            }
-            None => {
-                debug!("Claude process stdout channel closed");
-                None
-            }
+        if let Some(line) = self.stdout_rx.recv().await {
+            debug!(
+                line_length = line.len(),
+                "Read line from Claude process stdout"
+            );
+            Some(line)
+        } else {
+            debug!("Claude process stdout channel closed");
+            None
         }
     }
 
@@ -743,7 +736,7 @@ pub async fn handle_claude_output(
 mod tests {
     use super::*;
     use std::fs;
-    use std::path::PathBuf;
+
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -793,7 +786,7 @@ mod tests {
             "test-session",
             &working_dir,
             false,
-            &vec![
+            &[
                 create_file_command,
                 r#"{"role": "user", "content": "Hello Claude"}"#.to_string(),
             ],
@@ -871,7 +864,7 @@ done
             "old-session-456",
             &working_dir,
             true,
-            &vec![r#"{"role": "user", "content": "Resume session"}"#.to_string()],
+            &[r#"{"role": "user", "content": "Resume session"}"#.to_string()],
         )
         .await
         .unwrap();

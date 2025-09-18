@@ -1,6 +1,5 @@
 mod helpers;
 
-use axum;
 use chef_de_vibe::{
     api::handlers::AppState,
     config::Config,
@@ -17,22 +16,7 @@ use std::fs;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
-use tokio::time::timeout;
-use tokio_tungstenite::{connect_async, tungstenite::Message};
-use tracing::debug;
-use url::Url;
 
-fn generate_unique_session_id(test_name: &str) -> String {
-    format!(
-        "{}-{}-{}",
-        test_name,
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis()
-    )
-}
 
 // Helper function to create test session files on disk
 // These are used to test that the service can find and list historical sessions
@@ -61,7 +45,6 @@ fn create_test_session_file(
 
 struct TestServer {
     pub base_url: String,
-    pub ws_url: String,
     pub mock: MockClaude,
     server_handle: tokio::task::JoinHandle<()>,
     session_manager: Arc<SessionManager>,
@@ -75,12 +58,6 @@ impl TestServer {
         Self::new_internal(mock).await
     }
 
-    async fn new_with_approval_binary() -> Self {
-        init_logging();
-        let mock = MockClaude::new();
-        mock.setup_env_vars();
-        Self::new_internal(mock).await
-    }
 
     async fn new_internal(mock: MockClaude) -> Self {
         let config = Config::from_env().expect("Failed to load config");
@@ -119,7 +96,6 @@ impl TestServer {
         let addr = listener.local_addr().unwrap();
         let port = addr.port();
         let base_url = format!("http://127.0.0.1:{}", port);
-        let ws_url = format!("ws://127.0.0.1:{}", port);
 
         // Spawn server
         let server_handle = tokio::spawn(async move {
@@ -131,7 +107,6 @@ impl TestServer {
 
         Self {
             base_url,
-            ws_url,
             mock,
             server_handle,
             session_manager,

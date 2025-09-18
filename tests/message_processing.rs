@@ -70,21 +70,6 @@ impl TestServer {
         Self::new_internal(mock).await
     }
 
-    async fn new_with_approval_binary() -> Self {
-        init_logging();
-        // For the new design, approval binary is the same as regular binary
-        // Tests will send approval requests and responses as needed
-        let mock = MockClaude::new();
-        mock.setup_env_vars();
-        Self::new_internal(mock).await
-    }
-
-    async fn new_with_config() -> Self {
-        init_logging();
-        // Create a mock but don't call setup_env_vars - assume env vars are already set
-        let mock = MockClaude::new();
-        Self::new_internal(mock).await
-    }
 
     async fn new_internal(mock: MockClaude) -> Self {
         let config = Config::from_env().expect("Failed to load config");

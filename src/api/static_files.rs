@@ -13,6 +13,13 @@ use rust_embed::RustEmbed;
 #[exclude = "*.map"]
 pub struct Assets;
 
+/// Serves static files from the embedded frontend assets.
+///
+/// # Panics
+///
+/// Panics if the HTTP response builder fails to construct a response.
+/// This should only happen in extremely rare cases where the HTTP headers
+/// cannot be set properly.
 pub async fn serve_static(Path(path): Path<String>) -> impl IntoResponse {
     let path = if path.is_empty() || path == "/" {
         "index.html"

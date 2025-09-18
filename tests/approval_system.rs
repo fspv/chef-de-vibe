@@ -1,6 +1,5 @@
 mod helpers;
 
-use axum;
 use chef_de_vibe::{
     api::handlers::AppState,
     config::Config,
