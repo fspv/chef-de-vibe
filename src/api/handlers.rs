@@ -9,7 +9,7 @@ use axum::{
     Json,
 };
 use std::sync::Arc;
-use tracing::{info, warn, error, debug, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -27,7 +27,7 @@ pub async fn list_sessions(
     State(state): State<AppState>,
 ) -> OrchestratorResult<Json<ListSessionsResponse>> {
     info!("Listing all sessions");
-    
+
     let discovery = SessionDiscovery::new(&state.config, &state.session_manager);
     let sessions = match discovery.list_all_sessions().await {
         Ok(sessions) => {
@@ -70,7 +70,7 @@ pub async fn create_session(
             "session_id cannot be empty".to_string(),
         ));
     }
-    
+
     if request.first_message.is_empty() {
         warn!("Rejecting session creation request: empty first_message");
         return Err(crate::error::OrchestratorError::InvalidRequest(
@@ -110,7 +110,8 @@ pub async fn create_session(
 
     // Generate WebSocket URLs
     let websocket_url = format!("/api/v1/sessions/{actual_session_id}/claude_ws");
-    let approval_websocket_url = format!("/api/v1/sessions/{actual_session_id}/claude_approvals_ws");
+    let approval_websocket_url =
+        format!("/api/v1/sessions/{actual_session_id}/claude_approvals_ws");
     debug!(
         session_id = %actual_session_id,
         websocket_url = %websocket_url,
@@ -164,7 +165,7 @@ pub async fn get_session(
         let ws_url = format!("/api/v1/sessions/{session_id}/claude_ws");
         let approval_url = format!("/api/v1/sessions/{session_id}/claude_approvals_ws");
         debug!(
-            session_id = %session_id, 
+            session_id = %session_id,
             websocket_url = %ws_url,
             approval_websocket_url = %approval_url,
             "Session is active, providing WebSocket URLs"
@@ -286,7 +287,10 @@ done
         let state = create_test_state(&temp_dir);
 
         // Set environment variable for the mock Claude binary
-        std::env::set_var("CLAUDE_PROJECTS_DIR", state.config.claude_projects_dir.to_str().unwrap());
+        std::env::set_var(
+            "CLAUDE_PROJECTS_DIR",
+            state.config.claude_projects_dir.to_str().unwrap(),
+        );
 
         let working_dir = temp_dir.path().join("work");
         fs::create_dir_all(&working_dir).unwrap();
@@ -303,8 +307,14 @@ done
             .unwrap();
 
         assert_eq!(result.0.session_id, "test-session");
-        assert_eq!(result.0.websocket_url, "/api/v1/sessions/test-session/claude_ws");
-        assert_eq!(result.0.approval_websocket_url, "/api/v1/sessions/test-session/claude_approvals_ws");
+        assert_eq!(
+            result.0.websocket_url,
+            "/api/v1/sessions/test-session/claude_ws"
+        );
+        assert_eq!(
+            result.0.approval_websocket_url,
+            "/api/v1/sessions/test-session/claude_approvals_ws"
+        );
 
         // Verify session is in the list
         let list_result = list_sessions(State(state)).await.unwrap();
@@ -364,7 +374,10 @@ done
         let state = create_test_state(&temp_dir);
 
         // Set environment variable for the mock Claude binary
-        std::env::set_var("CLAUDE_PROJECTS_DIR", state.config.claude_projects_dir.to_str().unwrap());
+        std::env::set_var(
+            "CLAUDE_PROJECTS_DIR",
+            state.config.claude_projects_dir.to_str().unwrap(),
+        );
 
         let working_dir = temp_dir.path().join("work");
         fs::create_dir_all(&working_dir).unwrap();

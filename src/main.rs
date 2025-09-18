@@ -52,7 +52,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/v1/sessions", post(create_session))
         .route("/api/v1/sessions/:id", get(get_session))
         .route("/api/v1/sessions/:id/claude_ws", get(websocket_handler))
-        .route("/api/v1/sessions/:id/claude_approvals_ws", get(approval_websocket_handler))
+        .route(
+            "/api/v1/sessions/:id/claude_approvals_ws",
+            get(approval_websocket_handler),
+        )
         // Static file routes
         .route("/", get(serve_index))
         .route("/*path", get(serve_static))
@@ -72,7 +75,7 @@ async fn main() -> anyhow::Result<()> {
             .expect("Failed to listen for shutdown signal");
         info!("Received shutdown signal (Ctrl+C), initiating graceful shutdown...");
         info!("Press Ctrl+C again to force immediate shutdown");
-        
+
         // Start a task to listen for second Ctrl+C
         tokio::spawn(async {
             tokio::signal::ctrl_c()

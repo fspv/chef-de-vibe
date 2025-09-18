@@ -7,13 +7,11 @@ mod helpers;
 use chef_de_vibe::{
     api::handlers::AppState,
     config::Config,
-    models::{
-        CreateSessionRequest, CreateSessionResponse,
-    },
+    models::{CreateSessionRequest, CreateSessionResponse},
     session_manager::SessionManager,
 };
-use helpers::mock_claude::MockClaude;
 use helpers::logging::init_logging;
+use helpers::mock_claude::MockClaude;
 use reqwest::Client;
 use serial_test::serial;
 use std::fs;
@@ -25,8 +23,9 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 use url::Url;
 
 fn generate_unique_session_id(test_name: &str) -> String {
-    format!("{}-{}-{}", 
-        test_name, 
+    format!(
+        "{}-{}-{}",
+        test_name,
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -68,7 +67,6 @@ impl TestServer {
     }
 
     async fn new_internal(mock: MockClaude) -> Self {
-
         let config = Config::from_env().expect("Failed to load config");
         let session_manager = Arc::new(SessionManager::new(config.clone()));
 
@@ -127,12 +125,11 @@ impl TestServer {
     }
 }
 
-
 impl Drop for TestServer {
     fn drop(&mut self) {
         // First abort the server to stop accepting new connections
         self.server_handle.abort();
-        
+
         // Use thread-based cleanup to avoid runtime nesting issues
         let session_manager = self.session_manager.clone();
         std::thread::spawn(move || {
@@ -143,37 +140,15 @@ impl Drop for TestServer {
             rt.block_on(async {
                 // Give more time for ongoing operations to complete
                 tokio::time::sleep(Duration::from_millis(200)).await;
-                
+
                 // Shutdown all sessions
                 session_manager.shutdown().await;
-                
+
                 // Additional time for WebSocket connections and processes to clean up
                 tokio::time::sleep(Duration::from_millis(300)).await;
             });
-        }).join().ok();
+        })
+        .join()
+        .ok();
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

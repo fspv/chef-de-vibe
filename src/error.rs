@@ -61,9 +61,15 @@ impl OrchestratorError {
 
     const fn status_code(&self) -> StatusCode {
         match self {
-            Self::InvalidRequest(_) | Self::WorkingDirInvalid(_) | Self::FileParseError(_) => StatusCode::BAD_REQUEST,
+            Self::InvalidRequest(_) | Self::WorkingDirInvalid(_) | Self::FileParseError(_) => {
+                StatusCode::BAD_REQUEST
+            }
             Self::SessionNotFound(_) => StatusCode::NOT_FOUND,
-            Self::ClaudeSpawnFailed(_) | Self::DirectoryReadError(_) | Self::InternalError(_) | Self::WebSocketError(_) | Self::ProcessCommunicationError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::ClaudeSpawnFailed(_)
+            | Self::DirectoryReadError(_)
+            | Self::InternalError(_)
+            | Self::WebSocketError(_)
+            | Self::ProcessCommunicationError(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }

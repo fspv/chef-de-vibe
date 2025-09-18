@@ -1,5 +1,6 @@
 mod helpers;
 
+use axum;
 use chef_de_vibe::{
     api::handlers::AppState,
     config::Config,
@@ -8,8 +9,9 @@ use chef_de_vibe::{
     },
     session_manager::SessionManager,
 };
-use helpers::mock_claude::MockClaude;
+use futures_util::{SinkExt, StreamExt};
 use helpers::logging::init_logging;
+use helpers::mock_claude::MockClaude;
 use reqwest::Client;
 use serial_test::serial;
 use std::fs;
@@ -20,12 +22,11 @@ use tokio::time::timeout;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::debug;
 use url::Url;
-use axum;
-use futures_util::{SinkExt, StreamExt};
 
 fn generate_unique_session_id(test_name: &str) -> String {
-    format!("{}-{}-{}", 
-        test_name, 
+    format!(
+        "{}-{}-{}",
+        test_name,
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -34,26 +35,32 @@ fn generate_unique_session_id(test_name: &str) -> String {
     )
 }
 
-fn create_session_request_with_file(session_id: &str, working_dir: &std::path::Path, projects_dir: &std::path::Path) -> CreateSessionRequest {
+fn create_session_request_with_file(
+    session_id: &str,
+    working_dir: &std::path::Path,
+    projects_dir: &std::path::Path,
+) -> CreateSessionRequest {
     // Create session file control command
     let session_file_path = projects_dir.join(format!("{}.jsonl", session_id));
     let session_content = format!(
         r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#,
-        session_id, working_dir.display()
+        session_id,
+        working_dir.display()
     );
     let create_file_command = serde_json::json!({
         "control": "write_file",
         "path": session_file_path.to_string_lossy(),
         "content": session_content
-    }).to_string();
-    
+    })
+    .to_string();
+
     CreateSessionRequest {
         session_id: session_id.to_string(),
         working_dir: working_dir.to_path_buf(),
         resume: false,
         first_message: vec![
-            create_file_command, 
-            r#"{"role": "assistant", "content": "Session started successfully"}"#.to_string()
+            create_file_command,
+            r#"{"role": "assistant", "content": "Session started successfully"}"#.to_string(),
         ],
     }
 }
@@ -88,7 +95,7 @@ impl TestServer {
             session_manager: session_manager.clone(),
             config: Arc::new(config),
         };
-        
+
         // Build router
         let app = axum::Router::new()
             .route(
@@ -112,22 +119,22 @@ impl TestServer {
                 axum::routing::get(chef_de_vibe::api::websocket::approval_websocket_handler),
             )
             .with_state(state);
-            
+
         // Find a free port
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let port = addr.port();
         let base_url = format!("http://127.0.0.1:{}", port);
         let ws_url = format!("ws://127.0.0.1:{}", port);
-        
+
         // Spawn server
         let server_handle = tokio::spawn(async move {
             axum::serve(listener, app).await.unwrap();
         });
-        
+
         // Give server time to start - increase for better test isolation
         tokio::time::sleep(Duration::from_millis(500)).await;
-        
+
         Self {
             base_url,
             ws_url,
@@ -142,7 +149,7 @@ impl Drop for TestServer {
     fn drop(&mut self) {
         // First abort the server to stop accepting new connections
         self.server_handle.abort();
-        
+
         // Use thread-based cleanup to avoid runtime nesting issues
         let session_manager = self.session_manager.clone();
         std::thread::spawn(move || {
@@ -153,10 +160,10 @@ impl Drop for TestServer {
             rt.block_on(async {
                 // Give more time for ongoing operations to complete
                 tokio::time::sleep(Duration::from_millis(200)).await;
-                
+
                 // Shutdown all sessions
                 session_manager.shutdown().await;
-                
+
                 // Additional time for WebSocket connections and processes to clean up
                 tokio::time::sleep(Duration::from_millis(300)).await;
             });
@@ -175,7 +182,11 @@ async fn test_websocket_connection() {
     fs::create_dir_all(&working_dir).unwrap();
 
     // Create session first
-    let request = create_session_request_with_file("ws-test-session", &working_dir, &server.mock.projects_dir);
+    let request = create_session_request_with_file(
+        "ws-test-session",
+        &working_dir,
+        &server.mock.projects_dir,
+    );
 
     let create_response = client
         .post(format!("{}/api/v1/sessions", server.base_url))
@@ -214,8 +225,11 @@ async fn test_websocket_connection() {
     if let Ok(Some(Ok(msg))) = response_result {
         if let Message::Text(text) = msg {
             // Should receive Claude's response to our input
-            assert!(text.contains("Mock Claude received") || text.contains("assistant"), 
-                "Should receive Claude response, got: {}", text);
+            assert!(
+                text.contains("Mock Claude received") || text.contains("assistant"),
+                "Should receive Claude response, got: {}",
+                text
+            );
         }
     } else {
         panic!("Should have received Claude's response to user input");
@@ -266,7 +280,11 @@ async fn test_multiple_websocket_clients() {
     fs::create_dir_all(&working_dir).unwrap();
 
     // Create session
-    let request = create_session_request_with_file("multi-ws-session", &working_dir, &server.mock.projects_dir);
+    let request = create_session_request_with_file(
+        "multi-ws-session",
+        &working_dir,
+        &server.mock.projects_dir,
+    );
 
     let create_response = client
         .post(format!("{}/api/v1/sessions", server.base_url))
@@ -313,7 +331,11 @@ async fn test_websocket_message_broadcasting() {
     fs::create_dir_all(&working_dir).unwrap();
 
     // Create session
-    let request = create_session_request_with_file("broadcast-session", &working_dir, &server.mock.projects_dir);
+    let request = create_session_request_with_file(
+        "broadcast-session",
+        &working_dir,
+        &server.mock.projects_dir,
+    );
 
     let create_response = client
         .post(format!("{}/api/v1/sessions", server.base_url))
@@ -335,13 +357,25 @@ async fn test_websocket_message_broadcasting() {
 
     // Give connections time to stabilize and consume initial messages
     tokio::time::sleep(Duration::from_millis(200)).await;
-    
+
     // Consume initial messages (session start + first_message response)
     loop {
         let mut any_received = false;
-        if timeout(Duration::from_millis(100), ws1.next()).await.is_ok() { any_received = true; }
-        if timeout(Duration::from_millis(100), ws2.next()).await.is_ok() { any_received = true; }
-        if !any_received { break; }
+        if timeout(Duration::from_millis(100), ws1.next())
+            .await
+            .is_ok()
+        {
+            any_received = true;
+        }
+        if timeout(Duration::from_millis(100), ws2.next())
+            .await
+            .is_ok()
+        {
+            any_received = true;
+        }
+        if !any_received {
+            break;
+        }
     }
 
     // Client 1 sends a message
@@ -352,7 +386,7 @@ async fn test_websocket_message_broadcasting() {
 
     // Client 2 should receive the echoed input (but not client 1)
     let response_result = timeout(Duration::from_secs(2), ws2.next()).await;
-    
+
     match response_result {
         Ok(Some(Ok(Message::Text(text)))) => {
             // Should receive the echoed input from client 1
@@ -370,7 +404,7 @@ async fn test_websocket_message_broadcasting() {
         // Could be the echoed input (which shouldn't happen per README) or Claude's response
         // Accept any response for now to test basic WebSocket functionality
         assert!(!text.is_empty());
-        
+
         // Client 2 should also receive some response
         let client2_response = timeout(Duration::from_secs(2), ws2.next()).await;
         if let Ok(Some(Ok(Message::Text(text2)))) = client2_response {
@@ -396,7 +430,11 @@ async fn test_websocket_multiline_json_message_compaction() {
     let working_dir = server.mock.temp_dir.path().join("websocket_multiline_work");
     fs::create_dir_all(&working_dir).unwrap();
 
-    let request = create_session_request_with_file("websocket-multiline-session", &working_dir, &server.mock.projects_dir);
+    let request = create_session_request_with_file(
+        "websocket-multiline-session",
+        &working_dir,
+        &server.mock.projects_dir,
+    );
 
     let create_response = client
         .post(format!("{}/api/v1/sessions", server.base_url))
@@ -414,7 +452,12 @@ async fn test_websocket_multiline_json_message_compaction() {
     // Consume initial messages
     tokio::time::sleep(Duration::from_millis(200)).await;
     loop {
-        if timeout(Duration::from_millis(100), ws.next()).await.is_err() { break; }
+        if timeout(Duration::from_millis(100), ws.next())
+            .await
+            .is_err()
+        {
+            break;
+        }
     }
 
     // Send a multiline JSON message via WebSocket
@@ -437,11 +480,14 @@ async fn test_websocket_multiline_json_message_compaction() {
     // Should receive Claude's response to the compacted message
     let mut received_response = false;
     let mut all_responses = Vec::new();
-    
-    for _ in 0..5 { // Try more attempts
-        if let Ok(Some(Ok(Message::Text(text)))) = timeout(Duration::from_secs(2), ws.next()).await {
+
+    for _ in 0..5 {
+        // Try more attempts
+        if let Ok(Some(Ok(Message::Text(text)))) = timeout(Duration::from_secs(2), ws.next()).await
+        {
             all_responses.push(text.clone());
-            if text.contains("multiline WebSocket message") || text.contains("Mock Claude received") {
+            if text.contains("multiline WebSocket message") || text.contains("Mock Claude received")
+            {
                 received_response = true;
                 break;
             }
@@ -464,11 +510,16 @@ async fn test_websocket_invalid_json_message_handling() {
     let client = Client::new();
 
     // Create working directory and session
-    let working_dir = server.mock.temp_dir.path().join("websocket_invalid_json_work");
+    let working_dir = server
+        .mock
+        .temp_dir
+        .path()
+        .join("websocket_invalid_json_work");
     fs::create_dir_all(&working_dir).unwrap();
 
     let session_id = generate_unique_session_id("websocket-invalid-json");
-    let request = create_session_request_with_file(&session_id, &working_dir, &server.mock.projects_dir);
+    let request =
+        create_session_request_with_file(&session_id, &working_dir, &server.mock.projects_dir);
 
     let create_response = client
         .post(format!("{}/api/v1/sessions", server.base_url))
@@ -486,7 +537,12 @@ async fn test_websocket_invalid_json_message_handling() {
     // Consume initial messages
     tokio::time::sleep(Duration::from_millis(200)).await;
     loop {
-        if timeout(Duration::from_millis(100), ws.next()).await.is_err() { break; }
+        if timeout(Duration::from_millis(100), ws.next())
+            .await
+            .is_err()
+        {
+            break;
+        }
     }
 
     // Send an invalid JSON message via WebSocket
@@ -504,8 +560,10 @@ async fn test_websocket_invalid_json_message_handling() {
     // Should receive Claude's response to the valid message (invalid message should be ignored/logged)
     let mut received_valid_response = false;
     for _ in 0..5 {
-        if let Ok(Some(Ok(Message::Text(text)))) = timeout(Duration::from_secs(2), ws.next()).await {
-            if text.contains("Valid message after invalid") || text.contains("Mock Claude received") {
+        if let Ok(Some(Ok(Message::Text(text)))) = timeout(Duration::from_secs(2), ws.next()).await
+        {
+            if text.contains("Valid message after invalid") || text.contains("Mock Claude received")
+            {
                 received_valid_response = true;
                 break;
             }
@@ -530,7 +588,11 @@ async fn test_websocket_client_input_echoing_to_other_clients() {
     let working_dir = server.mock.temp_dir.path().join("echo_test_work");
     fs::create_dir_all(&working_dir).unwrap();
 
-    let request = create_session_request_with_file("echo-test-session", &working_dir, &server.mock.projects_dir);
+    let request = create_session_request_with_file(
+        "echo-test-session",
+        &working_dir,
+        &server.mock.projects_dir,
+    );
 
     let create_response = client
         .post(format!("{}/api/v1/sessions", server.base_url))
@@ -554,14 +616,32 @@ async fn test_websocket_client_input_echoing_to_other_clients() {
     // We need to consume any buffered messages before sending new test messages
     loop {
         let mut any_received = false;
-        if timeout(Duration::from_millis(100), ws1.next()).await.is_ok() { any_received = true; }
-        if timeout(Duration::from_millis(100), ws2.next()).await.is_ok() { any_received = true; }
-        if timeout(Duration::from_millis(100), ws3.next()).await.is_ok() { any_received = true; }
-        if !any_received { break; }
+        if timeout(Duration::from_millis(100), ws1.next())
+            .await
+            .is_ok()
+        {
+            any_received = true;
+        }
+        if timeout(Duration::from_millis(100), ws2.next())
+            .await
+            .is_ok()
+        {
+            any_received = true;
+        }
+        if timeout(Duration::from_millis(100), ws3.next())
+            .await
+            .is_ok()
+        {
+            any_received = true;
+        }
+        if !any_received {
+            break;
+        }
     }
 
     // Client 1 sends a message that when echoed back will look like a Claude response
-    let test_message = r#"{"role": "assistant", "content": "Mock Claude received: Hello from client 1"}"#;
+    let test_message =
+        r#"{"role": "assistant", "content": "Mock Claude received: Hello from client 1"}"#;
     ws1.send(Message::Text(test_message.to_string()))
         .await
         .unwrap();
@@ -574,7 +654,11 @@ async fn test_websocket_client_input_echoing_to_other_clients() {
     match client2_result {
         Ok(Some(Ok(Message::Text(text)))) => {
             // Should contain the original message from client 1
-            assert!(text.contains("Hello from client 1") || text.contains("Mock Claude received"), "Client 2 should receive client 1's input. Received: {}", text);
+            assert!(
+                text.contains("Hello from client 1") || text.contains("Mock Claude received"),
+                "Client 2 should receive client 1's input. Received: {}",
+                text
+            );
         }
         _ => {
             // Per README spec, client input should be echoed to other clients
@@ -587,7 +671,11 @@ async fn test_websocket_client_input_echoing_to_other_clients() {
     let client3_result = timeout(Duration::from_secs(2), ws3.next()).await;
     match client3_result {
         Ok(Some(Ok(Message::Text(text)))) => {
-            assert!(text.contains("Hello from client 1") || text.contains("Mock Claude received"), "Client 3 should receive client 1's input. Received: {}", text);
+            assert!(
+                text.contains("Hello from client 1") || text.contains("Mock Claude received"),
+                "Client 3 should receive client 1's input. Received: {}",
+                text
+            );
         }
         _ => {
             panic!("Client 3 should have received client 1's input message");
@@ -626,7 +714,11 @@ async fn test_claude_output_broadcasts_to_all_clients() {
     let working_dir = server.mock.temp_dir.path().join("claude_broadcast_work");
     fs::create_dir_all(&working_dir).unwrap();
 
-    let request = create_session_request_with_file("claude-broadcast-session", &working_dir, &server.mock.projects_dir);
+    let request = create_session_request_with_file(
+        "claude-broadcast-session",
+        &working_dir,
+        &server.mock.projects_dir,
+    );
 
     let create_response = client
         .post(format!("{}/api/v1/sessions", server.base_url))
@@ -649,9 +741,21 @@ async fn test_claude_output_broadcasts_to_all_clients() {
     // Both clients should receive Claude's response to the first_message
     loop {
         let mut any_received = false;
-        if timeout(Duration::from_millis(100), ws1.next()).await.is_ok() { any_received = true; }
-        if timeout(Duration::from_millis(100), ws2.next()).await.is_ok() { any_received = true; }
-        if !any_received { break; }
+        if timeout(Duration::from_millis(100), ws1.next())
+            .await
+            .is_ok()
+        {
+            any_received = true;
+        }
+        if timeout(Duration::from_millis(100), ws2.next())
+            .await
+            .is_ok()
+        {
+            any_received = true;
+        }
+        if !any_received {
+            break;
+        }
     }
 
     // Send a message that when echoed will look like Claude response
@@ -705,7 +809,10 @@ async fn test_websocket_connection_refused_for_nonexistent_session() {
     let server = TestServer::new().await;
 
     // Try to connect to WebSocket for a session that doesn't exist
-    let ws_url = format!("{}/api/v1/sessions/nonexistent-session/claude_ws", server.ws_url);
+    let ws_url = format!(
+        "{}/api/v1/sessions/nonexistent-session/claude_ws",
+        server.ws_url
+    );
     let url = Url::parse(&ws_url).unwrap();
 
     let connection_result = timeout(Duration::from_secs(2), connect_async(url)).await;
@@ -722,7 +829,9 @@ async fn test_websocket_connection_refused_for_nonexistent_session() {
                     // Connection was closed - this is also correct
                 }
                 _ => {
-                    panic!("WebSocket connection to non-existent session should be closed immediately");
+                    panic!(
+                        "WebSocket connection to non-existent session should be closed immediately"
+                    );
                 }
             }
         }
@@ -745,7 +854,11 @@ async fn test_session_with_no_connected_clients_discards_claude_output() {
     let working_dir = server.mock.temp_dir.path().join("discard_work");
     fs::create_dir_all(&working_dir).unwrap();
 
-    let request = create_session_request_with_file("discard-session", &working_dir, &server.mock.projects_dir);
+    let request = create_session_request_with_file(
+        "discard-session",
+        &working_dir,
+        &server.mock.projects_dir,
+    );
 
     let create_response = client
         .post(format!("{}/api/v1/sessions", server.base_url))
@@ -803,7 +916,11 @@ async fn test_websocket_invalid_json_handling() {
     let working_dir = server.mock.temp_dir.path().join("invalid_json_work");
     fs::create_dir_all(&working_dir).unwrap();
 
-    let request = create_session_request_with_file("invalid-json-session", &working_dir, &server.mock.projects_dir);
+    let request = create_session_request_with_file(
+        "invalid-json-session",
+        &working_dir,
+        &server.mock.projects_dir,
+    );
 
     let create_response = client
         .post(format!("{}/api/v1/sessions", server.base_url))
@@ -828,7 +945,10 @@ async fn test_websocket_invalid_json_handling() {
     // Send a valid message to verify connection is still working
     let valid_message = r#"{"role": "user", "content": "Valid message after invalid JSON"}"#;
     let send_result = ws.send(Message::Text(valid_message.to_string())).await;
-    assert!(send_result.is_ok(), "Connection should remain open after invalid JSON");
+    assert!(
+        send_result.is_ok(),
+        "Connection should remain open after invalid JSON"
+    );
 
     // Should be able to receive responses
     let response_result = timeout(Duration::from_secs(2), ws.next()).await;
@@ -855,7 +975,8 @@ async fn test_multiple_client_message_broadcasting_sequence() {
     fs::create_dir_all(&working_dir).unwrap();
 
     let session_id = generate_unique_session_id("multi-broadcast");
-    let request = create_session_request_with_file(&session_id, &working_dir, &server.mock.projects_dir);
+    let request =
+        create_session_request_with_file(&session_id, &working_dir, &server.mock.projects_dir);
 
     let create_response = client
         .post(format!("{}/api/v1/sessions", server.base_url))
@@ -876,20 +997,32 @@ async fn test_multiple_client_message_broadcasting_sequence() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Send a message from client 1 to trigger initial responses to all clients
-    let initial_message = r#"{"role": "assistant", "content": "Broadcasting session start to all clients"}"#;
-    ws1.send(Message::Text(initial_message.to_string())).await.unwrap();
-    
+    let initial_message =
+        r#"{"role": "assistant", "content": "Broadcasting session start to all clients"}"#;
+    ws1.send(Message::Text(initial_message.to_string()))
+        .await
+        .unwrap();
+
     // All clients should receive this broadcast message
     let start1 = timeout(Duration::from_secs(3), ws1.next()).await;
     let start2 = timeout(Duration::from_secs(3), ws2.next()).await;
     let start3 = timeout(Duration::from_secs(3), ws3.next()).await;
-    
-    assert!(start1.is_ok(), "Client 1 should receive session start message");
-    assert!(start2.is_ok(), "Client 2 should receive session start message");
-    assert!(start3.is_ok(), "Client 3 should receive session start message");
+
+    assert!(
+        start1.is_ok(),
+        "Client 1 should receive session start message"
+    );
+    assert!(
+        start2.is_ok(),
+        "Client 2 should receive session start message"
+    );
+    assert!(
+        start3.is_ok(),
+        "Client 3 should receive session start message"
+    );
 
     // Test sequence: Client 1 sends, then Client 2 sends, then Client 3 sends
-    
+
     // Client 1 sends message
     let msg1 = r#"{"role": "user", "content": "Message from client 1"}"#;
     ws1.send(Message::Text(msg1.to_string())).await.unwrap();
@@ -913,7 +1046,7 @@ async fn test_multiple_client_message_broadcasting_sequence() {
     // Client 2 sends message
     let msg2 = r#"{"role": "user", "content": "Message from client 2"}"#;
     ws2.send(Message::Text(msg2.to_string())).await.unwrap();
-    
+
     // Brief delay after sending to allow broadcast processing
     tokio::time::sleep(Duration::from_millis(200)).await;
 
@@ -921,35 +1054,49 @@ async fn test_multiple_client_message_broadcasting_sequence() {
     // Collect multiple messages to handle race conditions with Claude responses
     let mut c1_messages = Vec::new();
     let mut c3_messages = Vec::new();
-    
+
     // Collect messages for longer duration to account for potential delays
     let collect_duration = tokio::time::Instant::now() + Duration::from_secs(3);
     while tokio::time::Instant::now() < collect_duration {
-        if let Ok(Some(Ok(Message::Text(text)))) = timeout(Duration::from_millis(200), ws1.next()).await {
+        if let Ok(Some(Ok(Message::Text(text)))) =
+            timeout(Duration::from_millis(200), ws1.next()).await
+        {
             c1_messages.push(text);
         }
-        if let Ok(Some(Ok(Message::Text(text)))) = timeout(Duration::from_millis(200), ws3.next()).await {
+        if let Ok(Some(Ok(Message::Text(text)))) =
+            timeout(Duration::from_millis(200), ws3.next()).await
+        {
             c3_messages.push(text);
         }
-        
+
         // Break early if both clients have received client 2's message
-        if c1_messages.iter().any(|msg| msg.contains("Message from client 2")) && 
-           c3_messages.iter().any(|msg| msg.contains("Message from client 2")) {
+        if c1_messages
+            .iter()
+            .any(|msg| msg.contains("Message from client 2"))
+            && c3_messages
+                .iter()
+                .any(|msg| msg.contains("Message from client 2"))
+        {
             break;
         }
     }
-    
-    
+
     // Client 1 should have received client 2's message
     assert!(
-        c1_messages.iter().any(|msg| msg.contains("Message from client 2")),
-        "Client 1 should receive client 2's message. Received: {:?}", c1_messages
+        c1_messages
+            .iter()
+            .any(|msg| msg.contains("Message from client 2")),
+        "Client 1 should receive client 2's message. Received: {:?}",
+        c1_messages
     );
-    
+
     // Client 3 should have received client 2's message
     assert!(
-        c3_messages.iter().any(|msg| msg.contains("Message from client 2")),
-        "Client 3 should receive client 2's message. Received: {:?}", c3_messages
+        c3_messages
+            .iter()
+            .any(|msg| msg.contains("Message from client 2")),
+        "Client 3 should receive client 2's message. Received: {:?}",
+        c3_messages
     );
 
     // Clean up

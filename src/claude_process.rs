@@ -7,35 +7,34 @@ use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
-use tracing::{info, warn, error, debug, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 /// Compacts JSON message to a single line for Claude stdin.
 /// Claude expects each JSON message to be on a single line.
 fn compact_json_message(message: &str, context: &str) -> OrchestratorResult<String> {
     match serde_json::from_str::<serde_json::Value>(message) {
-        Ok(parsed) => {
-            match serde_json::to_string(&parsed) {
-                Ok(compacted) => {
-                    debug!(
-                        context = %context,
-                        original_len = message.len(),
-                        compacted_len = compacted.len(),
-                        "Successfully compacted JSON message"
-                    );
-                    Ok(compacted)
-                }
-                Err(e) => {
-                    error!(
-                        context = %context,
-                        error = %e,
-                        "Failed to re-serialize JSON message"
-                    );
-                    Err(OrchestratorError::ProcessCommunicationError(
-                        format!("Failed to compact JSON message for {}: {}", context, e)
-                    ))
-                }
+        Ok(parsed) => match serde_json::to_string(&parsed) {
+            Ok(compacted) => {
+                debug!(
+                    context = %context,
+                    original_len = message.len(),
+                    compacted_len = compacted.len(),
+                    "Successfully compacted JSON message"
+                );
+                Ok(compacted)
             }
-        }
+            Err(e) => {
+                error!(
+                    context = %context,
+                    error = %e,
+                    "Failed to re-serialize JSON message"
+                );
+                Err(OrchestratorError::ProcessCommunicationError(format!(
+                    "Failed to compact JSON message for {}: {}",
+                    context, e
+                )))
+            }
+        },
         Err(e) => {
             error!(
                 context = %context,
@@ -43,9 +42,10 @@ fn compact_json_message(message: &str, context: &str) -> OrchestratorResult<Stri
                 message = %message,
                 "Invalid JSON in message"
             );
-            Err(OrchestratorError::ProcessCommunicationError(
-                format!("Invalid JSON in message for {}: {}", context, e)
-            ))
+            Err(OrchestratorError::ProcessCommunicationError(format!(
+                "Invalid JSON in message for {}: {}",
+                context, e
+            )))
         }
     }
 }
@@ -118,9 +118,10 @@ impl ClaudeProcess {
                 claude_binary = %config.claude_binary_path.display(),
                 "Claude binary does not exist"
             );
-            return Err(OrchestratorError::ClaudeSpawnFailed(
-                format!("Claude binary does not exist: {}", config.claude_binary_path.display())
-            ));
+            return Err(OrchestratorError::ClaudeSpawnFailed(format!(
+                "Claude binary does not exist: {}",
+                config.claude_binary_path.display()
+            )));
         }
 
         debug!(
@@ -148,21 +149,15 @@ impl ClaudeProcess {
         );
 
         // Get stdin and stdout handles
-        let stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| {
-                error!(session_id = %session_id, "Failed to get stdin handle from Claude process");
-                OrchestratorError::ClaudeSpawnFailed("Failed to get stdin".into())
-            })?;
+        let stdin = child.stdin.take().ok_or_else(|| {
+            error!(session_id = %session_id, "Failed to get stdin handle from Claude process");
+            OrchestratorError::ClaudeSpawnFailed("Failed to get stdin".into())
+        })?;
 
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| {
-                error!(session_id = %session_id, "Failed to get stdout handle from Claude process");
-                OrchestratorError::ClaudeSpawnFailed("Failed to get stdout".into())
-            })?;
+        let stdout = child.stdout.take().ok_or_else(|| {
+            error!(session_id = %session_id, "Failed to get stdout handle from Claude process");
+            OrchestratorError::ClaudeSpawnFailed("Failed to get stdout".into())
+        })?;
 
         debug!(session_id = %session_id, "Successfully obtained stdin and stdout handles");
 
@@ -176,7 +171,7 @@ impl ClaudeProcess {
             first_message_count = first_message.len(),
             "Sending first message(s) to trigger Claude response"
         );
-        
+
         for (line_idx, line) in first_message.iter().enumerate() {
             if line.trim().is_empty() {
                 debug!(
@@ -186,17 +181,18 @@ impl ClaudeProcess {
                 );
                 continue;
             }
-            
+
             // Compact the JSON to ensure it's a single line (Claude expects single-line JSON)
-            let compacted_message = compact_json_message(line, &format!("first_message_line_{}", line_idx))?;
-            
+            let compacted_message =
+                compact_json_message(line, &format!("first_message_line_{}", line_idx))?;
+
             debug!(
                 session_id = %session_id,
                 line_index = line_idx,
                 line_content_len = line.len(),
                 "Sending first message line to Claude stdin"
             );
-            
+
             if let Err(e) = stdin_tx.send(compacted_message).await {
                 error!(
                     session_id = %session_id,
@@ -204,18 +200,19 @@ impl ClaudeProcess {
                     error = %e,
                     "Failed to send first message line to Claude stdin"
                 );
-                return Err(OrchestratorError::ProcessCommunicationError(
-                    format!("Failed to send first message line {} to Claude: {e}", line_idx)
-                ));
+                return Err(OrchestratorError::ProcessCommunicationError(format!(
+                    "Failed to send first message line {} to Claude: {e}",
+                    line_idx
+                )));
             }
-            
+
             debug!(
                 session_id = %session_id,
                 line_index = line_idx,
                 "Successfully sent first message line to Claude stdin"
             );
         }
-        
+
         info!(
             session_id = %session_id,
             first_message_count = first_message.len(),
@@ -228,7 +225,7 @@ impl ClaudeProcess {
         let stdin_session_id = session_id.to_string();
         tokio::spawn(async move {
             info!(session_id = %stdin_session_id, "Starting stdin writer task");
-            
+
             let mut messages_written = 0;
             while let Some(msg) = stdin_rx.recv().await {
                 messages_written += 1;
@@ -273,7 +270,7 @@ impl ClaudeProcess {
                     "Successfully wrote message to Claude stdin"
                 );
             }
-            
+
             info!(
                 session_id = %stdin_session_id,
                 total_messages_written = messages_written,
@@ -301,9 +298,10 @@ impl ClaudeProcess {
                     exit_status = ?exit_status,
                     "Claude process exited immediately after spawn"
                 );
-                return Err(OrchestratorError::ProcessCommunicationError(
-                    format!("Claude process exited immediately with status: {:?}", exit_status)
-                ));
+                return Err(OrchestratorError::ProcessCommunicationError(format!(
+                    "Claude process exited immediately with status: {:?}",
+                    exit_status
+                )));
             }
             Err(e) => {
                 error!(
@@ -319,7 +317,7 @@ impl ClaudeProcess {
         let mut reader = BufReader::new(stdout);
         let actual_session_id = if resume {
             debug!(session_id = %session_id, "Resume mode: reading first line to get actual session ID");
-            
+
             // Add timeout to prevent hanging indefinitely
             let timeout_duration = std::time::Duration::from_secs(30);
             debug!(
@@ -327,10 +325,11 @@ impl ClaudeProcess {
                 timeout_seconds = timeout_duration.as_secs(),
                 "Starting timed read of first line from Claude process"
             );
-            
+
             let mut first_line = String::new();
-            let read_result = tokio::time::timeout(timeout_duration, reader.read_line(&mut first_line)).await;
-            
+            let read_result =
+                tokio::time::timeout(timeout_duration, reader.read_line(&mut first_line)).await;
+
             match read_result {
                 Ok(Ok(bytes_read)) => {
                     debug!(
@@ -339,14 +338,14 @@ impl ClaudeProcess {
                         first_line = %first_line.trim(),
                         "Successfully read first line from Claude process"
                     );
-                    
+
                     if bytes_read == 0 {
                         error!(
                             session_id = %session_id,
                             "Claude process closed stdout without sending initial response"
                         );
                         return Err(OrchestratorError::ProcessCommunicationError(
-                            "Claude process closed stdout without sending initial response".into()
+                            "Claude process closed stdout without sending initial response".into(),
                         ));
                     }
                 }
@@ -364,7 +363,7 @@ impl ClaudeProcess {
                         timeout_seconds = timeout_duration.as_secs(),
                         "Timeout while waiting for first line from Claude process"
                     );
-                    
+
                     // Check if the process is still running
                     match child.try_wait() {
                         Ok(None) => {
@@ -396,10 +395,11 @@ impl ClaudeProcess {
                             );
                         }
                     }
-                    
-                    return Err(OrchestratorError::ProcessCommunicationError(
-                        format!("Timeout after {} seconds waiting for Claude process response", timeout_duration.as_secs())
-                    ));
+
+                    return Err(OrchestratorError::ProcessCommunicationError(format!(
+                        "Timeout after {} seconds waiting for Claude process response",
+                        timeout_duration.as_secs()
+                    )));
                 }
             }
 
@@ -420,7 +420,9 @@ impl ClaudeProcess {
                         error = %e,
                         "Failed to parse first line JSON from Claude"
                     );
-                    return Err(OrchestratorError::ProcessCommunicationError(format!("Failed to parse first line from Claude: {e}")));
+                    return Err(OrchestratorError::ProcessCommunicationError(format!(
+                        "Failed to parse first line from Claude: {e}"
+                    )));
                 }
             };
 
@@ -454,17 +456,17 @@ impl ClaudeProcess {
         let stdout_session_id = actual_session_id.clone();
         tokio::spawn(async move {
             info!(session_id = %stdout_session_id, "Starting stdout reader task");
-            
+
             let mut lines = reader.lines();
             let mut lines_read = 0;
-            
+
             loop {
                 debug!(
                     session_id = %stdout_session_id,
                     lines_read_so_far = lines_read,
                     "Waiting for next line from Claude stdout"
                 );
-                
+
                 match lines.next_line().await {
                     Ok(Some(line)) => {
                         lines_read += 1;
@@ -534,7 +536,7 @@ impl ClaudeProcess {
                     }
                 }
             }
-            
+
             info!(
                 session_id = %stdout_session_id,
                 total_lines_read = lines_read,
@@ -569,11 +571,11 @@ impl ClaudeProcess {
             message_length = message.len(),
             "Sending message to Claude process"
         );
-        
+
         // Compact JSON to ensure single-line format
         let compacted_message = compact_json_message(message, "write_method")
             .map_err(|e| anyhow::anyhow!("Failed to compact message: {}", e))?;
-            
+
         match self.stdin_tx.send(compacted_message).await {
             Ok(()) => {
                 debug!(
@@ -587,7 +589,10 @@ impl ClaudeProcess {
                     error = %e,
                     "Failed to send message to Claude process stdin writer"
                 );
-                return Err(anyhow::anyhow!("Failed to send message to stdin writer: {}", e));
+                return Err(anyhow::anyhow!(
+                    "Failed to send message to stdin writer: {}",
+                    e
+                ));
             }
         }
         Ok(())
@@ -622,7 +627,10 @@ impl ClaudeProcess {
         info!(process_id = self.child.id(), "Killing Claude process");
         match self.child.kill().await {
             Ok(()) => {
-                info!(process_id = self.child.id(), "Claude process killed successfully");
+                info!(
+                    process_id = self.child.id(),
+                    "Claude process killed successfully"
+                );
                 Ok(())
             }
             Err(e) => {
@@ -641,7 +649,10 @@ impl ClaudeProcess {
     pub fn is_running(&mut self) -> bool {
         match self.child.try_wait() {
             Ok(None) => {
-                debug!(process_id = self.child.id(), "Claude process is still running");
+                debug!(
+                    process_id = self.child.id(),
+                    "Claude process is still running"
+                );
                 true
             }
             Ok(Some(exit_status)) => {
@@ -672,7 +683,7 @@ pub async fn handle_claude_output(
     broadcast_tx: mpsc::Sender<(String, Option<String>)>,
 ) {
     info!("Starting Claude output handler");
-    
+
     let mut lines_processed = 0;
     while let Some(line) = process.read().await {
         lines_processed += 1;
@@ -690,7 +701,7 @@ pub async fn handle_claude_output(
                 error = %e,
                 "Received invalid JSON from Claude, killing process"
             );
-            
+
             // Kill the process and notify clients
             if let Err(e) = process.kill().await {
                 error!(error = %e, "Failed to kill Claude process after invalid JSON");
@@ -735,18 +746,17 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::TempDir;
 
-
     #[tokio::test]
     async fn test_spawn_claude_process() {
         let temp_dir = TempDir::new().unwrap();
         let working_dir = temp_dir.path().join("work");
         fs::create_dir_all(&working_dir).unwrap();
-        
+
         // Create python mock script inline
         let python_script = include_str!("../tests/helpers/mock_claude.py");
         let mock_path = temp_dir.path().join("mock_claude.py");
         fs::write(&mock_path, python_script).unwrap();
-        
+
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -754,7 +764,7 @@ mod tests {
             perms.set_mode(0o755);
             fs::set_permissions(&mock_path, perms).unwrap();
         }
-        
+
         let projects_dir = temp_dir.path().join("projects");
         fs::create_dir_all(&projects_dir).unwrap();
 
@@ -775,17 +785,29 @@ mod tests {
             "control": "write_file",
             "path": session_file_path.to_string_lossy(),
             "content": session_content
-        }).to_string();
+        })
+        .to_string();
 
-        let (mut process, session_id) =
-            ClaudeProcess::spawn(&config, "test-session", &working_dir, false, &vec![create_file_command, r#"{"role": "user", "content": "Hello Claude"}"#.to_string()])
-                .await
-                .unwrap();
+        let (mut process, session_id) = ClaudeProcess::spawn(
+            &config,
+            "test-session",
+            &working_dir,
+            false,
+            &vec![
+                create_file_command,
+                r#"{"role": "user", "content": "Hello Claude"}"#.to_string(),
+            ],
+        )
+        .await
+        .unwrap();
 
         assert_eq!(session_id, "test-session");
 
         // Test writing and reading
-        process.write(r#"{"role": "user", "content": "Hello Claude"}"#).await.unwrap();
+        process
+            .write(r#"{"role": "user", "content": "Hello Claude"}"#)
+            .await
+            .unwrap();
 
         // Give the mock process time to respond
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -844,10 +866,15 @@ done
             shutdown_timeout: std::time::Duration::from_secs(30),
         };
 
-        let (process, actual_session_id) =
-            ClaudeProcess::spawn(&config, "old-session-456", &working_dir, true, &vec![r#"{"role": "user", "content": "Resume session"}"#.to_string()])
-                .await
-                .unwrap();
+        let (process, actual_session_id) = ClaudeProcess::spawn(
+            &config,
+            "old-session-456",
+            &working_dir,
+            true,
+            &vec![r#"{"role": "user", "content": "Resume session"}"#.to_string()],
+        )
+        .await
+        .unwrap();
 
         assert_eq!(actual_session_id, "new-session-789");
 
@@ -859,12 +886,12 @@ done
         let temp_dir = TempDir::new().unwrap();
         let working_dir = temp_dir.path().join("work");
         fs::create_dir_all(&working_dir).unwrap();
-        
+
         // Create python mock script inline
         let python_script = include_str!("../tests/helpers/mock_claude.py");
         let mock_path = temp_dir.path().join("mock_claude.py");
         fs::write(&mock_path, python_script).unwrap();
-        
+
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -872,7 +899,7 @@ done
             perms.set_mode(0o755);
             fs::set_permissions(&mock_path, perms).unwrap();
         }
-        
+
         let projects_dir = temp_dir.path().join("projects");
         fs::create_dir_all(&projects_dir).unwrap();
 
@@ -893,8 +920,9 @@ done
             "control": "write_file",
             "path": session_file_path.to_string_lossy(),
             "content": session_content
-        }).to_string();
-        
+        })
+        .to_string();
+
         let messages = vec![
             create_file_command,
             r#"{"sessionId": "test-session", "type": "start"}"#.to_string(),
@@ -910,7 +938,10 @@ done
         assert_eq!(session_id, "test-session");
 
         // Test writing and reading
-        process.write(r#"{"role": "user", "content": "Additional message"}"#).await.unwrap();
+        process
+            .write(r#"{"role": "user", "content": "Additional message"}"#)
+            .await
+            .unwrap();
 
         // Give the mock process time to respond
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -928,12 +959,12 @@ done
         let temp_dir = TempDir::new().unwrap();
         let working_dir = temp_dir.path().join("work");
         fs::create_dir_all(&working_dir).unwrap();
-        
+
         // Create python mock script inline
         let python_script = include_str!("../tests/helpers/mock_claude.py");
         let mock_path = temp_dir.path().join("mock_claude.py");
         fs::write(&mock_path, python_script).unwrap();
-        
+
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -941,7 +972,7 @@ done
             perms.set_mode(0o755);
             fs::set_permissions(&mock_path, perms).unwrap();
         }
-        
+
         let projects_dir = temp_dir.path().join("projects");
         fs::create_dir_all(&projects_dir).unwrap();
 
@@ -962,21 +993,27 @@ done
             "control": "write_file",
             "path": session_file_path.to_string_lossy(),
             "content": session_content
-        }).to_string();
-        
+        })
+        .to_string();
+
         let messages_with_empty_lines = vec![
             create_file_command,
             r#"{"sessionId": "test-session", "type": "start"}"#.to_string(),
-            "".to_string(),  // Empty line
+            "".to_string(), // Empty line
             r#"{"role": "user", "content": "Second message"}"#.to_string(),
-            "".to_string(),  // Empty line
+            "".to_string(), // Empty line
             r#"{"role": "user", "content": "Third message"}"#.to_string(),
         ];
 
-        let (process, session_id) =
-            ClaudeProcess::spawn(&config, "test-session", &working_dir, false, &messages_with_empty_lines)
-                .await
-                .unwrap();
+        let (process, session_id) = ClaudeProcess::spawn(
+            &config,
+            "test-session",
+            &working_dir,
+            false,
+            &messages_with_empty_lines,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(session_id, "test-session");
 

@@ -1,5 +1,7 @@
 use crate::api::handlers::AppState;
-use crate::models::{ApprovalMessage, ApprovalWebSocketClient, BroadcastMessage, WebSocketClient, WriteMessage};
+use crate::models::{
+    ApprovalMessage, ApprovalWebSocketClient, BroadcastMessage, WebSocketClient, WriteMessage,
+};
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
@@ -10,8 +12,8 @@ use axum::{
 use futures::{sink::SinkExt, stream::StreamExt};
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
-use tracing::{info, warn, error, debug, instrument};
 
 #[instrument(skip(ws, state), fields(session_id = %session_id))]
 pub async fn websocket_handler(
@@ -62,7 +64,7 @@ fn spawn_outgoing_message_handler(
     client_id: String,
 ) -> tokio::task::JoinHandle<()> {
     debug!(client_id = %client_id, "Spawning outgoing message handler");
-    
+
     tokio::spawn(async move {
         let mut messages_sent = 0;
         while let Some(msg) = rx.recv().await {
@@ -116,7 +118,10 @@ fn spawn_broadcast_handler(
                     );
                     Some(content.clone())
                 }
-                BroadcastMessage::ClientInput { content, sender_client_id } => {
+                BroadcastMessage::ClientInput {
+                    content,
+                    sender_client_id,
+                } => {
                     // Only send to clients that are NOT the sender
                     if sender_client_id != &client_id {
                         debug!(
@@ -244,7 +249,7 @@ async fn handle_text_message(
     // Broadcast to all OTHER clients (not the sender) using session broadcast
     let clients = session.get_clients().await;
     let other_clients_count = clients.iter().filter(|c| c.id != client_id).count();
-    
+
     debug!(
         client_id = %client_id,
         session_id = %session_id,
@@ -254,11 +259,11 @@ async fn handle_text_message(
     );
 
     if other_clients_count > 0 {
-        let broadcast_msg = BroadcastMessage::ClientInput { 
-            content: text.clone(), 
-            sender_client_id: client_id.to_string() 
+        let broadcast_msg = BroadcastMessage::ClientInput {
+            content: text.clone(),
+            sender_client_id: client_id.to_string(),
         };
-        
+
         if let Err(e) = session.broadcast_message(broadcast_msg) {
             warn!(
                 client_id = %client_id,
@@ -314,13 +319,13 @@ fn cleanup_client_connection(
             "Client removed from session"
         );
     });
-    
+
     debug!(
         client_id = %client_id,
         session_id = %session_id,
         "Aborting background tasks"
     );
-    
+
     send_task.abort();
     broadcast_task.abort();
 
@@ -335,7 +340,7 @@ fn cleanup_client_connection(
 #[instrument(skip(socket, state), fields(session_id = %session_id, client_id))]
 async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState) {
     info!(session_id = %session_id, "Starting WebSocket connection handling");
-    
+
     // Get session
     let Some(session) = state.session_manager.get_session(&session_id) else {
         error!(session_id = %session_id, "WebSocket connection rejected: session not found");
@@ -359,7 +364,7 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
     // Setup client connection
     let (client_id, client) = setup_client_connection(&session_id, &session);
     tracing::Span::current().record("client_id", &client_id);
-    
+
     session.add_client(client).await;
     info!(
         session_id = %session_id,
@@ -385,12 +390,8 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
 
     // Spawn background tasks
     let send_task = spawn_outgoing_message_handler(sender, rx, client_id.clone());
-    let broadcast_task = spawn_broadcast_handler(
-        session.clone(),
-        tx.clone(),
-        client_id.clone(),
-    );
-    
+    let broadcast_task = spawn_broadcast_handler(session.clone(), tx.clone(), client_id.clone());
+
     debug!(
         session_id = %session_id,
         client_id = %client_id,
@@ -404,7 +405,7 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
         client_id = %client_id_recv,
         "Starting message processing loop"
     );
-    
+
     let mut messages_processed = 0;
     while let Some(msg) = receiver.next().await {
         messages_processed += 1;
@@ -478,7 +479,7 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
             }
         }
     }
-    
+
     info!(
         session_id = %session_id,
         client_id = %client_id_recv,
@@ -539,7 +540,7 @@ fn spawn_approval_outgoing_message_handler(
     client_id: String,
 ) -> tokio::task::JoinHandle<()> {
     debug!(client_id = %client_id, "Spawning approval outgoing message handler");
-    
+
     tokio::spawn(async move {
         let mut messages_sent = 0;
         while let Some(msg) = rx.recv().await {
@@ -712,7 +713,7 @@ async fn handle_approval_text_message(
 #[instrument(skip(socket, state), fields(session_id = %session_id, client_id))]
 async fn handle_approval_websocket(socket: WebSocket, session_id: String, state: AppState) {
     info!(session_id = %session_id, "Starting approval WebSocket connection handling");
-    
+
     // Get session
     let Some(session) = state.session_manager.get_session(&session_id) else {
         error!(session_id = %session_id, "Approval WebSocket connection rejected: session not found");
@@ -734,7 +735,7 @@ async fn handle_approval_websocket(socket: WebSocket, session_id: String, state:
     // Setup approval client connection
     let (client_id, client) = setup_approval_client_connection(&session_id, &session);
     tracing::Span::current().record("client_id", &client_id);
-    
+
     session.add_approval_client(client).await;
     info!(
         session_id = %session_id,
@@ -760,11 +761,8 @@ async fn handle_approval_websocket(socket: WebSocket, session_id: String, state:
 
     // Spawn background tasks first
     let send_task = spawn_approval_outgoing_message_handler(sender, rx, client_id.clone());
-    let broadcast_task = spawn_approval_broadcast_handler(
-        session.clone(),
-        tx.clone(),
-        client_id.clone(),
-    );
+    let broadcast_task =
+        spawn_approval_broadcast_handler(session.clone(), tx.clone(), client_id.clone());
 
     // Send pending approvals immediately upon connection as individual messages
     let pending_approvals = session.get_pending_approvals().await;
@@ -775,7 +773,7 @@ async fn handle_approval_websocket(socket: WebSocket, session_id: String, state:
             pending_count = pending_approvals.len(),
             "Sending pending approvals to newly connected client as individual messages"
         );
-        
+
         for approval_request in pending_approvals {
             let approval_message = match serde_json::to_string(&serde_json::json!({
                 "id": approval_request.id,
@@ -795,7 +793,7 @@ async fn handle_approval_websocket(socket: WebSocket, session_id: String, state:
                     continue;
                 }
             };
-            
+
             if let Err(e) = tx.send(Message::Text(approval_message)) {
                 warn!(
                     session_id = %session_id,
@@ -808,7 +806,7 @@ async fn handle_approval_websocket(socket: WebSocket, session_id: String, state:
             }
         }
     }
-    
+
     debug!(
         session_id = %session_id,
         client_id = %client_id,
@@ -822,7 +820,7 @@ async fn handle_approval_websocket(socket: WebSocket, session_id: String, state:
         client_id = %client_id_recv,
         "Starting approval message processing loop"
     );
-    
+
     let mut messages_processed = 0;
     while let Some(msg) = receiver.next().await {
         messages_processed += 1;
@@ -896,7 +894,7 @@ async fn handle_approval_websocket(socket: WebSocket, session_id: String, state:
             }
         }
     }
-    
+
     info!(
         session_id = %session_id,
         client_id = %client_id_recv,
@@ -914,20 +912,22 @@ async fn handle_approval_websocket(socket: WebSocket, session_id: String, state:
             session_id = %session_id_cleanup,
             "Removing approval client from session"
         );
-        session_cleanup.remove_approval_client(&client_id_cleanup).await;
+        session_cleanup
+            .remove_approval_client(&client_id_cleanup)
+            .await;
         debug!(
             client_id = %client_id_cleanup,
             session_id = %session_id_cleanup,
             "Approval client removed from session"
         );
     });
-    
+
     debug!(
         client_id = %client_id,
         session_id = %session_id,
         "Aborting approval background tasks"
     );
-    
+
     send_task.abort();
     broadcast_task.abort();
 
@@ -998,7 +998,10 @@ done
         }
 
         match client_msg {
-            BroadcastMessage::ClientInput { content, sender_client_id } => {
+            BroadcastMessage::ClientInput {
+                content,
+                sender_client_id,
+            } => {
                 assert_eq!(content, "test input");
                 assert_eq!(sender_client_id, "client123");
             }

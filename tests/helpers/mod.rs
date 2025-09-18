@@ -1,2 +1,2 @@
-pub mod mock_claude;
 pub mod logging;
+pub mod mock_claude;

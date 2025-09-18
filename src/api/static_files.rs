@@ -4,8 +4,8 @@ use axum::{
     http::{header, StatusCode},
     response::{IntoResponse, Response},
 };
-use rust_embed::RustEmbed;
 use mime_guess::mime;
+use rust_embed::RustEmbed;
 
 #[derive(RustEmbed)]
 #[folder = "frontend/dist/"]
@@ -23,7 +23,7 @@ pub async fn serve_static(Path(path): Path<String>) -> impl IntoResponse {
     match Assets::get(path) {
         Some(content) => {
             let mime = mime_guess::from_path(path).first_or_octet_stream();
-            
+
             Response::builder()
                 .status(StatusCode::OK)
                 .header(header::CONTENT_TYPE, mime.as_ref())
@@ -33,19 +33,15 @@ pub async fn serve_static(Path(path): Path<String>) -> impl IntoResponse {
         None => {
             // Try to serve index.html for client-side routing
             match Assets::get("index.html") {
-                Some(content) => {
-                    Response::builder()
-                        .status(StatusCode::OK)
-                        .header(header::CONTENT_TYPE, mime::TEXT_HTML.as_ref())
-                        .body(Body::from(content.data.to_vec()))
-                        .unwrap()
-                }
-                None => {
-                    Response::builder()
-                        .status(StatusCode::NOT_FOUND)
-                        .body(Body::from("404 Not Found"))
-                        .unwrap()
-                }
+                Some(content) => Response::builder()
+                    .status(StatusCode::OK)
+                    .header(header::CONTENT_TYPE, mime::TEXT_HTML.as_ref())
+                    .body(Body::from(content.data.to_vec()))
+                    .unwrap(),
+                None => Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(Body::from("404 Not Found"))
+                    .unwrap(),
             }
         }
     }

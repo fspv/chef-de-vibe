@@ -1,43 +1,44 @@
 use crate::claude_process::ClaudeProcess;
 use crate::config::Config;
 use crate::error::{OrchestratorError, OrchestratorResult};
-use crate::models::{ApprovalMessage, ApprovalRequest, BroadcastMessage, Session, SessionStatus, WriteMessage};
+use crate::models::{
+    ApprovalMessage, ApprovalRequest, BroadcastMessage, Session, SessionStatus, WriteMessage,
+};
 use dashmap::DashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 use tokio::time::{timeout, Duration};
-use tracing::{info, warn, error, debug, instrument};
+use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
 /// Compacts JSON message to a single line for Claude stdin.
 /// Claude expects each JSON message to be on a single line.
 fn compact_json_message(message: &str, context: &str) -> OrchestratorResult<String> {
     match serde_json::from_str::<serde_json::Value>(message) {
-        Ok(parsed) => {
-            match serde_json::to_string(&parsed) {
-                Ok(compacted) => {
-                    debug!(
-                        context = %context,
-                        original_len = message.len(),
-                        compacted_len = compacted.len(),
-                        "Successfully compacted JSON message"
-                    );
-                    Ok(compacted)
-                }
-                Err(e) => {
-                    error!(
-                        context = %context,
-                        error = %e,
-                        "Failed to re-serialize JSON message"
-                    );
-                    Err(OrchestratorError::ProcessCommunicationError(
-                        format!("Failed to compact JSON message for {}: {}", context, e)
-                    ))
-                }
+        Ok(parsed) => match serde_json::to_string(&parsed) {
+            Ok(compacted) => {
+                debug!(
+                    context = %context,
+                    original_len = message.len(),
+                    compacted_len = compacted.len(),
+                    "Successfully compacted JSON message"
+                );
+                Ok(compacted)
             }
-        }
+            Err(e) => {
+                error!(
+                    context = %context,
+                    error = %e,
+                    "Failed to re-serialize JSON message"
+                );
+                Err(OrchestratorError::ProcessCommunicationError(format!(
+                    "Failed to compact JSON message for {}: {}",
+                    context, e
+                )))
+            }
+        },
         Err(e) => {
             error!(
                 context = %context,
@@ -45,9 +46,10 @@ fn compact_json_message(message: &str, context: &str) -> OrchestratorResult<Stri
                 message = %message,
                 "Invalid JSON in message"
             );
-            Err(OrchestratorError::ProcessCommunicationError(
-                format!("Invalid JSON in message for {}: {}", context, e)
-            ))
+            Err(OrchestratorError::ProcessCommunicationError(format!(
+                "Invalid JSON in message for {}: {}",
+                context, e
+            )))
         }
     }
 }
@@ -69,17 +71,21 @@ impl SessionManager {
     }
 
     /// Waits for a session file to be created and contain non-empty content.
-    /// 
+    ///
     /// # Arguments
     /// * `session_id` - The session ID to wait for
     /// * `timeout_duration` - Maximum time to wait for the file
-    /// 
+    ///
     /// # Returns
     /// Ok(()) if file exists and is non-empty, Err if timeout or other error
     #[instrument(skip(self), fields(session_id = %session_id, timeout_seconds = timeout_duration.as_secs()))]
-    async fn wait_for_session_file(&self, session_id: &str, timeout_duration: Duration) -> OrchestratorResult<()> {
+    async fn wait_for_session_file(
+        &self,
+        session_id: &str,
+        timeout_duration: Duration,
+    ) -> OrchestratorResult<()> {
         let filename = format!("{}.jsonl", session_id);
-        
+
         debug!(
             session_id = %session_id,
             filename = %filename,
@@ -113,7 +119,7 @@ impl SessionManager {
                         );
                         return false;
                     }
-                    
+
                     info!(
                         session_id = %session_id,
                         file_path = %session_file_path.display(),
@@ -143,7 +149,9 @@ impl SessionManager {
                 }
                 interval.tick().await;
             }
-        }).await {
+        })
+        .await
+        {
             Ok(result) => {
                 info!(
                     session_id = %session_id,
@@ -159,9 +167,10 @@ impl SessionManager {
                     timeout_seconds = timeout_duration.as_secs(),
                     "Timeout waiting for session file to be created and populated"
                 );
-                Err(OrchestratorError::InternalError(
-                    format!("Timeout waiting for session file {} to be created", session_id)
-                ))
+                Err(OrchestratorError::InternalError(format!(
+                    "Timeout waiting for session file {} to be created",
+                    session_id
+                )))
             }
         }
     }
@@ -169,7 +178,7 @@ impl SessionManager {
     /// Finds a session file by scanning all subdirectories in the projects directory
     fn find_session_file(&self, filename: &str) -> Option<PathBuf> {
         use walkdir::WalkDir;
-        
+
         for entry in WalkDir::new(&self.config.claude_projects_dir)
             .into_iter()
             .filter_map(std::result::Result::ok)
@@ -233,7 +242,10 @@ impl SessionManager {
                 working_dir = %working_dir.display(),
                 "Working directory does not exist"
             );
-            return Err(OrchestratorError::WorkingDirInvalid(format!("Working directory does not exist: {}", working_dir.display())));
+            return Err(OrchestratorError::WorkingDirInvalid(format!(
+                "Working directory does not exist: {}",
+                working_dir.display()
+            )));
         }
 
         if !working_dir.is_dir() {
@@ -242,7 +254,10 @@ impl SessionManager {
                 working_dir = %working_dir.display(),
                 "Path is not a directory"
             );
-            return Err(OrchestratorError::WorkingDirInvalid(format!("Path is not a directory: {}", working_dir.display())));
+            return Err(OrchestratorError::WorkingDirInvalid(format!(
+                "Path is not a directory: {}",
+                working_dir.display()
+            )));
         }
 
         debug!(
@@ -382,10 +397,10 @@ impl SessionManager {
                         process_id = pid,
                         "Checking if Claude process is still running before waiting for session file"
                     );
-                    
+
                     // Give the process a moment to stabilize (1s)
                     tokio::time::sleep(Duration::from_millis(1000)).await;
-                    
+
                     // Check if process is still alive
                     if session.get_process_id().await.is_none() {
                         error!(
@@ -414,7 +429,10 @@ impl SessionManager {
 
                 // Use a 20 second timeout for file creation
                 let file_timeout = Duration::from_secs(20);
-                if let Err(e) = self.wait_for_session_file(&actual_session_id, file_timeout).await {
+                if let Err(e) = self
+                    .wait_for_session_file(&actual_session_id, file_timeout)
+                    .await
+                {
                     error!(
                         session_id = %actual_session_id,
                         error = %e,
@@ -477,26 +495,29 @@ impl SessionManager {
         );
 
         // Spawn Claude process
-        let (process, actual_session_id) = match ClaudeProcess::spawn(config, session_id, working_dir, resume, &first_message).await {
-            Ok((proc, id)) => {
-                info!(
-                    requested_session_id = %session_id,
-                    actual_session_id = %id,
-                    "Claude process spawned successfully"
-                );
-                (proc, id)
-            }
-            Err(e) => {
-                error!(
-                    session_id = %session_id,
-                    working_dir = %working_dir.display(),
-                    claude_binary = %config.claude_binary_path.display(),
-                    error = %e,
-                    "Failed to spawn Claude process"
-                );
-                return Err(e);
-            }
-        };
+        let (process, actual_session_id) =
+            match ClaudeProcess::spawn(config, session_id, working_dir, resume, &first_message)
+                .await
+            {
+                Ok((proc, id)) => {
+                    info!(
+                        requested_session_id = %session_id,
+                        actual_session_id = %id,
+                        "Claude process spawned successfully"
+                    );
+                    (proc, id)
+                }
+                Err(e) => {
+                    error!(
+                        session_id = %session_id,
+                        working_dir = %working_dir.display(),
+                        claude_binary = %config.claude_binary_path.display(),
+                        error = %e,
+                        "Failed to spawn Claude process"
+                    );
+                    return Err(e);
+                }
+            };
 
         // Extract components from process before moving
         let mut child = process.child;
@@ -526,7 +547,7 @@ impl SessionManager {
                 process_id = ?process_id,
                 "Starting dedicated process waiter task"
             );
-            
+
             // Wait for the process to exit - this is the proper way to wait and avoid zombies
             let exit_status = child.wait().await;
 
@@ -552,7 +573,7 @@ impl SessionManager {
 
             // Clear the process ID from the session
             process_waiter_session.set_process_id(None).await;
-            
+
             // Immediately broadcast disconnect to all WebSocket clients
             if let Err(e) = process_waiter_session.broadcast_message(BroadcastMessage::Disconnect) {
                 error!(
@@ -566,7 +587,7 @@ impl SessionManager {
                     "Successfully broadcast disconnect after process exit"
                 );
             }
-            
+
             debug!(
                 session_id = %process_waiter_session_id,
                 "Process waiter task finished"
@@ -581,7 +602,7 @@ impl SessionManager {
                 session_id = %output_session_id,
                 "Starting Claude output handler task"
             );
-            
+
             let mut lines_processed = 0;
             while let Some(line) = stdout_rx.recv().await {
                 lines_processed += 1;
@@ -603,9 +624,11 @@ impl SessionManager {
                             error = %e,
                             "Received invalid JSON from Claude process"
                         );
-                        
+
                         // Kill the process and notify clients
-                        if let Err(e) = output_session.broadcast_message(BroadcastMessage::Disconnect) {
+                        if let Err(e) =
+                            output_session.broadcast_message(BroadcastMessage::Disconnect)
+                        {
                             error!(
                                 session_id = %output_session_id,
                                 error = %e,
@@ -632,13 +655,15 @@ impl SessionManager {
                     message_subtype = ?message_subtype,
                     "Checking if this is a control_request"
                 );
-                
-                if parsed_line.get("type") == Some(&serde_json::Value::String("control_request".to_string()))
-                    && parsed_line.get("request")
+
+                if parsed_line.get("type")
+                    == Some(&serde_json::Value::String("control_request".to_string()))
+                    && parsed_line
+                        .get("request")
                         .and_then(|r| r.get("subtype"))
                         .map(|st| st == &serde_json::Value::String("can_use_tool".to_string()))
-                        .unwrap_or(false) {
-                    
+                        .unwrap_or(false)
+                {
                     debug!(
                         session_id = %output_session_id,
                         line_number = lines_processed,
@@ -649,13 +674,15 @@ impl SessionManager {
                     let approval_id = Uuid::new_v4().to_string();
 
                     // Extract Claude's original request_id for internal error handling
-                    let claude_request_id = parsed_line.get("request_id")
+                    let claude_request_id = parsed_line
+                        .get("request_id")
                         .and_then(|v| v.as_str())
                         .unwrap_or(&Uuid::new_v4().to_string())
                         .to_string();
 
                     // Pass through the entire nested 'request' object from Claude as-is
-                    let claude_request = parsed_line.get("request")
+                    let claude_request = parsed_line
+                        .get("request")
                         .cloned()
                         .unwrap_or_else(|| serde_json::json!({}));
 
@@ -671,12 +698,14 @@ impl SessionManager {
                         id: approval_id.clone(),
                         session_id: output_session_id.clone(),
                         claude_request_id: claude_request_id.clone(),
-                        request: claude_request,  // Raw Claude request - pass through
+                        request: claude_request, // Raw Claude request - pass through
                         created_at: std::time::SystemTime::now(),
                     };
 
                     // Store the approval request in the session
-                    output_session.add_pending_approval(approval_request.clone()).await;
+                    output_session
+                        .add_pending_approval(approval_request.clone())
+                        .await;
 
                     info!(
                         session_id = %output_session_id,
@@ -687,7 +716,7 @@ impl SessionManager {
 
                     // Broadcast to approval WebSocket clients
                     if let Err(e) = output_session.broadcast_approval_message(
-                        ApprovalMessage::ApprovalRequest(approval_request)
+                        ApprovalMessage::ApprovalRequest(approval_request),
                     ) {
                         error!(
                             session_id = %output_session_id,
@@ -696,7 +725,7 @@ impl SessionManager {
                             "Failed to broadcast approval request to approval clients"
                         );
                     }
-                    
+
                     // Do NOT broadcast control_requests to regular Claude WebSocket clients
                     // Claude will wait for our response via stdin
                 } else {
@@ -754,14 +783,15 @@ impl SessionManager {
                 // Process write queue
                 if let Some(msg) = write_session.dequeue_message().await {
                     // Compact JSON to ensure single-line format
-                    let compacted_message = match compact_json_message(&msg.content, "write_queue") {
+                    let compacted_message = match compact_json_message(&msg.content, "write_queue")
+                    {
                         Ok(compacted) => compacted,
                         Err(e) => {
                             error!("Failed to compact message from write queue: {}", e);
                             break;
                         }
                     };
-                    
+
                     if write_stdin_tx.send(compacted_message).await.is_err() {
                         eprintln!("Failed to send message to Claude stdin");
                         break;
@@ -780,15 +810,16 @@ impl SessionManager {
         tokio::spawn(async move {
             let mut approval_rx = approval_session.subscribe_to_approval_broadcasts();
             info!(session_id = %approval_session_id, "Starting approval response handler");
-            
+
             while let Ok(approval_message) = approval_rx.recv().await {
                 if let ApprovalMessage::ApprovalResponse(response_data) = approval_message {
                     // Extract our wrapper id from the client response
-                    let wrapper_id = response_data.get("id")
+                    let wrapper_id = response_data
+                        .get("id")
                         .and_then(|v| v.as_str())
                         .unwrap_or("unknown")
                         .to_string();
-                    
+
                     debug!(
                         session_id = %approval_session_id,
                         wrapper_id = %wrapper_id,
@@ -802,7 +833,9 @@ impl SessionManager {
                     }
 
                     // Remove the approval request from pending using our wrapper id
-                    if let Some(removed_request) = approval_session.remove_pending_approval(&wrapper_id).await {
+                    if let Some(removed_request) =
+                        approval_session.remove_pending_approval(&wrapper_id).await
+                    {
                         info!(
                             session_id = %approval_session_id,
                             wrapper_id = %wrapper_id,
@@ -814,11 +847,11 @@ impl SessionManager {
 
                         // Pass through client's raw response to Claude without parsing
                         let default_response = serde_json::json!({
-                            "behavior": "deny", 
+                            "behavior": "deny",
                             "message": "Invalid response format"
                         });
-                        let client_response = response_data.get("response")
-                            .unwrap_or(&default_response);
+                        let client_response =
+                            response_data.get("response").unwrap_or(&default_response);
 
                         let control_response = serde_json::json!({
                             "type": "control_response",
@@ -879,7 +912,7 @@ impl SessionManager {
                             wrapper_id = %wrapper_id,
                             "Approval request not found in pending state"
                         );
-                        continue;  // Skip this response if we can't find the original request
+                        continue; // Skip this response if we can't find the original request
                     }
                 }
             }
@@ -1085,12 +1118,20 @@ done
         fs::create_dir_all(&working_dir).unwrap();
 
         // Set environment variable for the mock Claude binary
-        std::env::set_var("CLAUDE_PROJECTS_DIR", config.claude_projects_dir.to_str().unwrap());
+        std::env::set_var(
+            "CLAUDE_PROJECTS_DIR",
+            config.claude_projects_dir.to_str().unwrap(),
+        );
 
         let manager = SessionManager::new(config);
 
         let session_id = manager
-            .create_session("test-session".to_string(), &working_dir, false, vec![r#"{"role": "user", "content": "Hello"}"#.to_string()])
+            .create_session(
+                "test-session".to_string(),
+                &working_dir,
+                false,
+                vec![r#"{"role": "user", "content": "Hello"}"#.to_string()],
+            )
             .await
             .unwrap();
 
@@ -1112,7 +1153,12 @@ done
 
         let non_existent = temp_dir.path().join("non_existent");
         let result = manager
-            .create_session("test-session".to_string(), &non_existent, false, vec![r#"{"role": "user", "content": "Hello"}"#.to_string()])
+            .create_session(
+                "test-session".to_string(),
+                &non_existent,
+                false,
+                vec![r#"{"role": "user", "content": "Hello"}"#.to_string()],
+            )
             .await;
 
         assert!(result.is_err());
@@ -1131,19 +1177,32 @@ done
         fs::create_dir_all(&working_dir).unwrap();
 
         // Set environment variable for the mock Claude binary
-        std::env::set_var("CLAUDE_PROJECTS_DIR", config.claude_projects_dir.to_str().unwrap());
+        std::env::set_var(
+            "CLAUDE_PROJECTS_DIR",
+            config.claude_projects_dir.to_str().unwrap(),
+        );
 
         let manager = SessionManager::new(config);
 
         // Create first session
         let session_id1 = manager
-            .create_session("test-session".to_string(), &working_dir, false, vec![r#"{"role": "user", "content": "Hello"}"#.to_string()])
+            .create_session(
+                "test-session".to_string(),
+                &working_dir,
+                false,
+                vec![r#"{"role": "user", "content": "Hello"}"#.to_string()],
+            )
             .await
             .unwrap();
 
         // Try to create same session again
         let session_id2 = manager
-            .create_session("test-session".to_string(), &working_dir, false, vec![r#"{"role": "user", "content": "Hello"}"#.to_string()])
+            .create_session(
+                "test-session".to_string(),
+                &working_dir,
+                false,
+                vec![r#"{"role": "user", "content": "Hello"}"#.to_string()],
+            )
             .await
             .unwrap();
 
@@ -1162,12 +1221,20 @@ done
         fs::create_dir_all(&working_dir).unwrap();
 
         // Set environment variable for the mock Claude binary
-        std::env::set_var("CLAUDE_PROJECTS_DIR", config.claude_projects_dir.to_str().unwrap());
+        std::env::set_var(
+            "CLAUDE_PROJECTS_DIR",
+            config.claude_projects_dir.to_str().unwrap(),
+        );
 
         let manager = SessionManager::new(config);
 
         manager
-            .create_session("test-session".to_string(), &working_dir, false, vec![r#"{"role": "user", "content": "Hello"}"#.to_string()])
+            .create_session(
+                "test-session".to_string(),
+                &working_dir,
+                false,
+                vec![r#"{"role": "user", "content": "Hello"}"#.to_string()],
+            )
             .await
             .unwrap();
 
@@ -1195,12 +1262,20 @@ done
         fs::create_dir_all(&working_dir).unwrap();
 
         // Set environment variable for the mock Claude binary
-        std::env::set_var("CLAUDE_PROJECTS_DIR", config.claude_projects_dir.to_str().unwrap());
+        std::env::set_var(
+            "CLAUDE_PROJECTS_DIR",
+            config.claude_projects_dir.to_str().unwrap(),
+        );
 
         let manager = SessionManager::new(config);
 
         manager
-            .create_session("test-session".to_string(), &working_dir, false, vec![r#"{"role": "user", "content": "Hello"}"#.to_string()])
+            .create_session(
+                "test-session".to_string(),
+                &working_dir,
+                false,
+                vec![r#"{"role": "user", "content": "Hello"}"#.to_string()],
+            )
             .await
             .unwrap();
 
@@ -1219,14 +1294,14 @@ done
         let temp_dir = TempDir::new().unwrap();
         let working_dir = temp_dir.path().join("work");
         fs::create_dir_all(&working_dir).unwrap();
-        
+
         // Create a mock Claude binary that exits immediately
         let claude_path = temp_dir.path().join("failing_claude");
         let script = r#"#!/bin/bash
 exit 1
 "#;
         fs::write(&claude_path, script).unwrap();
-        
+
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -1234,46 +1309,59 @@ exit 1
             perms.set_mode(0o755);
             fs::set_permissions(&claude_path, perms).unwrap();
         }
-        
+
         let projects_dir = temp_dir.path().join("projects");
         fs::create_dir_all(&projects_dir).unwrap();
-        
+
         let config = Config {
             claude_binary_path: claude_path,
             http_listen_address: "127.0.0.1:8080".to_string(),
             claude_projects_dir: projects_dir.clone(),
             shutdown_timeout: std::time::Duration::from_secs(1),
         };
-        
+
         // Set environment variable for the mock Claude binary
         std::env::set_var("CLAUDE_PROJECTS_DIR", projects_dir.to_str().unwrap());
-        
+
         let manager = SessionManager::new(config);
-        
+
         // Start timing
         let start = std::time::Instant::now();
-        
+
         // Try to create session - should fail immediately
         let result = manager
-            .create_session("test-session".to_string(), &working_dir, false, vec![r#"{"role": "user", "content": "Hello"}"#.to_string()])
+            .create_session(
+                "test-session".to_string(),
+                &working_dir,
+                false,
+                vec![r#"{"role": "user", "content": "Hello"}"#.to_string()],
+            )
             .await;
-            
+
         let elapsed = start.elapsed();
-        
+
         // Should fail
         assert!(result.is_err());
-        
+
         // Should fail quickly (less than 2 seconds, not wait for the 20 second timeout)
-        assert!(elapsed.as_secs() < 2, "Took too long to detect failure: {:?}", elapsed);
-        
+        assert!(
+            elapsed.as_secs() < 2,
+            "Took too long to detect failure: {:?}",
+            elapsed
+        );
+
         match result.unwrap_err() {
             OrchestratorError::ClaudeSpawnFailed(msg) => {
-                assert!(msg.contains("process exited immediately") || msg.contains("Failed to spawn Claude process"), 
-                       "Unexpected error message: {}", msg);
+                assert!(
+                    msg.contains("process exited immediately")
+                        || msg.contains("Failed to spawn Claude process"),
+                    "Unexpected error message: {}",
+                    msg
+                );
             }
             e => panic!("Expected ClaudeSpawnFailed error, got: {:?}", e),
         }
-        
+
         // Clean up environment variable
         std::env::remove_var("CLAUDE_PROJECTS_DIR");
     }

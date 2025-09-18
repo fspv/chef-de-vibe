@@ -3,14 +3,12 @@ mod helpers;
 use chef_de_vibe::{
     api::handlers::AppState,
     config::Config,
-    models::{
-        CreateSessionRequest, CreateSessionResponse,
-    },
+    models::{CreateSessionRequest, CreateSessionResponse},
     session_manager::SessionManager,
 };
 use futures_util::{SinkExt, StreamExt};
-use helpers::mock_claude::MockClaude;
 use helpers::logging::init_logging;
+use helpers::mock_claude::MockClaude;
 use reqwest::Client;
 use serial_test::serial;
 use std::fs;
@@ -21,7 +19,12 @@ use tokio::time::timeout;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use url::Url;
 
-fn create_test_session_file(projects_dir: &std::path::Path, project_name: &str, session_id: &str, cwd: &str) {
+fn create_test_session_file(
+    projects_dir: &std::path::Path,
+    project_name: &str,
+    session_id: &str,
+    cwd: &str,
+) {
     let project_dir = projects_dir.join(project_name);
     fs::create_dir_all(&project_dir).unwrap();
 
@@ -40,8 +43,9 @@ fn create_test_session_file(projects_dir: &std::path::Path, project_name: &str, 
 }
 
 fn generate_unique_session_id(test_name: &str) -> String {
-    format!("{}-{}-{}", 
-        test_name, 
+    format!(
+        "{}-{}-{}",
+        test_name,
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -83,7 +87,6 @@ impl TestServer {
     }
 
     async fn new_internal(mock: MockClaude) -> Self {
-
         let config = Config::from_env().expect("Failed to load config");
         let session_manager = Arc::new(SessionManager::new(config.clone()));
 
@@ -142,12 +145,11 @@ impl TestServer {
     }
 }
 
-
 impl Drop for TestServer {
     fn drop(&mut self) {
         // First abort the server to stop accepting new connections
         self.server_handle.abort();
-        
+
         // Use thread-based cleanup to avoid runtime nesting issues
         let session_manager = self.session_manager.clone();
         std::thread::spawn(move || {
@@ -158,14 +160,16 @@ impl Drop for TestServer {
             rt.block_on(async {
                 // Give more time for ongoing operations to complete
                 tokio::time::sleep(Duration::from_millis(200)).await;
-                
+
                 // Shutdown all sessions
                 session_manager.shutdown().await;
-                
+
                 // Additional time for WebSocket connections and processes to clean up
                 tokio::time::sleep(Duration::from_millis(300)).await;
             });
-        }).join().ok();
+        })
+        .join()
+        .ok();
     }
 }
 
@@ -186,7 +190,7 @@ async fn test_malformed_json_requests() {
 
     // Should be a 4xx error for malformed request
     assert!(response.status().is_client_error());
-    
+
     // Try to parse response - it might not be valid JSON
     let body_text = response.text().await.unwrap();
     if let Ok(body) = serde_json::from_str::<serde_json::Value>(&body_text) {
@@ -212,7 +216,7 @@ async fn test_malformed_json_requests() {
 
     // Should be a 4xx error for invalid request
     assert!(response.status().is_client_error());
-    
+
     // Try to parse response as JSON
     let body_text = response.text().await.unwrap();
     if let Ok(body) = serde_json::from_str::<serde_json::Value>(&body_text) {
@@ -249,11 +253,18 @@ async fn test_create_session_empty_first_message_validation() {
         .unwrap();
 
     // Should return 400 Bad Request
-    assert_eq!(response.status(), 400, "Empty first_message should be rejected with 400 status");
+    assert_eq!(
+        response.status(),
+        400,
+        "Empty first_message should be rejected with 400 status"
+    );
 
     let error_body: serde_json::Value = response.json().await.unwrap();
     assert!(
-        error_body["error"].as_str().unwrap().contains("first_message cannot be empty"),
+        error_body["error"]
+            .as_str()
+            .unwrap()
+            .contains("first_message cannot be empty"),
         "Error message should mention first_message cannot be empty. Got: {}",
         error_body["error"]
     );
@@ -266,27 +277,46 @@ async fn test_first_message_triggers_claude_response() {
     let client = Client::new();
 
     // Create working directory and session
-    let working_dir = server.mock.temp_dir.path().join("first_message_trigger_work");
+    let working_dir = server
+        .mock
+        .temp_dir
+        .path()
+        .join("first_message_trigger_work");
     fs::create_dir_all(&working_dir).unwrap();
 
-    let unique_content = format!("Trigger message {}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
+    let unique_content = format!(
+        "Trigger message {}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    );
     let session_id = generate_unique_session_id("first-message-trigger");
-    
+
     // First message needs to create the session file using the mock's write_file control command
-    let session_file_path = server.mock.projects_dir().join(format!("{}.jsonl", session_id));
-    let session_start_content = format!(r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#, 
-        session_id, working_dir.display());
-    
+    let session_file_path = server
+        .mock
+        .projects_dir()
+        .join(format!("{}.jsonl", session_id));
+    let session_start_content = format!(
+        r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#,
+        session_id,
+        working_dir.display()
+    );
+
     // Escape the content for embedding in JSON
     let escaped_content = session_start_content.replace('"', r#"\""#);
-    
+
     // Create the control command to write the session file, then add the user message
     let first_message = vec![
-        format!(r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
-            session_file_path.display(), escaped_content),
-        format!(r#"{{"role": "user", "content": "{}"}}"#, unique_content)
+        format!(
+            r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
+            session_file_path.display(),
+            escaped_content
+        ),
+        format!(r#"{{"role": "user", "content": "{}"}}"#, unique_content),
     ];
-    
+
     let request = CreateSessionRequest {
         session_id: session_id.clone(),
         working_dir: working_dir.clone(),
@@ -309,11 +339,13 @@ async fn test_first_message_triggers_claude_response() {
 
     // Give some time for session to be ready and first_message to be processed
     tokio::time::sleep(Duration::from_millis(500)).await;
-    
+
     // Try to receive Claude's response to first_message, but don't fail if we don't get it
     // (the message may have been discarded if client connected after Claude processed it)
-    for _ in 0..5 { // Try up to 5 messages to find the first_message response
-        if let Ok(Some(Ok(Message::Text(text)))) = timeout(Duration::from_secs(3), ws.next()).await {
+    for _ in 0..5 {
+        // Try up to 5 messages to find the first_message response
+        if let Ok(Some(Ok(Message::Text(text)))) = timeout(Duration::from_secs(3), ws.next()).await
+        {
             if text.contains(&unique_content) || text.contains("Mock Claude received") {
                 // Found the response, but we don't fail if we don't get it
                 break;
@@ -327,7 +359,6 @@ async fn test_first_message_triggers_claude_response() {
     // we won't receive it. This is expected behavior per the WebSocket message handling policy.
 
     let _ = ws.close(None).await;
-
 }
 
 #[tokio::test]
@@ -337,32 +368,57 @@ async fn test_resume_session_with_first_message() {
     let client = Client::new();
 
     // Create working directory and session file
-    let working_dir = server.mock.temp_dir.path().join("resume_first_message_work");
+    let working_dir = server
+        .mock
+        .temp_dir
+        .path()
+        .join("resume_first_message_work");
     fs::create_dir_all(&working_dir).unwrap();
 
     // Create a test session file directly on disk to simulate an existing session
     // Use the same helper function as other working tests
-    create_test_session_file(&server.mock.projects_dir, "resume_first_message_work", "old-resume-session", working_dir.to_str().unwrap());
+    create_test_session_file(
+        &server.mock.projects_dir,
+        "resume_first_message_work",
+        "old-resume-session",
+        working_dir.to_str().unwrap(),
+    );
 
-    let resume_content = format!("Resume trigger {}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
-    
+    let resume_content = format!(
+        "Resume trigger {}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    );
+
     // For resume tests, we need to send a control command to create the new session file with the new session ID
     // The mock Claude will generate a new session ID and create a new session file
     let new_session_id = generate_unique_session_id("resumed");
-    let new_session_start_content = format!(r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#, 
-        new_session_id, working_dir.display());
+    let new_session_start_content = format!(
+        r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#,
+        new_session_id,
+        working_dir.display()
+    );
     let escaped_content = new_session_start_content.replace('"', r#"\""#);
-    let new_session_file_path = server.mock.projects_dir.join("resume_first_message_work").join(format!("{}.jsonl", new_session_id));
-    
+    let new_session_file_path = server
+        .mock
+        .projects_dir
+        .join("resume_first_message_work")
+        .join(format!("{}.jsonl", new_session_id));
+
     // For resume mode, the first line output must be JSON with a session_id field
     // The mock Claude will echo this JSON, and the resume code will parse it to extract session_id
     let first_message = vec![
         format!(r#"{{"session_id": "{}"}}"#, new_session_id),
-        format!(r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
-            new_session_file_path.display(), escaped_content),
-        format!(r#"{{"role": "user", "content": "{}"}}"#, resume_content)
+        format!(
+            r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
+            new_session_file_path.display(),
+            escaped_content
+        ),
+        format!(r#"{{"role": "user", "content": "{}"}}"#, resume_content),
     ];
-    
+
     let request = CreateSessionRequest {
         session_id: "old-resume-session".to_string(),
         working_dir: working_dir.clone(),
@@ -382,15 +438,18 @@ async fn test_resume_session_with_first_message() {
         let error_body = response.text().await.unwrap();
         panic!(
             "Resume session with first_message failed with status: {}. Error body: {}",
-            status,
-            error_body
+            status, error_body
         );
     }
 
-    assert_eq!(response.status(), 200, "Resume session with first_message should succeed");
+    assert_eq!(
+        response.status(),
+        200,
+        "Resume session with first_message should succeed"
+    );
 
     let create_response: CreateSessionResponse = response.json().await.unwrap();
-    
+
     // Session ID should change during resume (mock Claude returns a new ID)
     assert_ne!(
         create_response.session_id, "old-resume-session",
@@ -408,8 +467,10 @@ async fn test_resume_session_with_first_message() {
 
     // Try to receive Claude's response to the first_message, but don't fail if we don't get it
     // (the message may have been discarded if client connected after Claude processed it)
-    for _ in 0..3 { // Try up to 3 messages to find the first_message response
-        if let Ok(Some(Ok(Message::Text(text)))) = timeout(Duration::from_secs(2), ws.next()).await {
+    for _ in 0..3 {
+        // Try up to 3 messages to find the first_message response
+        if let Ok(Some(Ok(Message::Text(text)))) = timeout(Duration::from_secs(2), ws.next()).await
+        {
             if text.contains(&resume_content) || text.contains("Mock Claude received") {
                 // Found the response, but we don't fail if we don't get it
                 break;
@@ -435,15 +496,21 @@ async fn test_multiline_first_message_compaction() {
     fs::create_dir_all(&working_dir).unwrap();
 
     let session_id = "multiline-message-session".to_string();
-    
+
     // First message needs to create the session file using the mock's write_file control command
-    let session_file_path = server.mock.projects_dir().join(format!("{}.jsonl", session_id));
-    let session_start_content = format!(r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#, 
-        session_id, working_dir.display());
-    
+    let session_file_path = server
+        .mock
+        .projects_dir()
+        .join(format!("{}.jsonl", session_id));
+    let session_start_content = format!(
+        r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#,
+        session_id,
+        working_dir.display()
+    );
+
     // Escape the content for embedding in JSON
     let escaped_content = session_start_content.replace('"', r#"\""#);
-    
+
     // Use a multiline JSON first_message (simulating what frontend might send)
     let multiline_json = r#"{
   "role": "user",
@@ -453,12 +520,15 @@ async fn test_multiline_first_message_compaction() {
     "array": [1, 2, 3]
   }
 }"#;
-    
+
     // Create the control command to write the session file, then add the multiline user message
     let first_message = vec![
-        format!(r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
-            session_file_path.display(), escaped_content),
-        multiline_json.to_string()
+        format!(
+            r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
+            session_file_path.display(),
+            escaped_content
+        ),
+        multiline_json.to_string(),
     ];
 
     let request = CreateSessionRequest {
@@ -476,7 +546,11 @@ async fn test_multiline_first_message_compaction() {
         .unwrap();
 
     // Session creation should succeed despite multiline JSON
-    assert_eq!(response.status(), 200, "Multiline first_message should be accepted and compacted");
+    assert_eq!(
+        response.status(),
+        200,
+        "Multiline first_message should be accepted and compacted"
+    );
 
     let create_response: CreateSessionResponse = response.json().await.unwrap();
     assert_eq!(create_response.session_id, "multiline-message-session");
@@ -485,14 +559,14 @@ async fn test_multiline_first_message_compaction() {
     let ws_url = format!("{}{}", server.ws_url, create_response.websocket_url);
     let (mut ws, _) = connect_async(Url::parse(&ws_url).unwrap()).await.unwrap();
 
-
     // Give connections time to stabilize
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Try to receive any messages, but don't assert that we get the first_message response
     // (the message may have been discarded if client connected after Claude processed it)
     for _ in 0..3 {
-        if let Ok(Some(Ok(Message::Text(text)))) = timeout(Duration::from_secs(2), ws.next()).await {
+        if let Ok(Some(Ok(Message::Text(text)))) = timeout(Duration::from_secs(2), ws.next()).await
+        {
             if text.contains("multiline JSON message") || text.contains("Mock Claude received") {
                 // Found the response, but we don't fail if we don't get it
                 break;
@@ -532,7 +606,11 @@ async fn test_invalid_json_first_message_rejection() {
         .unwrap();
 
     // Should return 500 because the Claude process fails to start due to invalid JSON
-    assert_eq!(response.status(), 500, "Invalid JSON first_message should cause session creation to fail");
+    assert_eq!(
+        response.status(),
+        500,
+        "Invalid JSON first_message should cause session creation to fail"
+    );
 }
 
 #[tokio::test]
@@ -546,22 +624,31 @@ async fn test_message_queue_json_compaction() {
     fs::create_dir_all(&working_dir).unwrap();
 
     let session_id = "queue-compaction-session".to_string();
-    
+
     // First message needs to create the session file using the mock's write_file control command
-    let session_file_path = server.mock.projects_dir().join(format!("{}.jsonl", session_id));
-    let session_start_content = format!(r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#, 
-        session_id, working_dir.display());
-    
+    let session_file_path = server
+        .mock
+        .projects_dir()
+        .join(format!("{}.jsonl", session_id));
+    let session_start_content = format!(
+        r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#,
+        session_id,
+        working_dir.display()
+    );
+
     // Escape the content for embedding in JSON
     let escaped_content = session_start_content.replace('"', r#"\""#);
-    
+
     // Create the control command to write the session file, then add the user message
     let first_message = vec![
-        format!(r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
-            session_file_path.display(), escaped_content),
-        r#"{"role": "user", "content": "Initial message"}"#.to_string()
+        format!(
+            r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
+            session_file_path.display(),
+            escaped_content
+        ),
+        r#"{"role": "user", "content": "Initial message"}"#.to_string(),
     ];
-    
+
     let request = CreateSessionRequest {
         session_id,
         working_dir: working_dir.clone(),
@@ -585,7 +672,12 @@ async fn test_message_queue_json_compaction() {
     // Consume initial messages
     tokio::time::sleep(Duration::from_millis(200)).await;
     loop {
-        if timeout(Duration::from_millis(100), ws.next()).await.is_err() { break; }
+        if timeout(Duration::from_millis(100), ws.next())
+            .await
+            .is_err()
+        {
+            break;
+        }
     }
 
     // Send multiple multiline messages rapidly to test queue processing
@@ -617,25 +709,29 @@ async fn test_message_queue_json_compaction() {
 
     // Should receive Claude's responses to all compacted messages
     let mut responses = Vec::new();
-    for _ in 0..10 { // Try to collect responses
-        if let Ok(Some(Ok(Message::Text(text)))) = timeout(Duration::from_millis(500), ws.next()).await {
+    for _ in 0..10 {
+        // Try to collect responses
+        if let Ok(Some(Ok(Message::Text(text)))) =
+            timeout(Duration::from_millis(500), ws.next()).await
+        {
             responses.push(text);
         }
     }
 
     // Verify we got responses containing our queue messages
-    let queue_responses: Vec<&String> = responses.iter()
+    let queue_responses: Vec<&String> = responses
+        .iter()
         .filter(|r| r.contains("Queue message") || r.contains("Mock Claude received"))
         .collect();
 
     assert!(
         queue_responses.len() >= 2,
         "Should have received multiple Claude responses to queued messages. Got {} responses: {:?}",
-        queue_responses.len(), responses
+        queue_responses.len(),
+        responses
     );
 
     let _ = ws.close(None).await;
-
 }
 
 #[tokio::test]
@@ -649,27 +745,36 @@ async fn test_mixed_json_formats_consistency() {
     fs::create_dir_all(&working_dir).unwrap();
 
     let session_id = "mixed-formats-session".to_string();
-    
+
     // First message needs to create the session file using the mock's write_file control command
-    let session_file_path = server.mock.projects_dir().join(format!("{}.jsonl", session_id));
-    let session_start_content = format!(r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#, 
-        session_id, working_dir.display());
-    
+    let session_file_path = server
+        .mock
+        .projects_dir()
+        .join(format!("{}.jsonl", session_id));
+    let session_start_content = format!(
+        r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#,
+        session_id,
+        working_dir.display()
+    );
+
     // Escape the content for embedding in JSON
     let escaped_content = session_start_content.replace('"', r#"\""#);
-    
+
     // Use multiline first_message
     let multiline_first_message = r#"{
   "role": "user",
   "content": "Multiline first message",
   "type": "initial"
 }"#;
-    
+
     // Create the control command to write the session file, then add the multiline user message
     let first_message = vec![
-        format!(r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
-            session_file_path.display(), escaped_content),
-        multiline_first_message.to_string()
+        format!(
+            r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
+            session_file_path.display(),
+            escaped_content
+        ),
+        multiline_first_message.to_string(),
     ];
 
     let request = CreateSessionRequest {
@@ -695,7 +800,12 @@ async fn test_mixed_json_formats_consistency() {
     // Consume initial messages
     tokio::time::sleep(Duration::from_millis(200)).await;
     loop {
-        if timeout(Duration::from_millis(100), ws.next()).await.is_err() { break; }
+        if timeout(Duration::from_millis(100), ws.next())
+            .await
+            .is_err()
+        {
+            break;
+        }
     }
 
     // Send messages in different JSON formats
@@ -710,20 +820,32 @@ async fn test_mixed_json_formats_consistency() {
   "format": "mixed"}"#;
 
     // Send all different formats
-    ws.send(Message::Text(compact_message.to_string())).await.unwrap();
+    ws.send(Message::Text(compact_message.to_string()))
+        .await
+        .unwrap();
     tokio::time::sleep(Duration::from_millis(50)).await;
-    
-    ws.send(Message::Text(pretty_message.to_string())).await.unwrap();
+
+    ws.send(Message::Text(pretty_message.to_string()))
+        .await
+        .unwrap();
     tokio::time::sleep(Duration::from_millis(50)).await;
-    
-    ws.send(Message::Text(mixed_message.to_string())).await.unwrap();
+
+    ws.send(Message::Text(mixed_message.to_string()))
+        .await
+        .unwrap();
 
     // Should receive Claude's responses to all formats
     let mut format_responses = Vec::new();
-    for _ in 0..6 { // Expect multiple responses
-        if let Ok(Some(Ok(Message::Text(text)))) = timeout(Duration::from_millis(800), ws.next()).await {
-            if text.contains("Compact message") || text.contains("Pretty printed message") || 
-               text.contains("Mixed format message") || text.contains("Mock Claude received") {
+    for _ in 0..6 {
+        // Expect multiple responses
+        if let Ok(Some(Ok(Message::Text(text)))) =
+            timeout(Duration::from_millis(800), ws.next()).await
+        {
+            if text.contains("Compact message")
+                || text.contains("Pretty printed message")
+                || text.contains("Mixed format message")
+                || text.contains("Mock Claude received")
+            {
                 format_responses.push(text);
             }
         }

@@ -5,8 +5,8 @@ use crate::session_manager::SessionManager;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use tracing::{error, instrument, warn};
 use walkdir::WalkDir;
-use tracing::{warn, error, instrument};
 
 pub struct SessionDiscovery<'a> {
     config: &'a Config,
@@ -43,9 +43,7 @@ impl<'a> SessionDiscovery<'a> {
 
         // Scan disk for all sessions
         let disk_sessions = match self.scan_disk_for_sessions() {
-            Ok(sessions) => {
-                sessions
-            }
+            Ok(sessions) => sessions,
             Err(e) => {
                 error!(error = %e, "Failed to scan disk for sessions");
                 return Err(e);
@@ -94,16 +92,24 @@ impl<'a> SessionDiscovery<'a> {
         // First check if session is active
         if let Some(session) = self.session_manager.get_session(session_id) {
             // Try to get enhanced session info from disk parsing
-            let disk_session_info = self.find_session_on_disk(session_id).ok()
+            let disk_session_info = self
+                .find_session_on_disk(session_id)
+                .ok()
                 .map(|(info, _)| info);
-            
+
             let session_info = SessionInfo {
                 session_id: session.get_id().await,
                 working_directory: session.working_dir.clone(),
                 active: session.is_active().await,
-                summary: disk_session_info.as_ref().and_then(|info| info.summary.clone()),
-                earliest_message_date: disk_session_info.as_ref().and_then(|info| info.earliest_message_date.clone()),
-                latest_message_date: disk_session_info.as_ref().and_then(|info| info.latest_message_date.clone()),
+                summary: disk_session_info
+                    .as_ref()
+                    .and_then(|info| info.summary.clone()),
+                earliest_message_date: disk_session_info
+                    .as_ref()
+                    .and_then(|info| info.earliest_message_date.clone()),
+                latest_message_date: disk_session_info
+                    .as_ref()
+                    .and_then(|info| info.latest_message_date.clone()),
             };
 
             // Try to read content from disk
@@ -199,14 +205,16 @@ impl<'a> SessionDiscovery<'a> {
 
     #[instrument(skip_all, fields(file_path = %path.display()))]
     fn parse_session_file(path: &Path) -> OrchestratorResult<Option<SessionInfo>> {
-        
         let file = File::open(path).map_err(|e| {
             error!(
                 file_path = %path.display(),
                 error = %e,
                 "Failed to open session file"
             );
-            OrchestratorError::FileParseError(format!("Failed to open file {}: {e}", path.display()))
+            OrchestratorError::FileParseError(format!(
+                "Failed to open file {}: {e}",
+                path.display()
+            ))
         })?;
 
         let reader = BufReader::new(file);
@@ -236,7 +244,11 @@ impl<'a> SessionDiscovery<'a> {
                     error = %e,
                     "Failed to read line from session file"
                 );
-                OrchestratorError::FileParseError(format!("Failed to read line {} from {}: {e}", line_number + 1, path.display()))
+                OrchestratorError::FileParseError(format!(
+                    "Failed to read line {} from {}: {e}",
+                    line_number + 1,
+                    path.display()
+                ))
             })?;
 
             // Try to parse as a general JSON value for summary and timestamp extraction
@@ -245,7 +257,8 @@ impl<'a> SessionDiscovery<'a> {
                     // Check for summary entry
                     if let Some(entry_type) = json.get("type").and_then(|v| v.as_str()) {
                         if entry_type == "summary" {
-                            if let Some(summary_text) = json.get("summary").and_then(|v| v.as_str()) {
+                            if let Some(summary_text) = json.get("summary").and_then(|v| v.as_str())
+                            {
                                 summary = Some(summary_text.to_string());
                             }
                         }
@@ -254,12 +267,16 @@ impl<'a> SessionDiscovery<'a> {
                     // Check for timestamp
                     if let Some(timestamp) = json.get("timestamp").and_then(|v| v.as_str()) {
                         let timestamp_str = timestamp.to_string();
-                        
-                        if earliest_timestamp.is_none() || Some(&timestamp_str) < earliest_timestamp.as_ref() {
+
+                        if earliest_timestamp.is_none()
+                            || Some(&timestamp_str) < earliest_timestamp.as_ref()
+                        {
                             earliest_timestamp = Some(timestamp_str.clone());
                         }
-                        
-                        if latest_timestamp.is_none() || Some(&timestamp_str) > latest_timestamp.as_ref() {
+
+                        if latest_timestamp.is_none()
+                            || Some(&timestamp_str) > latest_timestamp.as_ref()
+                        {
                             latest_timestamp = Some(timestamp_str.clone());
                         }
                     }
@@ -297,9 +314,11 @@ impl<'a> SessionDiscovery<'a> {
                         "Session ID mismatch between filename and file content"
                     );
                     return Err(OrchestratorError::FileParseError(format!(
-                        "Session ID mismatch in {}: filename '{}' contains session ID '{}'", 
-                        path.display(), file_session_id, id
-                    ))); 
+                        "Session ID mismatch in {}: filename '{}' contains session ID '{}'",
+                        path.display(),
+                        file_session_id,
+                        id
+                    )));
                 }
                 Ok(Some(SessionInfo {
                     session_id: id,
@@ -310,29 +329,29 @@ impl<'a> SessionDiscovery<'a> {
                     latest_message_date: latest_timestamp,
                 }))
             }
-            (None, _) => {
-                Err(OrchestratorError::FileParseError(format!(
-                    "Missing sessionId in file {}", path.display()
-                )))
-            }
-            (_, None) => {
-                Err(OrchestratorError::FileParseError(format!(
-                    "Missing cwd in file {}", path.display()
-                )))
-            }
+            (None, _) => Err(OrchestratorError::FileParseError(format!(
+                "Missing sessionId in file {}",
+                path.display()
+            ))),
+            (_, None) => Err(OrchestratorError::FileParseError(format!(
+                "Missing cwd in file {}",
+                path.display()
+            ))),
         }
     }
 
     #[instrument(skip_all, fields(file_path = %path.display()))]
     fn read_session_content(path: &Path) -> OrchestratorResult<Vec<serde_json::Value>> {
-        
         let file = File::open(path).map_err(|e| {
             error!(
                 file_path = %path.display(),
                 error = %e,
                 "Failed to open session content file"
             );
-            OrchestratorError::FileParseError(format!("Failed to open file {}: {e}", path.display()))
+            OrchestratorError::FileParseError(format!(
+                "Failed to open file {}: {e}",
+                path.display()
+            ))
         })?;
 
         let reader = BufReader::new(file);
@@ -348,7 +367,11 @@ impl<'a> SessionDiscovery<'a> {
                     error = %e,
                     "Failed to read line from session content file"
                 );
-                OrchestratorError::FileParseError(format!("Failed to read line {} from {}: {e}", line_number + 1, path.display()))
+                OrchestratorError::FileParseError(format!(
+                    "Failed to read line {} from {}: {e}",
+                    line_number + 1,
+                    path.display()
+                ))
             })?;
 
             // Parse line as JSON
@@ -472,12 +495,27 @@ mod tests {
 
         // Verify the raw JSON content is preserved
         assert!(content[0].get("sessionId").is_some());
-        assert_eq!(content[0].get("sessionId").unwrap().as_str().unwrap(), "session-123");
-        
+        assert_eq!(
+            content[0].get("sessionId").unwrap().as_str().unwrap(),
+            "session-123"
+        );
+
         assert_eq!(content[1].get("type").unwrap().as_str().unwrap(), "user");
-        assert_eq!(content[1].get("message").unwrap().get("content").unwrap().as_str().unwrap(), "Hello");
-        
-        assert_eq!(content[2].get("type").unwrap().as_str().unwrap(), "assistant");
+        assert_eq!(
+            content[1]
+                .get("message")
+                .unwrap()
+                .get("content")
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "Hello"
+        );
+
+        assert_eq!(
+            content[2].get("type").unwrap().as_str().unwrap(),
+            "assistant"
+        );
     }
 
     #[tokio::test]

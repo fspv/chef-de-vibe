@@ -44,7 +44,10 @@ pub enum BroadcastMessage {
     /// Message from Claude to be sent to all clients
     ClaudeOutput(String),
     /// Message from a client to be sent to all other clients (excludes sender)
-    ClientInput { content: String, sender_client_id: String },
+    ClientInput {
+        content: String,
+        sender_client_id: String,
+    },
     /// Disconnect signal when Claude process dies
     Disconnect,
 }
@@ -52,10 +55,10 @@ pub enum BroadcastMessage {
 /// Approval-related data structures
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApprovalRequest {
-    pub id: String,  // Our wrapper ID for frontend/backend communication
+    pub id: String, // Our wrapper ID for frontend/backend communication
     pub session_id: String,
-    pub claude_request_id: String,  // Claude's original request_id for internal use
-    pub request: serde_json::Value,  // Raw Claude request - pass-through
+    pub claude_request_id: String, // Claude's original request_id for internal use
+    pub request: serde_json::Value, // Raw Claude request - pass-through
     pub created_at: std::time::SystemTime,
 }
 
@@ -248,7 +251,10 @@ impl Session {
     }
 
     /// Broadcasts a message to all or filtered clients
-    pub fn broadcast_message(&self, message: BroadcastMessage) -> Result<usize, broadcast::error::SendError<BroadcastMessage>> {
+    pub fn broadcast_message(
+        &self,
+        message: BroadcastMessage,
+    ) -> Result<usize, broadcast::error::SendError<BroadcastMessage>> {
         self.broadcast_tx.send(message)
     }
 
@@ -277,7 +283,7 @@ impl Session {
 
     pub async fn add_pending_approval(&self, request: ApprovalRequest) {
         let mut pending = self.pending_approvals.lock().await;
-        pending.insert(request.id.clone(), request);  // Updated to use id instead of request_id
+        pending.insert(request.id.clone(), request); // Updated to use id instead of request_id
     }
 
     pub async fn remove_pending_approval(&self, request_id: &str) -> Option<ApprovalRequest> {
@@ -292,7 +298,10 @@ impl Session {
     }
 
     /// Broadcasts an approval message to all approval clients
-    pub fn broadcast_approval_message(&self, message: ApprovalMessage) -> Result<usize, broadcast::error::SendError<ApprovalMessage>> {
+    pub fn broadcast_approval_message(
+        &self,
+        message: ApprovalMessage,
+    ) -> Result<usize, broadcast::error::SendError<ApprovalMessage>> {
         self.approval_broadcast_tx.send(message)
     }
 

@@ -28,31 +28,29 @@ impl Config {
             Ok(path) => {
                 let path = PathBuf::from(path);
                 if path.is_relative() {
-                    std::fs::canonicalize(&path)
-                        .with_context(|| format!("Failed to resolve relative path: {}", path.display()))?
+                    std::fs::canonicalize(&path).with_context(|| {
+                        format!("Failed to resolve relative path: {}", path.display())
+                    })?
                 } else {
                     path
                 }
             }
-            Err(_) => {
-                Self::find_claude_in_path()
-                    .context("CLAUDE_BINARY_PATH not set and 'claude' not found in PATH")?
-            }
+            Err(_) => Self::find_claude_in_path()
+                .context("CLAUDE_BINARY_PATH not set and 'claude' not found in PATH")?,
         };
 
-        let http_listen_address = env::var("HTTP_LISTEN_ADDRESS")
-            .unwrap_or_else(|_| "127.0.0.1:3000".to_string());
+        let http_listen_address =
+            env::var("HTTP_LISTEN_ADDRESS").unwrap_or_else(|_| "127.0.0.1:3000".to_string());
 
-        let claude_projects_dir = env::var("CLAUDE_PROJECTS_DIR")
-            .map_or_else(
-                |_| {
-                    dirs::home_dir()
-                        .expect("Could not determine home directory")
-                        .join(".claude")
-                        .join("projects")
-                },
-                PathBuf::from,
-            );
+        let claude_projects_dir = env::var("CLAUDE_PROJECTS_DIR").map_or_else(
+            |_| {
+                dirs::home_dir()
+                    .expect("Could not determine home directory")
+                    .join(".claude")
+                    .join("projects")
+            },
+            PathBuf::from,
+        );
 
         let shutdown_timeout = env::var("SHUTDOWN_TIMEOUT")
             .unwrap_or_else(|_| "30".to_string())
@@ -130,7 +128,7 @@ impl Config {
     fn find_claude_in_path() -> Result<PathBuf> {
         let path_var = env::var("PATH").unwrap_or_default();
         let paths = env::split_paths(&path_var);
-        
+
         for dir in paths {
             let candidate = dir.join("claude");
             if candidate.exists() {
@@ -149,7 +147,7 @@ impl Config {
                 }
             }
         }
-        
+
         anyhow::bail!("'claude' binary not found in PATH")
     }
 }
@@ -157,9 +155,9 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::fs;
     use tempfile::TempDir;
-    use serial_test::serial;
 
     #[test]
     #[serial]
@@ -173,7 +171,8 @@ mod tests {
         let err_str = result.unwrap_err().to_string();
         assert!(
             err_str.contains("CLAUDE_BINARY_PATH not set and 'claude' not found in PATH"),
-            "Error was: {}", err_str
+            "Error was: {}",
+            err_str
         );
     }
 
@@ -268,7 +267,10 @@ mod tests {
         // Test that claude is not found
         let result = Config::find_claude_in_path();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("not found in PATH"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("not found in PATH"));
 
         // Restore original PATH
         if let Some(path) = original_path {
@@ -285,7 +287,7 @@ mod tests {
         env::remove_var("CLAUDE_BINARY_PATH");
         env::remove_var("HTTP_LISTEN_ADDRESS");
         env::remove_var("CLAUDE_PROJECTS_DIR");
-        
+
         let temp_dir = TempDir::new().unwrap();
         let binary_path = temp_dir.path().join("claude");
         fs::write(&binary_path, "").unwrap();
@@ -312,7 +314,10 @@ mod tests {
 
         let config = Config::from_env().unwrap();
         // The config should have canonicalized the relative path
-        assert_eq!(config.claude_binary_path, binary_path.canonicalize().unwrap());
+        assert_eq!(
+            config.claude_binary_path,
+            binary_path.canonicalize().unwrap()
+        );
 
         // Clean up env vars
         env::remove_var("CLAUDE_BINARY_PATH");
@@ -330,7 +335,7 @@ mod tests {
         env::remove_var("CLAUDE_BINARY_PATH");
         env::remove_var("HTTP_LISTEN_ADDRESS");
         env::remove_var("CLAUDE_PROJECTS_DIR");
-        
+
         // Create a temporary directory to act as a PATH location
         let temp_dir = TempDir::new().unwrap();
         let binary_path = temp_dir.path().join("claude");
@@ -357,7 +362,10 @@ mod tests {
 
         let config = Config::from_env().unwrap();
         // The path from find_claude_in_path should match our test binary
-        assert_eq!(config.claude_binary_path.canonicalize().unwrap(), binary_path.canonicalize().unwrap());
+        assert_eq!(
+            config.claude_binary_path.canonicalize().unwrap(),
+            binary_path.canonicalize().unwrap()
+        );
 
         // Clean up env vars
         env::remove_var("HTTP_LISTEN_ADDRESS");

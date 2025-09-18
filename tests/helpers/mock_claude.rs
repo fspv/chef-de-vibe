@@ -62,8 +62,8 @@ impl MockClaude {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::process::{Command, Stdio};
     use std::io::Write;
+    use std::process::{Command, Stdio};
 
     #[test]
     fn test_mock_claude_creation() {
@@ -75,7 +75,7 @@ mod tests {
     #[test]
     fn test_mock_claude_echo() {
         let mock = MockClaude::new();
-        
+
         // Test that the Python script echoes JSON
         let mut child = Command::new("python3")
             .arg(&mock.binary_path)
@@ -86,17 +86,21 @@ mod tests {
 
         let stdin = child.stdin.as_mut().expect("Failed to open stdin");
         let test_json = r#"{"type": "test", "message": "hello"}"#;
-        stdin.write_all(test_json.as_bytes()).expect("Failed to write to stdin");
+        stdin
+            .write_all(test_json.as_bytes())
+            .expect("Failed to write to stdin");
         stdin.write_all(b"\n").expect("Failed to write newline");
-        
+
         // Send exit command
         let exit_json = r#"{"control": "exit", "code": 0}"#;
-        stdin.write_all(exit_json.as_bytes()).expect("Failed to write exit command");
+        stdin
+            .write_all(exit_json.as_bytes())
+            .expect("Failed to write exit command");
         stdin.write_all(b"\n").expect("Failed to write newline");
 
         let output = child.wait_with_output().expect("Failed to read output");
         assert_eq!(output.status.code(), Some(0));
-        
+
         let stdout = String::from_utf8(output.stdout).unwrap();
         assert!(stdout.contains(test_json));
     }
@@ -104,7 +108,7 @@ mod tests {
     #[test]
     fn test_mock_claude_exit_control() {
         let mock = MockClaude::new();
-        
+
         // Test exit with code 1
         let mut child = Command::new("python3")
             .arg(&mock.binary_path)
@@ -115,7 +119,9 @@ mod tests {
 
         let stdin = child.stdin.as_mut().expect("Failed to open stdin");
         let exit_json = r#"{"control": "exit", "code": 42}"#;
-        stdin.write_all(exit_json.as_bytes()).expect("Failed to write exit command");
+        stdin
+            .write_all(exit_json.as_bytes())
+            .expect("Failed to write exit command");
         stdin.write_all(b"\n").expect("Failed to write newline");
 
         let output = child.wait_with_output().expect("Failed to read output");
@@ -126,7 +132,7 @@ mod tests {
     fn test_mock_claude_write_file_control() {
         let mock = MockClaude::new();
         let test_file = mock.temp_dir.path().join("test_output.txt");
-        
+
         // Test write_file control command
         let mut child = Command::new("python3")
             .arg(&mock.binary_path)
@@ -136,22 +142,26 @@ mod tests {
             .expect("Failed to start mock Claude");
 
         let stdin = child.stdin.as_mut().expect("Failed to open stdin");
-        
+
         // Send write_file command
         let write_json = format!(
             r#"{{"control": "write_file", "path": "{}", "content": "test content"}}"#,
             test_file.display()
         );
-        stdin.write_all(write_json.as_bytes()).expect("Failed to write command");
+        stdin
+            .write_all(write_json.as_bytes())
+            .expect("Failed to write command");
         stdin.write_all(b"\n").expect("Failed to write newline");
-        
+
         // Send exit command
         let exit_json = r#"{"control": "exit", "code": 0}"#;
-        stdin.write_all(exit_json.as_bytes()).expect("Failed to write exit command");
+        stdin
+            .write_all(exit_json.as_bytes())
+            .expect("Failed to write exit command");
         stdin.write_all(b"\n").expect("Failed to write newline");
 
         let _output = child.wait_with_output().expect("Failed to read output");
-        
+
         // Check that file was created
         assert!(test_file.exists());
         let content = fs::read_to_string(test_file).unwrap();

@@ -3,13 +3,12 @@ mod helpers;
 use chef_de_vibe::{
     api::handlers::AppState,
     config::Config,
-    models::{
-        CreateSessionRequest, GetSessionResponse, ListSessionsResponse,
-    },
+    models::{CreateSessionRequest, GetSessionResponse, ListSessionsResponse},
     session_manager::SessionManager,
 };
-use helpers::mock_claude::MockClaude;
+use futures_util::SinkExt;
 use helpers::logging::init_logging;
+use helpers::mock_claude::MockClaude;
 use reqwest::Client;
 use serial_test::serial;
 use std::fs;
@@ -18,10 +17,14 @@ use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use url::Url;
-use futures_util::SinkExt;
 
 // Helper function to create a session file with complete structure for testing
-fn create_complete_session_file(projects_dir: &std::path::Path, project_name: &str, session_id: &str, cwd: &str) {
+fn create_complete_session_file(
+    projects_dir: &std::path::Path,
+    project_name: &str,
+    session_id: &str,
+    cwd: &str,
+) {
     let project_dir = projects_dir.join(project_name);
     fs::create_dir_all(&project_dir).unwrap();
 
@@ -53,9 +56,7 @@ impl TestServer {
         Self::new_internal(mock).await
     }
 
-
     async fn new_internal(mock: MockClaude) -> Self {
-
         let config = Config::from_env().expect("Failed to load config");
         let session_manager = Arc::new(SessionManager::new(config.clone()));
 
@@ -114,12 +115,11 @@ impl TestServer {
     }
 }
 
-
 impl Drop for TestServer {
     fn drop(&mut self) {
         // First abort the server to stop accepting new connections
         self.server_handle.abort();
-        
+
         // Use thread-based cleanup to avoid runtime nesting issues
         let session_manager = self.session_manager.clone();
         std::thread::spawn(move || {
@@ -130,14 +130,16 @@ impl Drop for TestServer {
             rt.block_on(async {
                 // Give more time for ongoing operations to complete
                 tokio::time::sleep(Duration::from_millis(200)).await;
-                
+
                 // Shutdown all sessions
                 session_manager.shutdown().await;
-                
+
                 // Additional time for WebSocket connections and processes to clean up
                 tokio::time::sleep(Duration::from_millis(300)).await;
             });
-        }).join().ok();
+        })
+        .join()
+        .ok();
     }
 }
 
@@ -170,13 +172,17 @@ async fn test_session_lifecycle() {
         "control": "write_file",
         "path": session_file_path.to_string_lossy(),
         "content": session_content
-    }).to_string();
-    
+    })
+    .to_string();
+
     let request = CreateSessionRequest {
         session_id: "lifecycle-session".to_string(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: vec![create_file_command, r#"{"role": "user", "content": "Hello"}"#.to_string()],
+        first_message: vec![
+            create_file_command,
+            r#"{"role": "user", "content": "Hello"}"#.to_string(),
+        ],
     };
 
     let response = client
@@ -200,7 +206,10 @@ async fn test_session_lifecycle() {
 
     // 5. Get session details
     let response = client
-        .get(format!("{}/api/v1/sessions/lifecycle-session", server.base_url))
+        .get(format!(
+            "{}/api/v1/sessions/lifecycle-session",
+            server.base_url
+        ))
         .send()
         .await
         .unwrap();
@@ -234,12 +243,12 @@ async fn test_corrupted_session_file() {
     // Create a corrupted session file
     let project_dir = server.mock.projects_dir.join("corrupted");
     fs::create_dir_all(&project_dir).unwrap();
-    
+
     let session_file = project_dir.join("corrupted-session.jsonl");
     let invalid_content = r#"{"sessionId": "corrupted-session", "cwd": "/invalid/path"
 {invalid json line without closing brace
 {"type": "user", "message": malformed content}"#;
-    
+
     fs::write(session_file, invalid_content).unwrap();
 
     // List sessions should handle the corrupted file gracefully by ignoring it
@@ -251,7 +260,7 @@ async fn test_corrupted_session_file() {
 
     // Should return 200 and succeed, ignoring the corrupted file
     assert_eq!(response.status(), 200);
-    
+
     let body: ListSessionsResponse = response.json().await.unwrap();
     // The corrupted file should be ignored, so no sessions should be returned
     assert!(body.sessions.is_empty());
@@ -266,11 +275,11 @@ async fn test_session_id_mismatch_in_file() {
     // Create a session file where the filename doesn't match the sessionId in content
     let project_dir = server.mock.projects_dir.join("mismatch");
     fs::create_dir_all(&project_dir).unwrap();
-    
+
     let session_file = project_dir.join("file-session-id.jsonl");
     let content_with_different_id = r#"{"sessionId": "different-session-id", "cwd": "/home/user/project", "type": "start"}
 {"type": "user", "message": {"role": "user", "content": "Hello"}}"#;
-    
+
     fs::write(session_file, content_with_different_id).unwrap();
 
     // List sessions should handle the mismatch gracefully by ignoring the file
@@ -282,7 +291,7 @@ async fn test_session_id_mismatch_in_file() {
 
     // Should return 200 and succeed, ignoring the mismatched file
     assert_eq!(response.status(), 200);
-    
+
     let body: ListSessionsResponse = response.json().await.unwrap();
     // The mismatched file should be ignored, so no sessions should be returned
     assert!(body.sessions.is_empty());
@@ -295,10 +304,18 @@ async fn test_complete_session_content_preservation() {
     let client = Client::new();
 
     // Create session file with complete JSON structure
-    create_complete_session_file(&server.mock.projects_dir, "project1", "complete-session", "/home/user/project1");
+    create_complete_session_file(
+        &server.mock.projects_dir,
+        "project1",
+        "complete-session",
+        "/home/user/project1",
+    );
 
     let response = client
-        .get(format!("{}/api/v1/sessions/complete-session", server.base_url))
+        .get(format!(
+            "{}/api/v1/sessions/complete-session",
+            server.base_url
+        ))
         .send()
         .await
         .unwrap();
@@ -316,22 +333,55 @@ async fn test_complete_session_content_preservation() {
     // Verify first entry preserves all fields
     let first_entry = &body.content[0];
     assert!(first_entry.get("parentUuid").is_some());
-    assert_eq!(first_entry.get("parentUuid"), Some(&serde_json::Value::Null));
-    assert_eq!(first_entry.get("isSidechain"), Some(&serde_json::Value::Bool(false)));
-    assert_eq!(first_entry.get("userType"), Some(&serde_json::Value::String("external".to_string())));
-    assert_eq!(first_entry.get("sessionId"), Some(&serde_json::Value::String("complete-session".to_string())));
-    assert_eq!(first_entry.get("version"), Some(&serde_json::Value::String("1.0.65".to_string())));
-    assert_eq!(first_entry.get("gitBranch"), Some(&serde_json::Value::String("master".to_string())));
-    assert_eq!(first_entry.get("uuid"), Some(&serde_json::Value::String("30644cc3-c5cd-4e9e-953a-bbe299394703".to_string())));
+    assert_eq!(
+        first_entry.get("parentUuid"),
+        Some(&serde_json::Value::Null)
+    );
+    assert_eq!(
+        first_entry.get("isSidechain"),
+        Some(&serde_json::Value::Bool(false))
+    );
+    assert_eq!(
+        first_entry.get("userType"),
+        Some(&serde_json::Value::String("external".to_string()))
+    );
+    assert_eq!(
+        first_entry.get("sessionId"),
+        Some(&serde_json::Value::String("complete-session".to_string()))
+    );
+    assert_eq!(
+        first_entry.get("version"),
+        Some(&serde_json::Value::String("1.0.65".to_string()))
+    );
+    assert_eq!(
+        first_entry.get("gitBranch"),
+        Some(&serde_json::Value::String("master".to_string()))
+    );
+    assert_eq!(
+        first_entry.get("uuid"),
+        Some(&serde_json::Value::String(
+            "30644cc3-c5cd-4e9e-953a-bbe299394703".to_string()
+        ))
+    );
     assert!(first_entry.get("timestamp").is_some());
     assert!(first_entry.get("message").is_some());
 
     // Verify second entry preserves complex fields
     let second_entry = &body.content[1];
-    assert_eq!(second_entry.get("parentUuid"), Some(&serde_json::Value::String("30644cc3-c5cd-4e9e-953a-bbe299394703".to_string())));
-    assert_eq!(second_entry.get("requestId"), Some(&serde_json::Value::String("req_011CSyZqUfBhmGuMy8ymqeNp".to_string())));
+    assert_eq!(
+        second_entry.get("parentUuid"),
+        Some(&serde_json::Value::String(
+            "30644cc3-c5cd-4e9e-953a-bbe299394703".to_string()
+        ))
+    );
+    assert_eq!(
+        second_entry.get("requestId"),
+        Some(&serde_json::Value::String(
+            "req_011CSyZqUfBhmGuMy8ymqeNp".to_string()
+        ))
+    );
     assert!(second_entry.get("message").is_some());
-    
+
     // Verify message contains usage info
     let message = second_entry.get("message").unwrap();
     assert!(message.get("usage").is_some());
@@ -341,6 +391,12 @@ async fn test_complete_session_content_preservation() {
 
     // Verify third entry (system message)
     let third_entry = &body.content[2];
-    assert_eq!(third_entry.get("type"), Some(&serde_json::Value::String("system".to_string())));
-    assert_eq!(third_entry.get("message"), Some(&serde_json::Value::String("Session started".to_string())));
+    assert_eq!(
+        third_entry.get("type"),
+        Some(&serde_json::Value::String("system".to_string()))
+    );
+    assert_eq!(
+        third_entry.get("message"),
+        Some(&serde_json::Value::String("Session started".to_string()))
+    );
 }

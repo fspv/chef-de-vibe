@@ -3,13 +3,12 @@ mod helpers;
 use chef_de_vibe::{
     api::handlers::AppState,
     config::Config,
-    models::{
-        CreateSessionRequest, CreateSessionResponse,
-    },
+    models::{CreateSessionRequest, CreateSessionResponse},
     session_manager::SessionManager,
 };
-use helpers::mock_claude::MockClaude;
+use futures_util::{SinkExt, StreamExt};
 use helpers::logging::init_logging;
+use helpers::mock_claude::MockClaude;
 use reqwest::Client;
 use serial_test::serial;
 use std::fs;
@@ -19,11 +18,11 @@ use tokio::net::TcpListener;
 use tokio::time::timeout;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use url::Url;
-use futures_util::{SinkExt, StreamExt};
 
 fn generate_unique_session_id(test_name: &str) -> String {
-    format!("{}-{}-{}", 
-        test_name, 
+    format!(
+        "{}-{}-{}",
+        test_name,
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -65,7 +64,6 @@ impl TestServer {
     }
 
     async fn new_internal(mock: MockClaude) -> Self {
-
         let config = Config::from_env().expect("Failed to load config");
         let session_manager = Arc::new(SessionManager::new(config.clone()));
 
@@ -128,7 +126,7 @@ impl Drop for TestServer {
     fn drop(&mut self) {
         // First abort the server to stop accepting new connections
         self.server_handle.abort();
-        
+
         // Use thread-based cleanup to avoid runtime nesting issues
         let session_manager = self.session_manager.clone();
         std::thread::spawn(move || {
@@ -139,14 +137,16 @@ impl Drop for TestServer {
             rt.block_on(async {
                 // Give more time for ongoing operations to complete
                 tokio::time::sleep(Duration::from_millis(200)).await;
-                
+
                 // Shutdown all sessions
                 session_manager.shutdown().await;
-                
+
                 // Additional time for WebSocket connections and processes to clean up
                 tokio::time::sleep(Duration::from_millis(300)).await;
             });
-        }).join().ok();
+        })
+        .join()
+        .ok();
     }
 }
 
@@ -170,8 +170,9 @@ async fn test_write_queue_fifo_ordering() {
         "control": "write_file",
         "path": session_file_path.to_string_lossy(),
         "content": session_content
-    }).to_string();
-    
+    })
+    .to_string();
+
     let request = CreateSessionRequest {
         session_id: "queue-session".to_string(),
         working_dir: working_dir.clone(),
@@ -212,7 +213,8 @@ async fn test_write_queue_fifo_ordering() {
 
     // Try to receive responses (may or may not get them depending on mock behavior)
     for _ in 0..6 {
-        if let Ok(Some(Ok(Message::Text(_)))) = timeout(Duration::from_millis(100), ws.next()).await {
+        if let Ok(Some(Ok(Message::Text(_)))) = timeout(Duration::from_millis(100), ws.next()).await
+        {
             // Received a response - this is good, shows the queue is working
         } else {
             break;
@@ -242,8 +244,9 @@ async fn test_claude_process_death_simulation() {
         "control": "write_file",
         "path": session_file_path.to_string_lossy(),
         "content": session_content
-    }).to_string();
-    
+    })
+    .to_string();
+
     let request = CreateSessionRequest {
         session_id: "death-session".to_string(),
         working_dir: working_dir.clone(),
@@ -279,7 +282,7 @@ async fn test_claude_process_death_simulation() {
     // This test primarily verifies that the WebSocket infrastructure works
     // Actual process death detection would require more sophisticated mocking
     // but this test ensures the WebSocket handles multiple messages correctly
-    
+
     // Send another message to test queue processing
     let second_message = r#"{"role": "user", "content": "Another message"}"#;
     let send_result = ws.send(Message::Text(second_message.to_string())).await;
