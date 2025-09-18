@@ -413,8 +413,8 @@ html, body {
   border-right: 1px solid #34495e;
   display: flex;
   flex-direction: column;
-  transform: translateX(0);
-  transition: transform 0.3s ease;
+  transform: translate3d(0, 0, 0);
+  transition: transform 60ms linear;
   position: fixed;
   top: 0;
   left: 0;
@@ -422,14 +422,38 @@ html, body {
   z-index: 100;
   box-shadow: 2px 0 20px rgba(0, 0, 0, 0.3);
   padding-right: 30px; /* Add space for wider toggle button when open */
+  /* Enable hardware acceleration */
+  will-change: auto;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
 
 .app-sidebar.collapsed {
-  transform: translateX(-100%);
+  transform: translate3d(-100%, 0, 0);
 }
 
 .app.sidebar-collapsed .app-sidebar {
-  transform: translateX(-100%);
+  transform: translate3d(-100%, 0, 0);
+}
+
+/* Sidebar overlay for mobile */
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 99; /* Below sidebar but above content */
+  transition: opacity 60ms linear;
+  will-change: opacity;
+}
+
+/* Hide overlay on desktop */
+@media (min-width: 769px) {
+  .sidebar-overlay {
+    display: none !important;
+  }
 }
 
 .sidebar-toggle {
@@ -494,11 +518,11 @@ html, body {
   transition: margin-left 0.3s ease, margin-right 0.3s ease;
   min-width: 0;
   overflow-x: hidden;
-  margin-left: 30px; /* Account for collapsed sidebar toggle button */
+  margin-left: 0; /* Default: no margin */
 }
 
 .app.sidebar-collapsed .app-main {
-  margin-left: 30px;
+  margin-left: 30px; /* Account for collapsed sidebar toggle button */
   margin-right: 0;
 }
 
@@ -865,6 +889,18 @@ html, body {
   align-items: center;
   gap: 12px;
   z-index: 100;
+  animation: fadeIn 0.2s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* Floating Session Status Indicator */
@@ -2222,7 +2258,7 @@ html, body {
     min-width: 100vw;
     z-index: 150;
     box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
-    padding-right: 9px; /* Add space for thinner mobile button */
+    padding-right: 0; /* No toggle button on mobile */
   }
   
   .app-sidebar.collapsed {
@@ -2230,32 +2266,25 @@ html, body {
   }
   
   .sidebar-toggle {
-    width: 9px; /* Made 2x thinner */
-    height: 100vh;
-  }
-  
-  .sidebar-toggle:hover {
-    width: 11px; /* Made 2x thinner */
-  }
-  
-  .sidebar-toggle.collapsed::before {
-    font-size: 10px;
-  }
-  
-  .sidebar-toggle:not(.collapsed)::before {
-    font-size: 10px;
+    display: none !important; /* Hide toggle button on mobile - use swipe gestures instead */
   }
   
   .app-main {
-    width: calc(100% - 9px);
-    margin-left: 9px;
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+  }
+  
+  .app.sidebar-collapsed .app-main {
+    width: 100%;
+    margin-left: 0;
     margin-right: 0;
   }
   
   .app:not(.sidebar-collapsed) .app-main {
     width: 100%;
     margin-left: 0;
-    margin-right: 0; /* No margin needed - sidebar padding handles toggle button space */
+    margin-right: 0;
   }
   
   .group-header {

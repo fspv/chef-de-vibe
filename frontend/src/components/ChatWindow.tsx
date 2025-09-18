@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useLocation } from 'react-router-dom';
 import { useSessionDetails } from '../hooks/useApi';
@@ -6,7 +6,12 @@ import { useWebSocket } from '../hooks/useWebSocket';
 import { useApprovalWebSocket } from '../hooks/useApprovalWebSocket';
 import { MessageList, type MessageListRef } from './MessageList';
 import { MessageInput } from './MessageInput';
-import { SessionStatusIndicator } from './SessionStatusIndicator';
+// Lazy load the SessionStatusIndicator to prevent blocking
+const SessionStatusIndicator = lazy(() => 
+  import('./SessionStatusIndicator').then(module => ({
+    default: module.SessionStatusIndicator
+  }))
+);
 import { api } from '../services/api';
 import type { CreateSessionRequest, CreateSessionResponse } from '../types/api';
 import type { PermissionUpdate, PermissionMode } from '@anthropic-ai/claude-code/sdk';
@@ -28,6 +33,7 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
   const [debugMode, setDebugMode] = useState(false);
   const [autoScrollPaused, setAutoScrollPaused] = useState(false);
   const [currentMode, setCurrentMode] = useState<PermissionMode>('default');
+  const [showStatusIndicator, setShowStatusIndicator] = useState(false);
   const messageListRef = useRef<MessageListRef>(null);
   
   // Helper function to ensure directory path starts with /
@@ -164,6 +170,20 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
     };
   }, [pendingWebSocket, pendingApprovalWebSocket]);
 
+  // Delay showing status indicator to prevent blocking animations
+  useEffect(() => {
+    if (sidebarCollapsed) {
+      // Show indicator after a short delay to allow animations to complete
+      const timer = setTimeout(() => {
+        setShowStatusIndicator(true);
+      }, 100);
+      return () => clearTimeout(timer);
+    } else {
+      // Hide immediately when sidebar opens
+      setShowStatusIndicator(false);
+    }
+  }, [sidebarCollapsed]);
+
 
 
   const handleAutoScrollStateChange = useCallback((_isAtBottom: boolean, autoScrollPaused: boolean) => {
@@ -208,22 +228,24 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
   if (!sessionId) {
     return (
       <div className="chat-window">
-        {sidebarCollapsed && (
-          <SessionStatusIndicator
-            isActive={false}
-            isMainConnected={false}
-            isApprovalConnected={false}
-            hasApprovalRequests={false}
-            approvalRequestCount={0}
-            sessionId="New Chat"
-            workingDirectory={ensureAbsolutePath(selectedDirectory)}
-            debugMode={debugMode}
-            onDebugModeChange={setDebugMode}
-            autoScrollPaused={autoScrollPaused}
-            onToggleAutoScroll={handleToggleAutoScroll}
-            currentMode={currentMode}
-            onModeChange={handleModeChange}
-          />
+        {showStatusIndicator && sidebarCollapsed && (
+          <Suspense fallback={null}>
+            <SessionStatusIndicator
+              isActive={false}
+              isMainConnected={false}
+              isApprovalConnected={false}
+              hasApprovalRequests={false}
+              approvalRequestCount={0}
+              sessionId="New Chat"
+              workingDirectory={ensureAbsolutePath(selectedDirectory)}
+              debugMode={debugMode}
+              onDebugModeChange={setDebugMode}
+              autoScrollPaused={autoScrollPaused}
+              onToggleAutoScroll={handleToggleAutoScroll}
+              currentMode={currentMode}
+              onModeChange={handleModeChange}
+            />
+          </Suspense>
         )}
         
         <div className="chat-content centered">
@@ -283,22 +305,24 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
 
   return (
     <div className="chat-window">
-      {sidebarCollapsed && (
-        <SessionStatusIndicator
-          isActive={isActive}
-          isMainConnected={isConnected}
-          isApprovalConnected={approvalWs.isConnected}
-          hasApprovalRequests={approvalWs.pendingRequests.length > 0}
-          approvalRequestCount={approvalWs.pendingRequests.length}
-          sessionId={sessionDetails.session_id}
-          workingDirectory={ensureAbsolutePath(sessionDetails.working_directory)}
-          debugMode={debugMode}
-          onDebugModeChange={setDebugMode}
-          autoScrollPaused={autoScrollPaused}
-          onToggleAutoScroll={handleToggleAutoScroll}
-          currentMode={currentMode}
-          onModeChange={handleModeChange}
-        />
+      {showStatusIndicator && sidebarCollapsed && (
+        <Suspense fallback={null}>
+          <SessionStatusIndicator
+            isActive={isActive}
+            isMainConnected={isConnected}
+            isApprovalConnected={approvalWs.isConnected}
+            hasApprovalRequests={approvalWs.pendingRequests.length > 0}
+            approvalRequestCount={approvalWs.pendingRequests.length}
+            sessionId={sessionDetails.session_id}
+            workingDirectory={ensureAbsolutePath(sessionDetails.working_directory)}
+            debugMode={debugMode}
+            onDebugModeChange={setDebugMode}
+            autoScrollPaused={autoScrollPaused}
+            onToggleAutoScroll={handleToggleAutoScroll}
+            currentMode={currentMode}
+            onModeChange={handleModeChange}
+          />
+        </Suspense>
       )}
 
       <div className="chat-content">

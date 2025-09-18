@@ -66,57 +66,221 @@ function SessionView() {
     let touchEndX = 0;
     let touchEndY = 0;
     let isSwiping = false;
+    let isSwipingFromEdge = false;
+    let isSwipingOnSidebar = false;
+    let sidebarElement: HTMLElement | null = null;
+    let animationFrameId: number | null = null;
+    
+    // Cache DOM elements on mount
+    setTimeout(() => {
+      sidebarElement = document.querySelector('.app-sidebar');
+    }, 0);
 
     const handleTouchStart = (e: TouchEvent) => {
       if (!e.touches || e.touches.length === 0) return;
       touchStartX = e.touches[0].clientX;
       touchStartY = e.touches[0].clientY;
-      isSwiping = true;
+      touchEndX = touchStartX;
+      touchEndY = touchStartY;
+      
+      // Quick edge check before setting up swipe
+      if (touchStartX < 20 && sidebarCollapsed) {
+        isSwipingFromEdge = true;
+        isSwiping = true;
+        // Get sidebar if not cached
+        if (!sidebarElement) {
+          sidebarElement = document.querySelector('.app-sidebar');
+        }
+        if (sidebarElement) {
+          // Pre-warm the sidebar by removing collapsed class but keeping it off-screen
+          sidebarElement.classList.remove('collapsed');
+          sidebarElement.style.transform = 'translate3d(-100%, 0, 0)';
+          sidebarElement.style.transition = 'none';
+          sidebarElement.style.willChange = 'transform';
+        }
+      } else if (!sidebarCollapsed) {
+        // Check if swipe started on sidebar
+        const target = e.target as HTMLElement;
+        if (!sidebarElement) {
+          sidebarElement = document.querySelector('.app-sidebar');
+        }
+        if (sidebarElement?.contains(target)) {
+          isSwipingOnSidebar = true;
+          isSwiping = true;
+          sidebarElement.style.willChange = 'transform';
+          sidebarElement.style.transition = 'none';
+        }
+      }
+    };
+
+    const updateSwipePosition = (deltaX: number) => {
+      if (!sidebarElement) return;
+      
+      // Handle edge swipe to open
+      if (isSwipingFromEdge) {
+        // Direct calculation without intermediate variables
+        const translateX = Math.min(deltaX - window.innerWidth, 0);
+        
+        // Single transform update
+        sidebarElement.style.transform = `translateX(${translateX}px)`;
+      }
+      
+      // Handle swipe on sidebar to close
+      if (isSwipingOnSidebar && deltaX < 0) {
+        // Direct pixel-based transform
+        sidebarElement.style.transform = `translateX(${deltaX}px)`;
+      }
     };
 
     const handleTouchMove = (e: TouchEvent) => {
       if (!isSwiping || !e.touches || e.touches.length === 0) return;
+      if (!sidebarElement) return;
       
       touchEndX = e.touches[0].clientX;
       touchEndY = e.touches[0].clientY;
+      
+      const deltaX = touchEndX - touchStartX;
+      const deltaY = touchEndY - touchStartY;
+      
+      // If vertical movement is significant, it's likely scrolling, not swiping
+      if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 20) {
+        return;
+      }
+      
+      // Prevent page scrolling while swiping
+      if ((isSwipingFromEdge || isSwipingOnSidebar) && Math.abs(deltaX) > 10) {
+        e.preventDefault();
+        
+        // Skip if we already have a pending update
+        if (animationFrameId !== null) {
+          return;
+        }
+        
+        // Use requestAnimationFrame for smooth updates
+        animationFrameId = requestAnimationFrame(() => {
+          updateSwipePosition(deltaX);
+          animationFrameId = null;
+        });
+      }
     };
 
     const handleTouchEnd = () => {
       if (!isSwiping) return;
-      isSwiping = false;
-
+      
       const deltaX = touchEndX - touchStartX;
-      const deltaY = touchEndY - touchStartY;
-      const minSwipeDistance = 100;
-      const maxVerticalMovement = 100;
-
-      // Ignore if vertical movement is too large (likely scrolling)
-      if (Math.abs(deltaY) > maxVerticalMovement) {
-        return;
+      const threshold = window.innerWidth * 0.25;
+      
+      // Determine final state
+      let shouldOpen = false;
+      if (isSwipingFromEdge) {
+        shouldOpen = deltaX > threshold;
+      } else if (isSwipingOnSidebar) {
+        shouldOpen = deltaX > -threshold;
       }
-
-      // Swipe right to open sidebar (when closed)
-      if (deltaX > minSwipeDistance && sidebarCollapsed) {
-        // Only trigger if swipe starts from left edge of screen
-        if (touchStartX < 50) {
-          setSidebarCollapsed(false);
+      
+      // Immediately set final transform position
+      if (sidebarElement) {
+        // Clear will-change and set final position
+        sidebarElement.style.willChange = '';
+        sidebarElement.style.transform = shouldOpen ? '' : 'translate3d(-100%, 0, 0)';
+        // Re-enable transition after next frame
+        requestAnimationFrame(() => {
+          if (sidebarElement) {
+            sidebarElement.style.transition = '';
+          }
+        });
+      }
+      
+      // Update overlay
+      const overlay = document.querySelector('.sidebar-overlay') as HTMLElement;
+      if (overlay) {
+        overlay.style.display = shouldOpen ? 'block' : 'none';
+        overlay.style.opacity = shouldOpen ? '1' : '0';
+      }
+      
+      // Update classes
+      const appElement = document.querySelector('.app');
+      if (appElement) {
+        if (shouldOpen) {
+          sidebarElement?.classList.remove('collapsed');
+          appElement.classList.remove('sidebar-collapsed');
+        } else {
+          sidebarElement?.classList.add('collapsed');
+          appElement.classList.add('sidebar-collapsed');
         }
       }
-      // Swipe left to close sidebar (when open)
-      else if (deltaX < -minSwipeDistance && !sidebarCollapsed) {
-        setSidebarCollapsed(true);
+      
+      // Update React state much later
+      setTimeout(() => setSidebarCollapsed(!shouldOpen), 150);
+      
+      // Reset all flags
+      isSwiping = false;
+      isSwipingFromEdge = false;
+      isSwipingOnSidebar = false;
+      
+      // Cancel any pending frames
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
       }
     };
 
-    // Add touch event listeners
+    const handleTouchCancel = () => {
+      // Clean up on cancel (e.g., when another app takes focus)
+      if (isSwiping) {
+        isSwiping = false;
+        
+        // Reset sidebar
+        if (sidebarElement) {
+          sidebarElement.style.transition = '';
+          sidebarElement.style.transform = '';
+          sidebarElement.style.willChange = '';
+        }
+        
+        // Remove temporary overlay
+        const tempOverlay = document.querySelector('.sidebar-overlay-temp');
+        if (tempOverlay) {
+          tempOverlay.remove();
+        }
+        
+        // Reset regular overlay
+        const regularOverlay = document.querySelector('.sidebar-overlay') as HTMLElement;
+        if (regularOverlay) {
+          regularOverlay.style.transition = '';
+          regularOverlay.style.opacity = '';
+          regularOverlay.style.pointerEvents = '';
+        }
+        
+        // Cancel any pending animation frame
+        if (animationFrameId !== null) {
+          cancelAnimationFrame(animationFrameId);
+          animationFrameId = null;
+        }
+      }
+    };
+
+    // Add touch event listeners with non-passive for touchmove to allow preventDefault
     document.addEventListener('touchstart', handleTouchStart, { passive: true });
-    document.addEventListener('touchmove', handleTouchMove, { passive: true });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
     document.addEventListener('touchend', handleTouchEnd, { passive: true });
+    document.addEventListener('touchcancel', handleTouchCancel, { passive: true });
 
     return () => {
       document.removeEventListener('touchstart', handleTouchStart);
       document.removeEventListener('touchmove', handleTouchMove);
       document.removeEventListener('touchend', handleTouchEnd);
+      document.removeEventListener('touchcancel', handleTouchCancel);
+      
+      // Clean up any pending animation frame
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      
+      // Clean up any temporary overlay
+      const tempOverlay = document.querySelector('.sidebar-overlay-temp');
+      if (tempOverlay) {
+        tempOverlay.remove();
+      }
     };
   }, [sidebarCollapsed]);
 
@@ -189,6 +353,17 @@ function SessionView() {
 
   return (
     <div className={`app ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+      {/* Sidebar overlay for mobile - always in DOM, visibility controlled by CSS/JS */}
+      <div 
+        className="sidebar-overlay"
+        style={{
+          display: sidebarCollapsed ? 'none' : 'block',
+          opacity: sidebarCollapsed ? 0 : 1,
+          pointerEvents: sidebarCollapsed ? 'none' : 'auto'
+        }}
+        onClick={() => setSidebarCollapsed(true)}
+      />
+      
       <div className={`app-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <SessionList
           selectedSessionId={sessionId || null}
