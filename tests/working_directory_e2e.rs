@@ -141,7 +141,7 @@ impl Drop for TestServer {
     }
 }
 
-/// Test that active sessions return the correct working_directory
+/// Test that active sessions return the correct `working_directory`
 #[tokio::test]
 #[serial]
 async fn test_active_session_working_directory() {
@@ -271,7 +271,7 @@ async fn test_active_session_working_directory() {
     info!("Successfully verified different working directories for active sessions");
 }
 
-/// Test that inactive sessions (read from disk) return the correct working_directory
+/// Test that inactive sessions (read from disk) return the correct `working_directory`
 #[tokio::test]
 #[serial]
 async fn test_inactive_session_working_directory_from_disk() {

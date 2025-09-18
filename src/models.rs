@@ -120,31 +120,6 @@ pub struct CreateSessionResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum SessionContentEntry {
-    User { message: UserMessage },
-    Assistant { message: AssistantMessage },
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct UserMessage {
-    pub role: String,
-    pub content: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AssistantMessage {
-    pub role: String,
-    pub content: Vec<AssistantContent>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum AssistantContent {
-    Text { text: String },
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct GetSessionResponse {
     pub session_id: String,
     pub working_directory: PathBuf,
