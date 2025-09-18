@@ -27,14 +27,13 @@ services:
     image: node:20
     working_dir: /app
     environment:
-      - VITE_BACKEND_URL=${VITE_BACKEND_URL:-http://localhost:3000}
-      - VITE_PORT=${VITE_PORT:-8811}
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:3000}
     ports:
-      - "${FRONTEND_HOST_PORT:-8811}:${VITE_PORT:-8811}"
+      - 8811:8811
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    command: sh -c "npm install && npm run dev -- --port ${VITE_PORT:-8811}"
+    command: sh -c "npm install && npm run dev -- --port 8811"
     depends_on:
       - chef-de-vibe
 
