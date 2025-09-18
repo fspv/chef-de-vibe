@@ -25,6 +25,18 @@ Then you can access it via ngrok
 ngrok http 3000
 ```
 
+## Using Nix
+
+```sh
+# Clone and run
+git clone https://github.com/fspv/chef-de-vibe
+cd chef-de-vibe
+nix run
+
+# Or run directly from GitHub (if flake supports it)
+nix run github:fspv/chef-de-vibe
+```
+
 # From precompiled binaries
 
 Precompiled binaries for different platforms are available on the releases
