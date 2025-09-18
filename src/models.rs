@@ -251,6 +251,10 @@ impl Session {
     }
 
     /// Broadcasts a message to all or filtered clients
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if there are no active receivers for the broadcast channel.
     pub fn broadcast_message(
         &self,
         message: BroadcastMessage,
@@ -298,6 +302,10 @@ impl Session {
     }
 
     /// Broadcasts an approval message to all approval clients
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if there are no active receivers for the approval broadcast channel.
     pub fn broadcast_approval_message(
         &self,
         message: ApprovalMessage,
@@ -355,13 +363,13 @@ mod tests {
         session.add_client(client1).await;
         session.add_client(client2).await;
 
-        let clients = session.get_clients().await;
-        assert_eq!(clients.len(), 2);
+        let all_clients = session.get_clients().await;
+        assert_eq!(all_clients.len(), 2);
 
         session.remove_client("client1").await;
-        let clients = session.get_clients().await;
-        assert_eq!(clients.len(), 1);
-        assert_eq!(clients[0].id, "client2");
+        let remaining_clients = session.get_clients().await;
+        assert_eq!(remaining_clients.len(), 1);
+        assert_eq!(remaining_clients[0].id, "client2");
     }
 
     #[tokio::test]

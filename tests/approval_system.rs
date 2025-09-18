@@ -94,8 +94,8 @@ impl TestServer {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let port = addr.port();
-        let base_url = format!("http://127.0.0.1:{}", port);
-        let ws_url = format!("ws://127.0.0.1:{}", port);
+        let base_url = format!("http://127.0.0.1:{port}");
+        let ws_url = format!("ws://127.0.0.1:{port}");
 
         // Spawn server
         let server_handle = tokio::spawn(async move {
@@ -171,23 +171,17 @@ async fn expect_approval_request(
             if tool_name == expected_tool_name {
                 if let Some(request_id) = parsed["id"].as_str() {
                     return Ok(request_id.to_string());
-                } else {
-                    return Err("No request_id found in approval_request".into());
                 }
-            } else {
-                return Err(format!(
-                    "Expected tool_name '{}', got '{}'",
-                    expected_tool_name, tool_name
-                )
-                .into());
+                return Err("No request_id found in approval_request".into());
             }
-        } else {
-            return Err(format!(
-                "Expected approval request with id and request fields, got message: {:?}",
-                parsed
-            )
-            .into());
+            return Err(
+                format!("Expected tool_name '{expected_tool_name}', got '{tool_name}'").into(),
+            );
         }
+        return Err(format!(
+            "Expected approval request with id and request fields, got message: {parsed:?}"
+        )
+        .into());
     }
 
     Err("Expected text message with approval request".into())
@@ -248,7 +242,7 @@ async fn test_approval_websocket_basic_connection() {
     let session_file_path = server
         .mock
         .projects_dir()
-        .join(format!("{}.jsonl", session_id));
+        .join(format!("{session_id}.jsonl"));
     let session_start_content = format!(
         r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#,
         session_id,
@@ -282,22 +276,22 @@ async fn test_approval_websocket_basic_connection() {
     // Debug: Check response status and headers
     let status = create_response.status();
     let headers = create_response.headers().clone();
-    println!("Response status: {}", status);
-    println!("Response headers: {:?}", headers);
+    println!("Response status: {status}");
+    println!("Response headers: {headers:?}");
 
     // Get the response body as text first
     let response_text = create_response.text().await.unwrap();
-    println!("Raw response body: {}", response_text);
+    println!("Raw response body: {response_text}");
 
     assert_eq!(status, 200);
 
     // Try to parse as JSON to see the structure
     match serde_json::from_str::<serde_json::Value>(&response_text) {
         Ok(json_value) => {
-            println!("Parsed JSON structure: {:#}", json_value);
+            println!("Parsed JSON structure: {json_value:#}");
         }
         Err(e) => {
-            println!("Failed to parse as JSON: {}", e);
+            println!("Failed to parse as JSON: {e}");
         }
     }
 
@@ -308,7 +302,7 @@ async fn test_approval_websocket_basic_connection() {
             data
         }
         Err(e) => {
-            println!("Failed to parse response as CreateSessionResponse: {}", e);
+            println!("Failed to parse response as CreateSessionResponse: {e}");
             println!("Expected fields for CreateSessionResponse (add these if missing from your struct definition):");
             panic!("Response parsing failed - check the debug output above");
         }
@@ -326,24 +320,18 @@ async fn test_approval_websocket_basic_connection() {
 
     // Should not receive any initial pending approvals (empty session)
     let timeout_result = timeout(Duration::from_millis(500), approval_ws.next()).await;
-    match timeout_result {
-        Err(_) => {
-            // Timeout is expected - no pending approvals
+    if let Ok(Some(Ok(Message::Text(text)))) = timeout_result {
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+        if parsed["type"] == "pending_approvals" {
+            let requests = parsed["requests"].as_array().unwrap();
+            assert_eq!(
+                requests.len(),
+                0,
+                "Should have no pending approvals initially"
+            );
         }
-        Ok(Some(Ok(Message::Text(text)))) => {
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
-            if parsed["type"] == "pending_approvals" {
-                let requests = parsed["requests"].as_array().unwrap();
-                assert_eq!(
-                    requests.len(),
-                    0,
-                    "Should have no pending approvals initially"
-                );
-            }
-        }
-        _ => {
-            // Other outcomes are acceptable
-        }
+    } else {
+        // Other outcomes (timeout or connection close) are acceptable
     }
 
     let _ = approval_ws.close(None).await;
@@ -362,28 +350,26 @@ async fn test_approval_websocket_connection_to_nonexistent_session() {
     let result = connect_approval_websocket(&approval_ws_url).await;
 
     match result {
-        Err(_) => {
+        Err(e) => {
             // Connection failed as expected
+            eprintln!("Connection failed (expected): {e}");
         }
         Ok(mut ws) => {
             // Connection succeeded, but server should close it immediately
             let close_result = timeout(Duration::from_secs(2), ws.next()).await;
             match close_result {
-                Ok(Some(Ok(Message::Close(_)))) => {
-                    // Server closed connection as expected
-                }
-                Ok(None) => {
-                    // WebSocket stream ended, which is also expected
+                Ok(Some(Ok(Message::Close(_))) | None) => {
+                    // Server closed connection or stream ended as expected
                 }
                 Ok(Some(Ok(other))) => {
-                    panic!("Expected close message or end of stream, got: {:?}", other);
+                    panic!("Expected close message or end of stream, got: {other:?}");
                 }
                 Ok(Some(Err(e))) => {
                     // WebSocket error, which is acceptable for this test
-                    println!("WebSocket error (expected): {:?}", e);
+                    println!("WebSocket error (expected): {e:?}");
                 }
-                Err(_) => {
-                    panic!("Expected server to close connection for nonexistent session");
+                Err(e) => {
+                    panic!("Timeout waiting for server close: {e}");
                 }
             }
             let _ = ws.close(None).await;
@@ -407,7 +393,7 @@ async fn test_single_tool_approval_allow_flow() {
     let session_file_path = server
         .mock
         .projects_dir()
-        .join(format!("{}.jsonl", session_id));
+        .join(format!("{session_id}.jsonl"));
     let session_start_content = format!(
         r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#,
         session_id,
@@ -521,8 +507,7 @@ async fn test_single_tool_approval_allow_flow() {
             assert_eq!(
                 parsed.get("type").and_then(|v| v.as_str()),
                 Some("assistant"),
-                "Expected assistant message, got: {}",
-                text
+                "Expected assistant message, got: {text}"
             );
 
             // Extract the message content
@@ -543,11 +528,10 @@ async fn test_single_tool_approval_allow_flow() {
 
             assert_eq!(
                 text_content, "APPROVAL_TEST_SUCCESS_READ",
-                "Response should indicate Read tool approval was successful. Got: '{}'",
-                text_content
+                "Response should indicate Read tool approval was successful. Got: '{text_content}'"
             );
         }
-        _ => panic!("Expected text message, got: {:?}", response),
+        _ => panic!("Expected text message, got: {response:?}"),
     }
 
     let _ = approval_ws.close(None).await;
@@ -570,7 +554,7 @@ async fn test_single_tool_approval_deny_flow() {
     let session_file_path = server
         .mock
         .projects_dir()
-        .join(format!("{}.jsonl", session_id));
+        .join(format!("{session_id}.jsonl"));
     let session_start_content = format!(
         r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#,
         session_id,
@@ -684,8 +668,7 @@ async fn test_single_tool_approval_deny_flow() {
             assert_eq!(
                 parsed.get("type").and_then(|v| v.as_str()),
                 Some("assistant"),
-                "Expected assistant message, got: {}",
-                text
+                "Expected assistant message, got: {text}"
             );
 
             // Extract the message content
@@ -706,11 +689,10 @@ async fn test_single_tool_approval_deny_flow() {
 
             assert_eq!(
                 text_content, "APPROVAL_TEST_DENIED_BASH",
-                "Response should indicate Bash tool was denied. Got: '{}'",
-                text_content
+                "Response should indicate Bash tool was denied. Got: '{text_content}'"
             );
         }
-        _ => panic!("Expected text message, got: {:?}", response),
+        _ => panic!("Expected text message, got: {response:?}"),
     }
 
     let _ = approval_ws.close(None).await;
@@ -788,7 +770,7 @@ async fn test_multiple_pending_approvals_accumulation() {
     let session_file_path = server
         .mock
         .projects_dir()
-        .join(format!("{}.jsonl", session_id));
+        .join(format!("{session_id}.jsonl"));
     let session_start_content = format!(
         r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#,
         session_id,
@@ -837,8 +819,6 @@ async fn test_multiple_pending_approvals_accumulation() {
     }
 
     // Send a control request for tool approval
-    use futures_util::SinkExt;
-    use futures_util::StreamExt;
     println!("Sending control request to main WebSocket");
     let control_request = r#"{"type": "control_request", "request_id": "multi-test-123", "request": {"subtype": "can_use_tool", "tool_name": "Read"}}"#;
     main_ws
@@ -851,23 +831,20 @@ async fn test_multiple_pending_approvals_accumulation() {
     let response1 = timeout(Duration::from_secs(3), approval_ws1.next()).await;
     let response1 = match response1 {
         Ok(Some(Ok(Message::Text(text)))) => {
-            println!("First approval client received: {}", text);
+            println!("First approval client received: {text}");
             text
         }
         Ok(Some(Ok(other))) => {
-            panic!(
-                "First approval client received unexpected message type: {:?}",
-                other
-            );
+            panic!("First approval client received unexpected message type: {other:?}");
         }
         Ok(Some(Err(e))) => {
-            panic!("First approval client WebSocket error: {:?}", e);
+            panic!("First approval client WebSocket error: {e:?}");
         }
         Ok(None) => {
             panic!("First approval client WebSocket closed");
         }
-        Err(_) => {
-            panic!("First approval client timeout - no approval request received");
+        Err(e) => {
+            panic!("First approval client timeout - no approval request received: {e}");
         }
     };
 
@@ -909,13 +886,10 @@ async fn test_multiple_pending_approvals_accumulation() {
                     "✓ Second client correctly received pending approval as individual message"
                 );
             } else {
-                panic!(
-                    "Expected individual approval request message, got: {:?}",
-                    parsed
-                );
+                panic!("Expected individual approval request message, got: {parsed:?}");
             }
         }
-        other => panic!("Expected text message, got: {:?}", other),
+        other => panic!("Expected text message, got: {other:?}"),
     }
 
     // Now respond to the approval from the first client
@@ -972,8 +946,7 @@ async fn test_multiple_pending_approvals_accumulation() {
             assert_eq!(
                 parsed.get("type").and_then(|v| v.as_str()),
                 Some("assistant"),
-                "Expected assistant message, got: {}",
-                text
+                "Expected assistant message, got: {text}"
             );
 
             // Extract the message content
@@ -994,12 +967,11 @@ async fn test_multiple_pending_approvals_accumulation() {
 
             assert_eq!(
                 text_content, "APPROVAL_TEST_SUCCESS_READ",
-                "Response should indicate Read tool approval was successful. Got: '{}'",
-                text_content
+                "Response should indicate Read tool approval was successful. Got: '{text_content}'"
             );
             println!("✓ Tool request was properly approved and executed");
         }
-        _ => panic!("Expected text message, got: {:?}", response),
+        _ => panic!("Expected text message, got: {response:?}"),
     }
 
     let _ = approval_ws1.close(None).await;
@@ -1023,7 +995,7 @@ async fn test_multiple_approval_clients_broadcast() {
     let session_file_path = server
         .mock
         .projects_dir()
-        .join(format!("{}.jsonl", session_id));
+        .join(format!("{session_id}.jsonl"));
     let session_start_content = format!(
         r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#,
         session_id,
@@ -1077,8 +1049,6 @@ async fn test_multiple_approval_clients_broadcast() {
     }
 
     // Send a control request for tool approval
-    use futures_util::SinkExt;
-    use futures_util::StreamExt;
     let control_request = r#"{"type": "control_request", "request_id": "broadcast-test-123", "request": {"subtype": "can_use_tool", "tool_name": "Read"}}"#;
     main_ws
         .send(Message::Text(control_request.to_string()))
@@ -1129,8 +1099,8 @@ async fn test_multiple_approval_clients_broadcast() {
             Ok(None) => {
                 panic!("Client {} WebSocket closed", i + 1);
             }
-            Err(_) => {
-                panic!("Client {} timeout waiting for approval request", i + 1);
+            Err(e) => {
+                panic!("Client {} timeout waiting for approval request: {e}", i + 1);
             }
         }
     }
@@ -1207,8 +1177,7 @@ async fn test_multiple_approval_clients_broadcast() {
             assert_eq!(
                 parsed.get("type").and_then(|v| v.as_str()),
                 Some("assistant"),
-                "Expected assistant message, got: {}",
-                text
+                "Expected assistant message, got: {text}"
             );
 
             // Extract the message content
@@ -1229,12 +1198,11 @@ async fn test_multiple_approval_clients_broadcast() {
 
             assert_eq!(
                 text_content, "APPROVAL_TEST_SUCCESS_READ",
-                "Response should indicate Read tool approval was successful. Got: '{}'",
-                text_content
+                "Response should indicate Read tool approval was successful. Got: '{text_content}'"
             );
             println!("✓ Tool request was properly approved and executed");
         }
-        _ => panic!("Expected text message, got: {:?}", response),
+        _ => panic!("Expected text message, got: {response:?}"),
     }
 
     let _ = approval_ws1.close(None).await;

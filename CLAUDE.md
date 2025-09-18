@@ -1,0 +1,1 @@
+- Run linter with `cargo clippy --all-targets --all-features`

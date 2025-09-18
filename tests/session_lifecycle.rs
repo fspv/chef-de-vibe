@@ -25,16 +25,15 @@ fn create_complete_session_file(
     session_id: &str,
     cwd: &str,
 ) {
-    let project_dir = projects_dir.join(project_name);
-    fs::create_dir_all(&project_dir).unwrap();
+    let project_path = projects_dir.join(project_name);
+    fs::create_dir_all(&project_path).unwrap();
 
-    let session_file = project_dir.join(format!("{}.jsonl", session_id));
+    let session_file = project_path.join(format!("{session_id}.jsonl"));
 
     let content = format!(
-        r#"{{"parentUuid":null,"isSidechain":false,"userType":"external","cwd":"{}","sessionId":"{}","version":"1.0.65","gitBranch":"master","type":"user","message":{{"role":"user","content":"fix all the clippy warnings"}},"uuid":"30644cc3-c5cd-4e9e-953a-bbe299394703","timestamp":"2025-09-09T21:51:18.091Z"}}
-{{"parentUuid":"30644cc3-c5cd-4e9e-953a-bbe299394703","isSidechain":false,"userType":"external","cwd":"{}","sessionId":"{}","version":"1.0.65","gitBranch":"master","message":{{"id":"msg_01SZg91CWiohGz1EGpKNtiNc","type":"message","role":"assistant","model":"claude-sonnet-4-20250514","content":[{{"type":"text","text":"I'll use the rust-linter-fixer agent..."}}],"stop_reason":null,"stop_sequence":null,"usage":{{"input_tokens":4,"cache_creation_input_tokens":17902,"cache_read_input_tokens":0,"cache_creation":{{"ephemeral_5m_input_tokens":17902,"ephemeral_1h_input_tokens":0}},"output_tokens":3,"service_tier":"standard"}}}},"requestId":"req_011CSyZqUfBhmGuMy8ymqeNp","type":"assistant","uuid":"44f23e72-dd74-467a-b7b2-bd1bb905abe4","timestamp":"2025-09-09T21:51:21.682Z"}}
-{{"type":"system","message":"Session started","timestamp":"2025-09-09T21:51:22.000Z","sessionId":"{}"}}"#,
-        cwd, session_id, cwd, session_id, session_id
+        r#"{{"parentUuid":null,"isSidechain":false,"userType":"external","cwd":"{cwd}","sessionId":"{session_id}","version":"1.0.65","gitBranch":"master","type":"user","message":{{"role":"user","content":"fix all the clippy warnings"}},"uuid":"30644cc3-c5cd-4e9e-953a-bbe299394703","timestamp":"2025-09-09T21:51:18.091Z"}}
+{{"parentUuid":"30644cc3-c5cd-4e9e-953a-bbe299394703","isSidechain":false,"userType":"external","cwd":"{cwd}","sessionId":"{session_id}","version":"1.0.65","gitBranch":"master","message":{{"id":"msg_01SZg91CWiohGz1EGpKNtiNc","type":"message","role":"assistant","model":"claude-sonnet-4-20250514","content":[{{"type":"text","text":"I'll use the rust-linter-fixer agent..."}}],"stop_reason":null,"stop_sequence":null,"usage":{{"input_tokens":4,"cache_creation_input_tokens":17902,"cache_read_input_tokens":0,"cache_creation":{{"ephemeral_5m_input_tokens":17902,"ephemeral_1h_input_tokens":0}},"output_tokens":3,"service_tier":"standard"}}}},"requestId":"req_011CSyZqUfBhmGuMy8ymqeNp","type":"assistant","uuid":"44f23e72-dd74-467a-b7b2-bd1bb905abe4","timestamp":"2025-09-09T21:51:21.682Z"}}
+{{"type":"system","message":"Session started","timestamp":"2025-09-09T21:51:22.000Z","sessionId":"{session_id}"}}"#
     );
 
     fs::write(session_file, content).unwrap();
@@ -94,8 +93,8 @@ impl TestServer {
         let addr = listener.local_addr().unwrap();
         let port = addr.port();
 
-        let base_url = format!("http://127.0.0.1:{}", port);
-        let ws_url = format!("ws://127.0.0.1:{}", port);
+        let base_url = format!("http://127.0.0.1:{port}");
+        let ws_url = format!("ws://127.0.0.1:{port}");
 
         // Spawn server
         let server_handle = tokio::spawn(async move {

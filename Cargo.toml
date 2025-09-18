@@ -3,6 +3,13 @@ name = "chef-de-vibe"
 version = "0.1.0"
 edition = "2021"
 
+[lints.clippy]
+all = "warn"
+pedantic = "warn"
+correctness = "warn"
+complexity = "warn"
+perf = "warn"
+
 [dependencies]
 axum = { version = "0.7", features = ["ws"] }
 tokio = { version = "1", features = ["full"] }

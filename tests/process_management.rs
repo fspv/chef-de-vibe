@@ -73,8 +73,8 @@ impl TestServer {
         let addr = listener.local_addr().unwrap();
         let port = addr.port();
 
-        let base_url = format!("http://127.0.0.1:{}", port);
-        let ws_url = format!("ws://127.0.0.1:{}", port);
+        let base_url = format!("http://127.0.0.1:{port}");
+        let ws_url = format!("ws://127.0.0.1:{port}");
 
         // Spawn server
         let server_handle = tokio::spawn(async move {

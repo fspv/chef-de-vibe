@@ -94,9 +94,7 @@ impl SessionManager {
 
         let check_file_ready = || async {
             // Search for the session file in all subdirectories
-            let session_file_path = if let Some(path) = self.find_session_file(&filename) {
-                path
-            } else {
+            let Some(session_file_path) = self.find_session_file(&filename) else {
                 debug!(
                     session_id = %session_id,
                     filename = %filename,
@@ -191,6 +189,7 @@ impl SessionManager {
     /// Returns an error if the working directory is invalid, if the Claude process
     /// fails to spawn, or if the session creation fails.
     #[instrument(skip(self), fields(session_id = %session_id, working_dir = %working_dir.display(), resume = resume, bootstrap_messages_len = bootstrap_messages.len()))]
+    #[allow(clippy::too_many_lines)]
     pub async fn create_session(
         &self,
         session_id: String,
@@ -471,6 +470,7 @@ impl SessionManager {
     }
 
     #[instrument(skip(config, session), fields(session_id = %session_id, working_dir = %working_dir.display(), resume = resume, bootstrap_messages_len = bootstrap_messages.len()))]
+    #[allow(clippy::too_many_lines)]
     async fn spawn_claude_process(
         config: &Config,
         session_id: &str,
@@ -948,13 +948,15 @@ impl SessionManager {
                 {
                     use nix::sys::signal::{kill, Signal};
                     use nix::unistd::Pid;
-                    if let Err(e) = kill(Pid::from_raw(pid as i32), Signal::SIGTERM) {
-                        warn!(
-                            session_id = %session.get_id().await,
-                            process_id = pid,
-                            error = %e,
-                            "Failed to send SIGTERM to Claude process"
-                        );
+                    if let Ok(pid_i32) = i32::try_from(pid) {
+                        if let Err(e) = kill(Pid::from_raw(pid_i32), Signal::SIGTERM) {
+                            warn!(
+                                session_id = %session.get_id().await,
+                                process_id = pid,
+                                error = %e,
+                                "Failed to send SIGTERM to Claude process"
+                            );
+                        }
                     }
                 }
                 #[cfg(not(unix))]
@@ -979,13 +981,15 @@ impl SessionManager {
                 {
                     use nix::sys::signal::{kill, Signal};
                     use nix::unistd::Pid;
-                    if let Err(e) = kill(Pid::from_raw(pid as i32), Signal::SIGKILL) {
-                        warn!(
-                            session_id = %session.get_id().await,
-                            process_id = pid,
-                            error = %e,
-                            "Failed to send SIGKILL to Claude process"
-                        );
+                    if let Ok(pid_i32) = i32::try_from(pid) {
+                        if let Err(e) = kill(Pid::from_raw(pid_i32), Signal::SIGKILL) {
+                            warn!(
+                                session_id = %session.get_id().await,
+                                process_id = pid,
+                                error = %e,
+                                "Failed to send SIGKILL to Claude process"
+                            );
+                        }
                     }
                 }
                 session.set_process_id(None).await;
@@ -1296,9 +1300,9 @@ done
 
         // Create a mock Claude binary that exits immediately
         let claude_path = temp_dir.path().join("failing_claude");
-        let script = r#"#!/bin/bash
+        let script = r"#!/bin/bash
 exit 1
-"#;
+";
         fs::write(&claude_path, script).unwrap();
 
         #[cfg(unix)]
@@ -1345,8 +1349,7 @@ exit 1
         // Should fail quickly (less than 2 seconds, not wait for the 20 second timeout)
         assert!(
             elapsed.as_secs() < 2,
-            "Took too long to detect failure: {:?}",
-            elapsed
+            "Took too long to detect failure: {elapsed:?}"
         );
 
         match result.unwrap_err() {
@@ -1354,11 +1357,10 @@ exit 1
                 assert!(
                     msg.contains("process exited immediately")
                         || msg.contains("Failed to spawn Claude process"),
-                    "Unexpected error message: {}",
-                    msg
+                    "Unexpected error message: {msg}"
                 );
             }
-            e => panic!("Expected ClaudeSpawnFailed error, got: {:?}", e),
+            e => panic!("Expected ClaudeSpawnFailed error, got: {e:?}"),
         }
 
         // Clean up environment variable

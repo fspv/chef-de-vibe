@@ -20,6 +20,7 @@ pub struct Assets;
 /// Panics if the HTTP response builder fails to construct a response.
 /// This should only happen in extremely rare cases where the HTTP headers
 /// cannot be set properly.
+#[allow(clippy::unused_async)]
 pub async fn serve_static(Path(path): Path<String>) -> impl IntoResponse {
     let path = if path.is_empty() || path == "/" {
         "index.html"

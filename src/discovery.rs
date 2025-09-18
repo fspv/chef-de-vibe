@@ -197,6 +197,7 @@ impl<'a> SessionDiscovery<'a> {
         Ok(Vec::new())
     }
 
+    #[allow(clippy::too_many_lines)]
     #[instrument(skip_all, fields(file_path = %path.display()))]
     fn parse_session_file(path: &Path) -> OrchestratorResult<Option<SessionInfo>> {
         let file = File::open(path).map_err(|e| {
@@ -397,17 +398,16 @@ mod tests {
         session_id: &str,
         working_dir: &str,
     ) {
-        let project_dir = projects_dir.join(project_name);
-        fs::create_dir_all(&project_dir).unwrap();
+        let project_path = projects_dir.join(project_name);
+        fs::create_dir_all(&project_path).unwrap();
 
-        let session_file = project_dir.join(format!("{}.jsonl", session_id));
+        let session_file = project_path.join(format!("{session_id}.jsonl"));
 
         let content = format!(
-            r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}
+            r#"{{"sessionId": "{session_id}", "cwd": "{working_dir}", "type": "start"}}
 {{"type": "user", "message": {{"role": "user", "content": "Hello"}}}}
 {{"type": "assistant", "message": {{"role": "assistant", "content": [{{"type": "text", "text": "Hi there!"}}]}}}}
-"#,
-            session_id, working_dir
+"#
         );
 
         fs::write(session_file, content).unwrap();
@@ -512,11 +512,11 @@ mod tests {
         let projects_dir = temp_dir.path().join("projects");
         fs::create_dir_all(&projects_dir).unwrap();
 
-        let project_dir = projects_dir.join("project1");
-        fs::create_dir_all(&project_dir).unwrap();
+        let project_path = projects_dir.join("project1");
+        fs::create_dir_all(&project_path).unwrap();
 
         // Create file with mismatched session ID
-        let session_file = project_dir.join("wrong-id.jsonl");
+        let session_file = project_path.join("wrong-id.jsonl");
         let content = r#"{"sessionId": "different-id", "cwd": "/home/user", "type": "start"}"#;
         fs::write(session_file, content).unwrap();
 
@@ -544,11 +544,11 @@ mod tests {
         let projects_dir = temp_dir.path().join("projects");
         fs::create_dir_all(&projects_dir).unwrap();
 
-        let project_dir = projects_dir.join("project1");
-        fs::create_dir_all(&project_dir).unwrap();
+        let project_path = projects_dir.join("project1");
+        fs::create_dir_all(&project_path).unwrap();
 
         // Create file missing cwd field
-        let session_file = project_dir.join("incomplete.jsonl");
+        let session_file = project_path.join("incomplete.jsonl");
         let content = r#"{"sessionId": "incomplete", "type": "start"}"#;
         fs::write(session_file, content).unwrap();
 

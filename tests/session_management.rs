@@ -25,18 +25,17 @@ fn create_test_session_file(
     session_id: &str,
     cwd: &str,
 ) {
-    let project_dir = projects_dir.join(project_name);
-    fs::create_dir_all(&project_dir).unwrap();
+    let project_path = projects_dir.join(project_name);
+    fs::create_dir_all(&project_path).unwrap();
 
-    let session_file = project_dir.join(format!("{}.jsonl", session_id));
+    let session_file = project_path.join(format!("{session_id}.jsonl"));
     let content = format!(
-        r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}
+        r#"{{"sessionId": "{session_id}", "cwd": "{cwd}", "type": "start"}}
 {{"type": "user", "message": {{"role": "user", "content": "Hello Claude"}}}}
 {{"type": "assistant", "message": {{"role": "assistant", "content": [{{"type": "text", "text": "Hello! How can I help you today?"}}]}}}}
 {{"type": "user", "message": {{"role": "user", "content": "What's 2+2?"}}}}
 {{"type": "assistant", "message": {{"role": "assistant", "content": [{{"type": "text", "text": "2 + 2 equals 4."}}]}}}}
-"#,
-        session_id, cwd
+"#
     );
 
     fs::write(session_file, content).unwrap();
@@ -93,7 +92,7 @@ impl TestServer {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let port = addr.port();
-        let base_url = format!("http://127.0.0.1:{}", port);
+        let base_url = format!("http://127.0.0.1:{port}");
 
         // Spawn server
         let server_handle = tokio::spawn(async move {
@@ -312,7 +311,7 @@ async fn test_resume_session() {
     let session_file_path = server
         .mock
         .projects_dir
-        .join(format!("{}.jsonl", new_session_id));
+        .join(format!("{new_session_id}.jsonl"));
     let session_content = format!(
         r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#,
         new_session_id,

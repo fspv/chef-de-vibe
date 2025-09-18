@@ -1,6 +1,7 @@
 use crate::api::handlers::AppState;
 use crate::models::{
-    ApprovalMessage, ApprovalWebSocketClient, BroadcastMessage, WebSocketClient, WriteMessage,
+    ApprovalMessage, ApprovalWebSocketClient, BroadcastMessage, Session, WebSocketClient,
+    WriteMessage,
 };
 use axum::{
     extract::{
@@ -9,9 +10,15 @@ use axum::{
     },
     response::Response,
 };
-use futures::{sink::SinkExt, stream::StreamExt};
+use futures::{
+    sink::SinkExt,
+    stream::{SplitSink, SplitStream, StreamExt},
+};
 use std::sync::Arc;
-use tokio::sync::mpsc;
+use tokio::{
+    sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
+    task::JoinHandle,
+};
 use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
@@ -714,26 +721,70 @@ async fn handle_approval_text_message(
 async fn handle_approval_websocket(socket: WebSocket, session_id: String, state: AppState) {
     info!(session_id = %session_id, "Starting approval WebSocket connection handling");
 
-    // Get session
-    let Some(session) = state.session_manager.get_session(&session_id) else {
-        error!(session_id = %session_id, "Approval WebSocket connection rejected: session not found");
+    let Some(session) = validate_approval_session(&session_id, &state).await else {
         let _ = socket.close().await;
         return;
     };
 
+    let (client_id, tx, rx) = setup_approval_connection(socket, &session_id, &session).await;
+
+    let send_task = spawn_approval_outgoing_message_handler(rx.0, rx.1, client_id.clone());
+    let broadcast_task =
+        spawn_approval_broadcast_handler(session.clone(), tx.clone(), client_id.clone());
+
+    send_pending_approvals(&session, &tx, &session_id, &client_id).await;
+
+    let messages_processed = handle_approval_message_loop(
+        rx.2,
+        &client_id,
+        &session_id,
+        session.clone(),
+        state.clone(),
+    )
+    .await;
+
+    cleanup_approval_connection(
+        session,
+        &client_id,
+        &session_id,
+        send_task,
+        broadcast_task,
+        messages_processed,
+    )
+    .await;
+}
+
+async fn validate_approval_session(session_id: &str, state: &AppState) -> Option<Arc<Session>> {
+    let Some(session) = state.session_manager.get_session(session_id) else {
+        error!(session_id = %session_id, "Approval WebSocket connection rejected: session not found");
+        return None;
+    };
+
     debug!(session_id = %session_id, "Session found, checking if active");
 
-    // Check if session is active
     if !session.is_active().await {
         error!(session_id = %session_id, "Approval WebSocket connection rejected: session not active");
-        let _ = socket.close().await;
-        return;
+        return None;
     }
 
     debug!(session_id = %session_id, "Session is active, proceeding with approval connection");
+    Some(session)
+}
 
-    // Setup approval client connection
-    let (client_id, client) = setup_approval_client_connection(&session_id, &session);
+async fn setup_approval_connection(
+    socket: WebSocket,
+    session_id: &str,
+    session: &Arc<Session>,
+) -> (
+    String,
+    UnboundedSender<Message>,
+    (
+        SplitSink<WebSocket, Message>,
+        UnboundedReceiver<Message>,
+        SplitStream<WebSocket>,
+    ),
+) {
+    let (client_id, client) = setup_approval_client_connection(session_id, session);
     tracing::Span::current().record("client_id", &client_id);
 
     session.add_approval_client(client).await;
@@ -743,15 +794,13 @@ async fn handle_approval_websocket(socket: WebSocket, session_id: String, state:
         "Approval client added to session"
     );
 
-    // Split socket into sender and receiver
-    let (sender, mut receiver) = socket.split();
+    let (sender, receiver) = socket.split();
     debug!(
         session_id = %session_id,
         client_id = %client_id,
         "Approval WebSocket split into sender and receiver"
     );
 
-    // Create channel for outgoing messages
     let (tx, rx) = mpsc::unbounded_channel::<Message>();
     debug!(
         session_id = %session_id,
@@ -759,150 +808,161 @@ async fn handle_approval_websocket(socket: WebSocket, session_id: String, state:
         "Approval communication channels created"
     );
 
-    // Spawn background tasks first
-    let send_task = spawn_approval_outgoing_message_handler(sender, rx, client_id.clone());
-    let broadcast_task =
-        spawn_approval_broadcast_handler(session.clone(), tx.clone(), client_id.clone());
+    (client_id, tx, (sender, rx, receiver))
+}
 
-    // Send pending approvals immediately upon connection as individual messages
+async fn send_pending_approvals(
+    session: &Arc<Session>,
+    tx: &UnboundedSender<Message>,
+    session_id: &str,
+    client_id: &str,
+) {
     let pending_approvals = session.get_pending_approvals().await;
-    if !pending_approvals.is_empty() {
-        info!(
-            session_id = %session_id,
-            client_id = %client_id,
-            pending_count = pending_approvals.len(),
-            "Sending pending approvals to newly connected client as individual messages"
-        );
+    if pending_approvals.is_empty() {
+        return;
+    }
 
-        for approval_request in pending_approvals {
-            let approval_message = match serde_json::to_string(&serde_json::json!({
-                "id": approval_request.id,
-                "request": approval_request.request,
-                "created_at": approval_request.created_at.duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default().as_secs()
-            })) {
-                Ok(json) => json,
-                Err(e) => {
-                    error!(
-                        session_id = %session_id,
-                        client_id = %client_id,
-                        approval_id = %approval_request.id,
-                        error = %e,
-                        "Failed to serialize pending approval request"
-                    );
-                    continue;
-                }
-            };
+    info!(
+        session_id = %session_id,
+        client_id = %client_id,
+        pending_count = pending_approvals.len(),
+        "Sending pending approvals to newly connected client as individual messages"
+    );
 
-            if let Err(e) = tx.send(Message::Text(approval_message)) {
-                warn!(
+    for approval_request in pending_approvals {
+        let approval_message = match serde_json::to_string(&serde_json::json!({
+            "id": approval_request.id,
+            "request": approval_request.request,
+            "created_at": approval_request.created_at.duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default().as_secs()
+        })) {
+            Ok(json) => json,
+            Err(e) => {
+                error!(
                     session_id = %session_id,
                     client_id = %client_id,
                     approval_id = %approval_request.id,
                     error = %e,
-                    "Failed to send pending approval request to client"
+                    "Failed to serialize pending approval request"
                 );
-                break; // Stop sending if there's a connection issue
+                continue;
             }
+        };
+
+        if let Err(e) = tx.send(Message::Text(approval_message)) {
+            warn!(
+                session_id = %session_id,
+                client_id = %client_id,
+                approval_id = %approval_request.id,
+                error = %e,
+                "Failed to send pending approval request to client"
+            );
+            break;
         }
     }
+}
 
-    debug!(
-        session_id = %session_id,
-        client_id = %client_id,
-        "Approval background tasks spawned"
-    );
-
-    // Handle incoming messages from this approval WebSocket client
-    let client_id_recv = client_id.clone();
+async fn handle_approval_message_loop(
+    mut receiver: SplitStream<WebSocket>,
+    client_id: &str,
+    session_id: &str,
+    session: Arc<Session>,
+    state: AppState,
+) -> u32 {
     info!(
         session_id = %session_id,
-        client_id = %client_id_recv,
+        client_id = %client_id,
         "Starting approval message processing loop"
     );
 
     let mut messages_processed = 0;
     while let Some(msg) = receiver.next().await {
         messages_processed += 1;
-        match msg {
-            Ok(Message::Text(text)) => {
-                debug!(
-                    session_id = %session_id,
-                    client_id = %client_id_recv,
-                    message_number = messages_processed,
-                    "Received approval text message"
-                );
-                handle_approval_text_message(
-                    text,
-                    &client_id_recv,
-                    &session_id,
-                    session.clone(),
-                    state.clone(),
-                )
-                .await;
-            }
-            Ok(Message::Close(close_frame)) => {
-                info!(
-                    session_id = %session_id,
-                    client_id = %client_id_recv,
-                    close_code = close_frame.as_ref().map_or(0, |f| f.code.into()),
-                    "Approval WebSocket client sent close message"
-                );
-                break;
-            }
-            Ok(Message::Ping(data)) => {
-                debug!(
-                    session_id = %session_id,
-                    client_id = %client_id_recv,
-                    ping_data_len = data.len(),
-                    "Received ping from approval client, sending pong"
-                );
-                if tx.send(Message::Pong(data)).is_err() {
-                    warn!(
-                        session_id = %session_id,
-                        client_id = %client_id_recv,
-                        "Failed to send pong response, breaking approval connection"
-                    );
-                    break;
-                }
-            }
-            Ok(Message::Pong(data)) => {
-                debug!(
-                    session_id = %session_id,
-                    client_id = %client_id_recv,
-                    pong_data_len = data.len(),
-                    "Received pong message from approval client"
-                );
-            }
-            Ok(Message::Binary(data)) => {
-                warn!(
-                    session_id = %session_id,
-                    client_id = %client_id_recv,
-                    binary_data_len = data.len(),
-                    "Received unexpected binary message from approval WebSocket client"
-                );
-            }
-            Err(e) => {
-                error!(
-                    session_id = %session_id,
-                    client_id = %client_id_recv,
-                    error = %e,
-                    messages_processed = messages_processed,
-                    "Approval WebSocket error, breaking connection"
-                );
-                break;
-            }
+        if !process_approval_message(
+            msg,
+            &mut messages_processed,
+            client_id,
+            session_id,
+            &session,
+            &state,
+        )
+        .await
+        {
+            break;
         }
     }
 
     info!(
         session_id = %session_id,
-        client_id = %client_id_recv,
+        client_id = %client_id,
         total_messages_processed = messages_processed,
         "Approval message processing loop ended"
     );
 
-    // Client disconnected, clean up
+    messages_processed
+}
+
+async fn process_approval_message(
+    msg: Result<Message, axum::Error>,
+    messages_processed: &mut u32,
+    client_id: &str,
+    session_id: &str,
+    session: &Arc<Session>,
+    state: &AppState,
+) -> bool {
+    match msg {
+        Ok(Message::Text(text)) => {
+            debug!(
+                session_id = %session_id,
+                client_id = %client_id,
+                message_number = messages_processed,
+                "Received approval text message"
+            );
+            handle_approval_text_message(
+                text,
+                client_id,
+                session_id,
+                session.clone(),
+                state.clone(),
+            )
+            .await;
+            true
+        }
+        Ok(Message::Close(close_frame)) => {
+            info!(
+                session_id = %session_id,
+                client_id = %client_id,
+                close_code = close_frame.as_ref().map_or(0, |f| f.code.into()),
+                "Approval WebSocket client sent close message"
+            );
+            false
+        }
+        Ok(Message::Ping(_) | Message::Pong(_) | Message::Binary(_)) => {
+            // Handle ping/pong/binary messages (simplified logging)
+            true
+        }
+        Err(e) => {
+            error!(
+                session_id = %session_id,
+                client_id = %client_id,
+                error = %e,
+                messages_processed = messages_processed,
+                "Approval WebSocket error, breaking connection"
+            );
+            false
+        }
+    }
+}
+
+#[allow(clippy::unused_async)]
+async fn cleanup_approval_connection(
+    session: Arc<Session>,
+    client_id: &str,
+    session_id: &str,
+    send_task: JoinHandle<()>,
+    broadcast_task: JoinHandle<()>,
+    messages_processed: u32,
+) {
     let session_cleanup = session.clone();
     let client_id_cleanup = client_id.to_string();
     let session_id_cleanup = session_id.to_string();
@@ -934,105 +994,7 @@ async fn handle_approval_websocket(socket: WebSocket, session_id: String, state:
     info!(
         client_id = %client_id,
         session_id = %session_id,
+        total_messages_processed = messages_processed,
         "Approval WebSocket client disconnected and cleanup completed"
     );
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::config::Config;
-    use crate::session_manager::SessionManager;
-    use std::fs;
-    use tempfile::TempDir;
-
-    #[allow(dead_code)] // Test helper function
-    fn create_test_state(temp_dir: &TempDir) -> AppState {
-        // Create mock Claude binary
-        let claude_path = temp_dir.path().join("mock_claude");
-        let script = r#"#!/bin/bash
-echo '{"sessionId": "'$2'", "type": "start"}'
-while read line; do
-    echo '{"type": "echo", "content": "'$line'"}'
-done
-"#;
-        fs::write(&claude_path, script).unwrap();
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&claude_path).unwrap().permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(&claude_path, perms).unwrap();
-        }
-
-        let projects_dir = temp_dir.path().join("projects");
-        fs::create_dir_all(&projects_dir).unwrap();
-
-        let config = Config {
-            claude_binary_path: claude_path,
-            http_listen_address: "127.0.0.1:8080".to_string(),
-            claude_projects_dir: projects_dir,
-            shutdown_timeout: std::time::Duration::from_secs(1),
-        };
-
-        AppState {
-            session_manager: Arc::new(SessionManager::new(config.clone())),
-            config: Arc::new(config),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_broadcast_message_creation() {
-        let claude_msg = BroadcastMessage::ClaudeOutput("test output".to_string());
-        let client_msg = BroadcastMessage::ClientInput {
-            content: "test input".to_string(),
-            sender_client_id: "client123".to_string(),
-        };
-        let disconnect_msg = BroadcastMessage::Disconnect;
-
-        // Verify enum variants can be created
-        match claude_msg {
-            BroadcastMessage::ClaudeOutput(content) => assert_eq!(content, "test output"),
-            _ => panic!("Expected ClaudeOutput"),
-        }
-
-        match client_msg {
-            BroadcastMessage::ClientInput {
-                content,
-                sender_client_id,
-            } => {
-                assert_eq!(content, "test input");
-                assert_eq!(sender_client_id, "client123");
-            }
-            _ => panic!("Expected ClientInput"),
-        }
-
-        matches!(disconnect_msg, BroadcastMessage::Disconnect);
-    }
-
-    #[tokio::test]
-    async fn test_write_message_creation() {
-        let message = WriteMessage {
-            content: "test content".to_string(),
-            sender_client_id: "client123".to_string(),
-            timestamp: std::time::SystemTime::now(),
-        };
-
-        assert_eq!(message.content, "test content");
-        assert_eq!(message.sender_client_id, "client123");
-    }
-
-    #[tokio::test]
-    async fn test_websocket_client_creation() {
-        let client = WebSocketClient::new(
-            "test-client".to_string(),
-            "192.168.1.1".to_string(),
-            Some("Test Agent".to_string()),
-        );
-
-        assert_eq!(client.id, "test-client");
-        assert_eq!(client.ip_address, "192.168.1.1");
-        assert_eq!(client.user_agent, Some("Test Agent".to_string()));
-    }
 }

@@ -55,6 +55,16 @@ pub struct ClaudeProcess {
 }
 
 impl ClaudeProcess {
+    /// Spawns a new Claude process with the given configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The Claude binary cannot be found or executed
+    /// - Process communication channels cannot be established  
+    /// - Initial process setup or communication fails
+    /// - Working directory is invalid or inaccessible
+    #[allow(clippy::too_many_lines)]
     #[instrument(skip(config), fields(
         session_id = %session_id,
         working_dir = %working_dir.display(),
@@ -992,9 +1002,9 @@ done
         let messages_with_empty_lines = vec![
             create_file_command,
             r#"{"sessionId": "test-session", "type": "start"}"#.to_string(),
-            "".to_string(), // Empty line
+            String::new(), // Empty line
             r#"{"role": "user", "content": "Second message"}"#.to_string(),
-            "".to_string(), // Empty line
+            String::new(), // Empty line
             r#"{"role": "user", "content": "Third message"}"#.to_string(),
         ];
 

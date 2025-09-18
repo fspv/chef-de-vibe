@@ -37,7 +37,7 @@ fn create_session_request_with_file(
     projects_dir: &std::path::Path,
 ) -> CreateSessionRequest {
     // Create session file control command
-    let session_file_path = projects_dir.join(format!("{}.jsonl", session_id));
+    let session_file_path = projects_dir.join(format!("{session_id}.jsonl"));
     let session_content = format!(
         r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#,
         session_id,
@@ -113,8 +113,8 @@ impl TestServer {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let port = addr.port();
-        let base_url = format!("http://127.0.0.1:{}", port);
-        let ws_url = format!("ws://127.0.0.1:{}", port);
+        let base_url = format!("http://127.0.0.1:{port}");
+        let ws_url = format!("ws://127.0.0.1:{port}");
 
         // Spawn server
         let server_handle = tokio::spawn(async move {
@@ -216,8 +216,7 @@ async fn test_websocket_connection() {
             // Should receive Claude's response to our input
             assert!(
                 text.contains("Mock Claude received") || text.contains("assistant"),
-                "Should receive Claude response, got: {}",
-                text
+                "Should receive Claude response, got: {text}"
             );
         }
     } else {
@@ -237,24 +236,18 @@ async fn test_websocket_connection_to_non_existent_session() {
     let connection_result = timeout(Duration::from_secs(2), connect_async(url)).await;
 
     // Connection should fail immediately, or connect and then be closed quickly
-    match connection_result {
-        Ok(Ok((mut ws, _))) => {
-            // If connection succeeds, it should be closed quickly by the server
-            let close_result = timeout(Duration::from_secs(1), ws.next()).await;
-            // Should either timeout or get a close message
-            match close_result {
-                Ok(Some(Ok(msg))) => {
-                    // Should be a close message
-                    assert!(matches!(msg, Message::Close(_)));
-                }
-                _ => {
-                    // Connection closed or timed out - both are acceptable
-                }
-            }
+    if let Ok(Ok((mut ws, _))) = connection_result {
+        // If connection succeeds, it should be closed quickly by the server
+        let close_result = timeout(Duration::from_secs(1), ws.next()).await;
+        // Should either timeout or get a close message
+        if let Ok(Some(Ok(msg))) = close_result {
+            // Should be a close message
+            assert!(matches!(msg, Message::Close(_)));
+        } else {
+            // Connection closed or timed out - both are acceptable
         }
-        _ => {
-            // Connection failed outright, which is also acceptable
-        }
+    } else {
+        // Connection failed outright, which is also acceptable
     }
 }
 
@@ -389,7 +382,7 @@ async fn test_websocket_message_broadcasting() {
     // Both clients should receive Claude's response (if any)
     let claude_response_result = timeout(Duration::from_secs(2), ws1.next()).await;
     if let Ok(Some(Ok(Message::Text(text)))) = claude_response_result {
-        println!("Client 1 received: {}", text);
+        println!("Client 1 received: {text}");
         // Could be the echoed input (which shouldn't happen per README) or Claude's response
         // Accept any response for now to test basic WebSocket functionality
         assert!(!text.is_empty());
@@ -397,7 +390,7 @@ async fn test_websocket_message_broadcasting() {
         // Client 2 should also receive some response
         let client2_response = timeout(Duration::from_secs(2), ws2.next()).await;
         if let Ok(Some(Ok(Message::Text(text2)))) = client2_response {
-            println!("Client 2 received: {}", text2);
+            println!("Client 2 received: {text2}");
             assert!(!text2.is_empty());
         }
     } else {
@@ -485,8 +478,7 @@ async fn test_websocket_multiline_json_message_compaction() {
 
     assert!(
         received_response,
-        "Should have received Claude's response to compacted multiline WebSocket message. All responses: {:?}",
-        all_responses
+        "Should have received Claude's response to compacted multiline WebSocket message. All responses: {all_responses:?}"
     );
 
     let _ = ws.close(None).await;
@@ -645,8 +637,7 @@ async fn test_websocket_client_input_echoing_to_other_clients() {
             // Should contain the original message from client 1
             assert!(
                 text.contains("Hello from client 1") || text.contains("Mock Claude received"),
-                "Client 2 should receive client 1's input. Received: {}",
-                text
+                "Client 2 should receive client 1's input. Received: {text}"
             );
         }
         _ => {
@@ -662,8 +653,7 @@ async fn test_websocket_client_input_echoing_to_other_clients() {
         Ok(Some(Ok(Message::Text(text)))) => {
             assert!(
                 text.contains("Hello from client 1") || text.contains("Mock Claude received"),
-                "Client 3 should receive client 1's input. Received: {}",
-                text
+                "Client 3 should receive client 1's input. Received: {text}"
             );
         }
         _ => {
@@ -673,18 +663,15 @@ async fn test_websocket_client_input_echoing_to_other_clients() {
 
     // Client 1 should NOT receive its own message back (per README specification)
     let client1_result = timeout(Duration::from_millis(500), ws1.next()).await;
-    match client1_result {
-        Ok(Some(Ok(Message::Text(text)))) => {
-            // If client 1 receives any message, it should be from Claude, not an echo of its own input
-            if text.contains("Hello from client 1") && !text.contains("Mock Claude received") {
-                panic!("Client 1 should NOT receive an echo of its own input message");
-            }
-            // Claude response (containing "Mock Claude received") is acceptable
-        }
-        Err(_) => {
-            // Timeout is expected - client 1 should not receive echo of its own message
-        }
-        _ => {}
+    if let Ok(Some(Ok(Message::Text(text)))) = client1_result {
+        // If client 1 receives any message, it should be from Claude, not an echo of its own input
+        assert!(
+            !text.contains("Hello from client 1") || text.contains("Mock Claude received"),
+            "Client 1 should NOT receive an echo of its own input message"
+        );
+        // Claude response (containing "Mock Claude received") is acceptable
+    } else {
+        // Timeout or other outcomes are expected - client 1 should not receive echo of its own message
     }
 
     // Clean up
@@ -765,8 +752,7 @@ async fn test_claude_output_broadcasts_to_all_clients() {
         Ok(Some(Ok(Message::Text(text)))) => {
             assert!(
                 text.contains("Mock Claude received") || text.contains("assistant"),
-                "Client 1 should receive Claude's response. Received: {}",
-                text
+                "Client 1 should receive Claude's response. Received: {text}"
             );
         }
         _ => {
@@ -778,8 +764,7 @@ async fn test_claude_output_broadcasts_to_all_clients() {
         Ok(Some(Ok(Message::Text(text)))) => {
             assert!(
                 text.contains("Mock Claude received") || text.contains("assistant"),
-                "Client 2 should receive Claude's response. Received: {}",
-                text
+                "Client 2 should receive Claude's response. Received: {text}"
             );
         }
         _ => {
@@ -806,30 +791,19 @@ async fn test_websocket_connection_refused_for_nonexistent_session() {
 
     let connection_result = timeout(Duration::from_secs(2), connect_async(url)).await;
 
-    match connection_result {
-        Ok(Ok((mut ws, _))) => {
-            // If connection succeeds initially, it should be closed immediately by the server
-            let close_result = timeout(Duration::from_secs(1), ws.next()).await;
-            match close_result {
-                Ok(Some(Ok(Message::Close(_)))) => {
-                    // Connection was closed by server - this is correct
-                }
-                Ok(None) => {
-                    // Connection was closed - this is also correct
-                }
-                _ => {
-                    panic!(
-                        "WebSocket connection to non-existent session should be closed immediately"
-                    );
-                }
+    if let Ok(Ok((mut ws, _))) = connection_result {
+        // If connection succeeds initially, it should be closed immediately by the server
+        let close_result = timeout(Duration::from_secs(1), ws.next()).await;
+        match close_result {
+            Ok(Some(Ok(Message::Close(_))) | None) => {
+                // Connection was closed by server or stream ended - this is correct
+            }
+            _ => {
+                panic!("WebSocket connection to non-existent session should be closed immediately");
             }
         }
-        Ok(Err(_)) => {
-            // Connection failed - this is also acceptable
-        }
-        Err(_) => {
-            // Connection timed out - this is also acceptable
-        }
+    } else {
+        // Connection failed or timed out - this is acceptable
     }
 }
 
@@ -880,16 +854,10 @@ async fn test_session_with_no_connected_clients_discards_claude_output() {
 
     // New client should not receive any previous messages
     let result = timeout(Duration::from_millis(500), ws2.next()).await;
-    match result {
-        Err(_) => {
-            // Timeout is expected - no buffered messages should be received
-        }
-        Ok(Some(Ok(Message::Text(_)))) => {
-            panic!("New client should not receive any buffered messages when connecting to session with no previous clients");
-        }
-        _ => {
-            // Other outcomes (like connection close) are acceptable
-        }
+    if let Ok(Some(Ok(Message::Text(_)))) = result {
+        panic!("New client should not receive any buffered messages when connecting to session with no previous clients");
+    } else {
+        // Timeout or other outcomes are expected - no buffered messages
     }
 
     let _ = ws2.close(None).await;
@@ -941,13 +909,10 @@ async fn test_websocket_invalid_json_handling() {
 
     // Should be able to receive responses
     let response_result = timeout(Duration::from_secs(2), ws.next()).await;
-    match response_result {
-        Ok(Some(Ok(Message::Text(_)))) => {
-            // Received some response - connection is working
-        }
-        _ => {
-            // No response is also acceptable for this test - main point is connection stayed open
-        }
+    if let Ok(Some(Ok(Message::Text(_)))) = response_result {
+        // Received some response - connection is working
+    } else {
+        // No response is also acceptable for this test - main point is connection stayed open
     }
 
     let _ = ws.close(None).await;
@@ -1075,8 +1040,7 @@ async fn test_multiple_client_message_broadcasting_sequence() {
         c1_messages
             .iter()
             .any(|msg| msg.contains("Message from client 2")),
-        "Client 1 should receive client 2's message. Received: {:?}",
-        c1_messages
+        "Client 1 should receive client 2's message. Received: {c1_messages:?}"
     );
 
     // Client 3 should have received client 2's message
@@ -1084,8 +1048,7 @@ async fn test_multiple_client_message_broadcasting_sequence() {
         c3_messages
             .iter()
             .any(|msg| msg.contains("Message from client 2")),
-        "Client 3 should receive client 2's message. Received: {:?}",
-        c3_messages
+        "Client 3 should receive client 2's message. Received: {c3_messages:?}"
     );
 
     // Clean up

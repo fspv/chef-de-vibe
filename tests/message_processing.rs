@@ -25,18 +25,17 @@ fn create_test_session_file(
     session_id: &str,
     cwd: &str,
 ) {
-    let project_dir = projects_dir.join(project_name);
-    fs::create_dir_all(&project_dir).unwrap();
+    let project_path = projects_dir.join(project_name);
+    fs::create_dir_all(&project_path).unwrap();
 
-    let session_file = project_dir.join(format!("{}.jsonl", session_id));
+    let session_file = project_path.join(format!("{session_id}.jsonl"));
     let content = format!(
-        r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}
+        r#"{{"sessionId": "{session_id}", "cwd": "{cwd}", "type": "start"}}
 {{"type": "user", "message": {{"role": "user", "content": "Hello Claude"}}}}
 {{"type": "assistant", "message": {{"role": "assistant", "content": [{{"type": "text", "text": "Hello! How can I help you today?"}}]}}}}
 {{"type": "user", "message": {{"role": "user", "content": "What's 2+2?"}}}}
 {{"type": "assistant", "message": {{"role": "assistant", "content": [{{"type": "text", "text": "2 + 2 equals 4."}}]}}}}
-"#,
-        session_id, cwd
+"#
     );
 
     fs::write(session_file, content).unwrap();
@@ -108,8 +107,8 @@ impl TestServer {
         let addr = listener.local_addr().unwrap();
         let port = addr.port();
 
-        let base_url = format!("http://127.0.0.1:{}", port);
-        let ws_url = format!("ws://127.0.0.1:{}", port);
+        let base_url = format!("http://127.0.0.1:{port}");
+        let ws_url = format!("ws://127.0.0.1:{port}");
 
         // Spawn server
         let server_handle = tokio::spawn(async move {
@@ -181,7 +180,7 @@ async fn test_malformed_json_requests() {
         assert_eq!(body["code"], "INVALID_REQUEST");
     } else {
         // Some malformed requests might return non-JSON error responses
-        println!("Response body: {}", body_text);
+        println!("Response body: {body_text}");
         // For malformed JSON, axum might return different error formats
         // Just check that we got a 400 status, which indicates the error was caught
         assert!(!body_text.is_empty()); // Should have some error content
@@ -285,7 +284,7 @@ async fn test_bootstrap_messages_triggers_claude_response() {
     let session_file_path = server
         .mock
         .projects_dir()
-        .join(format!("{}.jsonl", session_id));
+        .join(format!("{session_id}.jsonl"));
     let session_start_content = format!(
         r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#,
         session_id,
@@ -393,7 +392,7 @@ async fn test_resume_session_with_bootstrap_messages() {
         .mock
         .projects_dir
         .join("resume_bootstrap_messages_work")
-        .join(format!("{}.jsonl", new_session_id));
+        .join(format!("{new_session_id}.jsonl"));
 
     // For resume mode, the first line output must be JSON with a session_id field
     // The mock Claude will echo this JSON, and the resume code will parse it to extract session_id
@@ -425,8 +424,7 @@ async fn test_resume_session_with_bootstrap_messages() {
     if status != 200 {
         let error_body = response.text().await.unwrap();
         panic!(
-            "Resume session with bootstrap_messages failed with status: {}. Error body: {}",
-            status, error_body
+            "Resume session with bootstrap_messages failed with status: {status}. Error body: {error_body}"
         );
     }
 
@@ -489,7 +487,7 @@ async fn test_multiline_bootstrap_messages_compaction() {
     let session_file_path = server
         .mock
         .projects_dir()
-        .join(format!("{}.jsonl", session_id));
+        .join(format!("{session_id}.jsonl"));
     let session_start_content = format!(
         r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#,
         session_id,
@@ -617,7 +615,7 @@ async fn test_message_queue_json_compaction() {
     let session_file_path = server
         .mock
         .projects_dir()
-        .join(format!("{}.jsonl", session_id));
+        .join(format!("{session_id}.jsonl"));
     let session_start_content = format!(
         r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#,
         session_id,
@@ -691,7 +689,7 @@ async fn test_message_queue_json_compaction() {
 
     // Send messages rapidly to test queue handling
     for msg in &messages {
-        ws.send(Message::Text(msg.to_string())).await.unwrap();
+        ws.send(Message::Text((*msg).to_string())).await.unwrap();
         tokio::time::sleep(Duration::from_millis(10)).await; // Small delay
     }
 
@@ -738,7 +736,7 @@ async fn test_mixed_json_formats_consistency() {
     let session_file_path = server
         .mock
         .projects_dir()
-        .join(format!("{}.jsonl", session_id));
+        .join(format!("{session_id}.jsonl"));
     let session_start_content = format!(
         r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#,
         session_id,
