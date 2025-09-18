@@ -259,7 +259,7 @@ async fn test_approval_websocket_basic_connection() {
     let escaped_content = session_start_content.replace('"', r#"\""#);
 
     // Create the control command to write the session file
-    let first_message = vec![format!(
+    let bootstrap_messages = vec![format!(
         r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
         session_file_path.display(),
         escaped_content
@@ -269,7 +269,7 @@ async fn test_approval_websocket_basic_connection() {
         session_id: session_id.clone(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message,
+        bootstrap_messages,
     };
 
     let create_response = client
@@ -418,7 +418,7 @@ async fn test_single_tool_approval_allow_flow() {
     let escaped_content = session_start_content.replace('"', r#"\""#);
 
     // Create the control command to write the session file
-    let first_message = vec![format!(
+    let bootstrap_messages = vec![format!(
         r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
         session_file_path.display(),
         escaped_content
@@ -428,7 +428,7 @@ async fn test_single_tool_approval_allow_flow() {
         session_id: session_id.clone(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message,
+        bootstrap_messages,
     };
 
     let create_response = client
@@ -449,7 +449,7 @@ async fn test_single_tool_approval_allow_flow() {
     let url = tokio_tungstenite::tungstenite::http::Uri::try_from(ws_url).unwrap();
     let (mut main_ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
 
-    // Consume any initial messages (session start, first_message response, etc.)
+    // Consume any initial messages (session start, bootstrap_messages response, etc.)
     tokio::time::sleep(Duration::from_millis(200)).await;
     while let Ok(Some(_)) = timeout(Duration::from_millis(100), main_ws.next()).await {
         // Drain all pending messages
@@ -581,7 +581,7 @@ async fn test_single_tool_approval_deny_flow() {
     let escaped_content = session_start_content.replace('"', r#"\""#);
 
     // Create the control command to write the session file
-    let first_message = vec![format!(
+    let bootstrap_messages = vec![format!(
         r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
         session_file_path.display(),
         escaped_content
@@ -591,7 +591,7 @@ async fn test_single_tool_approval_deny_flow() {
         session_id: session_id.clone(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message,
+        bootstrap_messages,
     };
 
     let create_response = client
@@ -612,7 +612,7 @@ async fn test_single_tool_approval_deny_flow() {
     let url = tokio_tungstenite::tungstenite::http::Uri::try_from(ws_url).unwrap();
     let (mut main_ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
 
-    // Consume any initial messages (session start, first_message response, etc.)
+    // Consume any initial messages (session start, bootstrap_messages response, etc.)
     tokio::time::sleep(Duration::from_millis(200)).await;
     while let Ok(Some(_)) = timeout(Duration::from_millis(100), main_ws.next()).await {
         // Drain all pending messages
@@ -799,7 +799,7 @@ async fn test_multiple_pending_approvals_accumulation() {
     let escaped_content = session_start_content.replace('"', r#"\""#);
 
     // Create the control command to write the session file
-    let first_message = vec![format!(
+    let bootstrap_messages = vec![format!(
         r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
         session_file_path.display(),
         escaped_content
@@ -809,7 +809,7 @@ async fn test_multiple_pending_approvals_accumulation() {
         session_id: session_id.clone(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message,
+        bootstrap_messages,
     };
 
     let create_response = client
@@ -830,7 +830,7 @@ async fn test_multiple_pending_approvals_accumulation() {
     let url = tokio_tungstenite::tungstenite::http::Uri::try_from(ws_url).unwrap();
     let (mut main_ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
 
-    // Consume any initial messages (session start, first_message response, etc.)
+    // Consume any initial messages (session start, bootstrap_messages response, etc.)
     tokio::time::sleep(Duration::from_millis(200)).await;
     while let Ok(Some(_)) = timeout(Duration::from_millis(100), main_ws.next()).await {
         // Drain all pending messages
@@ -1034,7 +1034,7 @@ async fn test_multiple_approval_clients_broadcast() {
     let escaped_content = session_start_content.replace('"', r#"\""#);
 
     // Create the control command to write the session file
-    let first_message = vec![format!(
+    let bootstrap_messages = vec![format!(
         r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
         session_file_path.display(),
         escaped_content
@@ -1044,7 +1044,7 @@ async fn test_multiple_approval_clients_broadcast() {
         session_id: session_id.clone(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message,
+        bootstrap_messages,
     };
 
     let create_response = client

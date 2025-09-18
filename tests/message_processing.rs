@@ -70,7 +70,6 @@ impl TestServer {
         Self::new_internal(mock).await
     }
 
-
     async fn new_internal(mock: MockClaude) -> Self {
         let config = Config::from_env().expect("Failed to load config");
         let session_manager = Arc::new(SessionManager::new(config.clone()));
@@ -215,19 +214,23 @@ async fn test_malformed_json_requests() {
 
 #[tokio::test]
 #[serial]
-async fn test_create_session_empty_first_message_validation() {
+async fn test_create_session_empty_bootstrap_messages_validation() {
     let server = TestServer::new().await;
     let client = Client::new();
 
     // Create working directory
-    let working_dir = server.mock.temp_dir.path().join("empty_first_message_work");
+    let working_dir = server
+        .mock
+        .temp_dir
+        .path()
+        .join("empty_bootstrap_messages_work");
     fs::create_dir_all(&working_dir).unwrap();
 
     let request = CreateSessionRequest {
-        session_id: "empty-first-message-session".to_string(),
+        session_id: "empty-bootstrap-messages-session".to_string(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: vec![], // Empty first_message should be rejected
+        bootstrap_messages: vec![], // Empty bootstrap_messages should be rejected
     };
 
     let response = client
@@ -241,7 +244,7 @@ async fn test_create_session_empty_first_message_validation() {
     assert_eq!(
         response.status(),
         400,
-        "Empty first_message should be rejected with 400 status"
+        "Empty bootstrap_messages should be rejected with 400 status"
     );
 
     let error_body: serde_json::Value = response.json().await.unwrap();
@@ -249,15 +252,15 @@ async fn test_create_session_empty_first_message_validation() {
         error_body["error"]
             .as_str()
             .unwrap()
-            .contains("first_message cannot be empty"),
-        "Error message should mention first_message cannot be empty. Got: {}",
+            .contains("bootstrap_messages cannot be empty"),
+        "Error message should mention bootstrap_messages cannot be empty. Got: {}",
         error_body["error"]
     );
 }
 
 #[tokio::test]
 #[serial]
-async fn test_first_message_triggers_claude_response() {
+async fn test_bootstrap_messages_triggers_claude_response() {
     let server = TestServer::new().await;
     let client = Client::new();
 
@@ -266,7 +269,7 @@ async fn test_first_message_triggers_claude_response() {
         .mock
         .temp_dir
         .path()
-        .join("first_message_trigger_work");
+        .join("bootstrap_messages_trigger_work");
     fs::create_dir_all(&working_dir).unwrap();
 
     let unique_content = format!(
@@ -276,9 +279,9 @@ async fn test_first_message_triggers_claude_response() {
             .unwrap()
             .as_millis()
     );
-    let session_id = generate_unique_session_id("first-message-trigger");
+    let session_id = generate_unique_session_id("bootstrap-messages-trigger");
 
-    // First message needs to create the session file using the mock's write_file control command
+    // Bootstrap messages need to create the session file using the mock's write_file control command
     let session_file_path = server
         .mock
         .projects_dir()
@@ -293,7 +296,7 @@ async fn test_first_message_triggers_claude_response() {
     let escaped_content = session_start_content.replace('"', r#"\""#);
 
     // Create the control command to write the session file, then add the user message
-    let first_message = vec![
+    let bootstrap_messages = vec![
         format!(
             r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
             session_file_path.display(),
@@ -306,7 +309,7 @@ async fn test_first_message_triggers_claude_response() {
         session_id: session_id.clone(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message,
+        bootstrap_messages,
     };
 
     let create_response = client
@@ -318,17 +321,17 @@ async fn test_first_message_triggers_claude_response() {
 
     let session_data: CreateSessionResponse = create_response.json().await.unwrap();
 
-    // Connect WebSocket to verify Claude responds to first_message
+    // Connect WebSocket to verify Claude responds to bootstrap_messages
     let ws_url = format!("{}{}", server.ws_url, session_data.websocket_url);
     let (mut ws, _) = connect_async(Url::parse(&ws_url).unwrap()).await.unwrap();
 
-    // Give some time for session to be ready and first_message to be processed
+    // Give some time for session to be ready and bootstrap_messages to be processed
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    // Try to receive Claude's response to first_message, but don't fail if we don't get it
+    // Try to receive Claude's response to bootstrap_messages, but don't fail if we don't get it
     // (the message may have been discarded if client connected after Claude processed it)
     for _ in 0..5 {
-        // Try up to 5 messages to find the first_message response
+        // Try up to 5 messages to find the bootstrap_messages response
         if let Ok(Some(Ok(Message::Text(text)))) = timeout(Duration::from_secs(3), ws.next()).await
         {
             if text.contains(&unique_content) || text.contains("Mock Claude received") {
@@ -339,7 +342,7 @@ async fn test_first_message_triggers_claude_response() {
         }
     }
 
-    // Note: We don't assert that we received the first_message response because
+    // Note: We don't assert that we received the bootstrap_messages response because
     // if the client connects after Claude has already processed and discarded the message,
     // we won't receive it. This is expected behavior per the WebSocket message handling policy.
 
@@ -348,7 +351,7 @@ async fn test_first_message_triggers_claude_response() {
 
 #[tokio::test]
 #[serial]
-async fn test_resume_session_with_first_message() {
+async fn test_resume_session_with_bootstrap_messages() {
     let server = TestServer::new().await;
     let client = Client::new();
 
@@ -357,14 +360,14 @@ async fn test_resume_session_with_first_message() {
         .mock
         .temp_dir
         .path()
-        .join("resume_first_message_work");
+        .join("resume_bootstrap_messages_work");
     fs::create_dir_all(&working_dir).unwrap();
 
     // Create a test session file directly on disk to simulate an existing session
     // Use the same helper function as other working tests
     create_test_session_file(
         &server.mock.projects_dir,
-        "resume_first_message_work",
+        "resume_bootstrap_messages_work",
         "old-resume-session",
         working_dir.to_str().unwrap(),
     );
@@ -389,12 +392,12 @@ async fn test_resume_session_with_first_message() {
     let new_session_file_path = server
         .mock
         .projects_dir
-        .join("resume_first_message_work")
+        .join("resume_bootstrap_messages_work")
         .join(format!("{}.jsonl", new_session_id));
 
     // For resume mode, the first line output must be JSON with a session_id field
     // The mock Claude will echo this JSON, and the resume code will parse it to extract session_id
-    let first_message = vec![
+    let bootstrap_messages = vec![
         format!(r#"{{"session_id": "{}"}}"#, new_session_id),
         format!(
             r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
@@ -408,7 +411,7 @@ async fn test_resume_session_with_first_message() {
         session_id: "old-resume-session".to_string(),
         working_dir: working_dir.clone(),
         resume: true,
-        first_message,
+        bootstrap_messages,
     };
 
     let response = client
@@ -422,7 +425,7 @@ async fn test_resume_session_with_first_message() {
     if status != 200 {
         let error_body = response.text().await.unwrap();
         panic!(
-            "Resume session with first_message failed with status: {}. Error body: {}",
+            "Resume session with bootstrap_messages failed with status: {}. Error body: {}",
             status, error_body
         );
     }
@@ -430,7 +433,7 @@ async fn test_resume_session_with_first_message() {
     assert_eq!(
         response.status(),
         200,
-        "Resume session with first_message should succeed"
+        "Resume session with bootstrap_messages should succeed"
     );
 
     let create_response: CreateSessionResponse = response.json().await.unwrap();
@@ -446,14 +449,14 @@ async fn test_resume_session_with_first_message() {
         create_response.session_id
     );
 
-    // Connect WebSocket to verify Claude responds to first_message during resume
+    // Connect WebSocket to verify Claude responds to bootstrap_messages during resume
     let ws_url = format!("{}{}", server.ws_url, create_response.websocket_url);
     let (mut ws, _) = connect_async(Url::parse(&ws_url).unwrap()).await.unwrap();
 
-    // Try to receive Claude's response to the first_message, but don't fail if we don't get it
+    // Try to receive Claude's response to the bootstrap_messages, but don't fail if we don't get it
     // (the message may have been discarded if client connected after Claude processed it)
     for _ in 0..3 {
-        // Try up to 3 messages to find the first_message response
+        // Try up to 3 messages to find the bootstrap_messages response
         if let Ok(Some(Ok(Message::Text(text)))) = timeout(Duration::from_secs(2), ws.next()).await
         {
             if text.contains(&resume_content) || text.contains("Mock Claude received") {
@@ -463,7 +466,7 @@ async fn test_resume_session_with_first_message() {
         }
     }
 
-    // Note: We don't assert that we received the first_message response because
+    // Note: We don't assert that we received the bootstrap_messages response because
     // if the client connects after Claude has already processed and discarded the message,
     // we won't receive it. This is expected behavior per the WebSocket message handling policy.
 
@@ -472,7 +475,7 @@ async fn test_resume_session_with_first_message() {
 
 #[tokio::test]
 #[serial]
-async fn test_multiline_first_message_compaction() {
+async fn test_multiline_bootstrap_messages_compaction() {
     let server = TestServer::new().await;
     let client = Client::new();
 
@@ -482,7 +485,7 @@ async fn test_multiline_first_message_compaction() {
 
     let session_id = "multiline-message-session".to_string();
 
-    // First message needs to create the session file using the mock's write_file control command
+    // Bootstrap messages need to create the session file using the mock's write_file control command
     let session_file_path = server
         .mock
         .projects_dir()
@@ -496,7 +499,7 @@ async fn test_multiline_first_message_compaction() {
     // Escape the content for embedding in JSON
     let escaped_content = session_start_content.replace('"', r#"\""#);
 
-    // Use a multiline JSON first_message (simulating what frontend might send)
+    // Use a multiline JSON bootstrap_messages (simulating what frontend might send)
     let multiline_json = r#"{
   "role": "user",
   "content": "This is a multiline JSON message",
@@ -507,7 +510,7 @@ async fn test_multiline_first_message_compaction() {
 }"#;
 
     // Create the control command to write the session file, then add the multiline user message
-    let first_message = vec![
+    let bootstrap_messages = vec![
         format!(
             r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
             session_file_path.display(),
@@ -520,7 +523,7 @@ async fn test_multiline_first_message_compaction() {
         session_id,
         working_dir: working_dir.clone(),
         resume: false,
-        first_message,
+        bootstrap_messages,
     };
 
     let response = client
@@ -534,20 +537,20 @@ async fn test_multiline_first_message_compaction() {
     assert_eq!(
         response.status(),
         200,
-        "Multiline first_message should be accepted and compacted"
+        "Multiline bootstrap_messages should be accepted and compacted"
     );
 
     let create_response: CreateSessionResponse = response.json().await.unwrap();
     assert_eq!(create_response.session_id, "multiline-message-session");
 
-    // Connect WebSocket to verify Claude responds to the compacted first_message
+    // Connect WebSocket to verify Claude responds to the compacted bootstrap_messages
     let ws_url = format!("{}{}", server.ws_url, create_response.websocket_url);
     let (mut ws, _) = connect_async(Url::parse(&ws_url).unwrap()).await.unwrap();
 
     // Give connections time to stabilize
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    // Try to receive any messages, but don't assert that we get the first_message response
+    // Try to receive any messages, but don't assert that we get the bootstrap_messages response
     // (the message may have been discarded if client connected after Claude processed it)
     for _ in 0..3 {
         if let Ok(Some(Ok(Message::Text(text)))) = timeout(Duration::from_secs(2), ws.next()).await
@@ -559,7 +562,7 @@ async fn test_multiline_first_message_compaction() {
         }
     }
 
-    // Note: We don't assert that we received the first_message response because
+    // Note: We don't assert that we received the bootstrap_messages response because
     // if the client connects after Claude has already processed and discarded the message,
     // we won't receive it. This is expected behavior per the WebSocket message handling policy.
 
@@ -568,7 +571,7 @@ async fn test_multiline_first_message_compaction() {
 
 #[tokio::test]
 #[serial]
-async fn test_invalid_json_first_message_rejection() {
+async fn test_invalid_json_bootstrap_messages_rejection() {
     let server = TestServer::new().await;
     let client = Client::new();
 
@@ -580,7 +583,7 @@ async fn test_invalid_json_first_message_rejection() {
         session_id: "invalid-json-session".to_string(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: vec!["{ invalid json }".to_string()], // Invalid JSON
+        bootstrap_messages: vec!["{ invalid json }".to_string()], // Invalid JSON
     };
 
     let response = client
@@ -594,7 +597,7 @@ async fn test_invalid_json_first_message_rejection() {
     assert_eq!(
         response.status(),
         500,
-        "Invalid JSON first_message should cause session creation to fail"
+        "Invalid JSON bootstrap_messages should cause session creation to fail"
     );
 }
 
@@ -610,7 +613,7 @@ async fn test_message_queue_json_compaction() {
 
     let session_id = "queue-compaction-session".to_string();
 
-    // First message needs to create the session file using the mock's write_file control command
+    // Bootstrap messages need to create the session file using the mock's write_file control command
     let session_file_path = server
         .mock
         .projects_dir()
@@ -625,7 +628,7 @@ async fn test_message_queue_json_compaction() {
     let escaped_content = session_start_content.replace('"', r#"\""#);
 
     // Create the control command to write the session file, then add the user message
-    let first_message = vec![
+    let bootstrap_messages = vec![
         format!(
             r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
             session_file_path.display(),
@@ -638,7 +641,7 @@ async fn test_message_queue_json_compaction() {
         session_id,
         working_dir: working_dir.clone(),
         resume: false,
-        first_message,
+        bootstrap_messages,
     };
 
     let create_response = client
@@ -731,7 +734,7 @@ async fn test_mixed_json_formats_consistency() {
 
     let session_id = "mixed-formats-session".to_string();
 
-    // First message needs to create the session file using the mock's write_file control command
+    // Bootstrap messages need to create the session file using the mock's write_file control command
     let session_file_path = server
         .mock
         .projects_dir()
@@ -745,28 +748,28 @@ async fn test_mixed_json_formats_consistency() {
     // Escape the content for embedding in JSON
     let escaped_content = session_start_content.replace('"', r#"\""#);
 
-    // Use multiline first_message
-    let multiline_first_message = r#"{
+    // Use multiline bootstrap_messages
+    let multiline_bootstrap_message = r#"{
   "role": "user",
   "content": "Multiline first message",
   "type": "initial"
 }"#;
 
     // Create the control command to write the session file, then add the multiline user message
-    let first_message = vec![
+    let bootstrap_messages = vec![
         format!(
             r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
             session_file_path.display(),
             escaped_content
         ),
-        multiline_first_message.to_string(),
+        multiline_bootstrap_message.to_string(),
     ];
 
     let request = CreateSessionRequest {
         session_id,
         working_dir: working_dir.clone(),
         resume: false,
-        first_message,
+        bootstrap_messages,
     };
 
     let create_response = client

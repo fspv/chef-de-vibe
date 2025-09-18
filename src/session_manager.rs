@@ -94,7 +94,9 @@ impl SessionManager {
 
         let check_file_ready = || async {
             // Search for the session file in all subdirectories
-            let session_file_path = if let Some(path) = self.find_session_file(&filename) { path } else {
+            let session_file_path = if let Some(path) = self.find_session_file(&filename) {
+                path
+            } else {
                 debug!(
                     session_id = %session_id,
                     filename = %filename,
@@ -145,7 +147,8 @@ impl SessionManager {
                 interval.tick().await;
             }
         })
-        .await {
+        .await
+        {
             info!(
                 session_id = %session_id,
                 filename = %filename,
@@ -187,13 +190,13 @@ impl SessionManager {
     ///
     /// Returns an error if the working directory is invalid, if the Claude process
     /// fails to spawn, or if the session creation fails.
-    #[instrument(skip(self), fields(session_id = %session_id, working_dir = %working_dir.display(), resume = resume, first_message_len = first_message.len()))]
+    #[instrument(skip(self), fields(session_id = %session_id, working_dir = %working_dir.display(), resume = resume, bootstrap_messages_len = bootstrap_messages.len()))]
     pub async fn create_session(
         &self,
         session_id: String,
         working_dir: &Path,
         resume: bool,
-        first_message: Vec<String>,
+        bootstrap_messages: Vec<String>,
     ) -> OrchestratorResult<String> {
         info!(
             session_id = %session_id,
@@ -295,7 +298,7 @@ impl SessionManager {
                 &worker_session_id,
                 &working_dir,
                 resume,
-                first_message.clone(),
+                bootstrap_messages.clone(),
                 session_clone.clone(),
             )
             .await
@@ -467,13 +470,13 @@ impl SessionManager {
         }
     }
 
-    #[instrument(skip(config, session), fields(session_id = %session_id, working_dir = %working_dir.display(), resume = resume, first_message_len = first_message.len()))]
+    #[instrument(skip(config, session), fields(session_id = %session_id, working_dir = %working_dir.display(), resume = resume, bootstrap_messages_len = bootstrap_messages.len()))]
     async fn spawn_claude_process(
         config: &Config,
         session_id: &str,
         working_dir: &Path,
         resume: bool,
-        first_message: Vec<String>,
+        bootstrap_messages: Vec<String>,
         session: Arc<Session>,
     ) -> OrchestratorResult<String> {
         info!(
@@ -485,29 +488,34 @@ impl SessionManager {
         );
 
         // Spawn Claude process
-        let (process, actual_session_id) =
-            match ClaudeProcess::spawn(config, session_id, working_dir, resume, &first_message)
-                .await
-            {
-                Ok((proc, id)) => {
-                    info!(
-                        requested_session_id = %session_id,
-                        actual_session_id = %id,
-                        "Claude process spawned successfully"
-                    );
-                    (proc, id)
-                }
-                Err(e) => {
-                    error!(
-                        session_id = %session_id,
-                        working_dir = %working_dir.display(),
-                        claude_binary = %config.claude_binary_path.display(),
-                        error = %e,
-                        "Failed to spawn Claude process"
-                    );
-                    return Err(e);
-                }
-            };
+        let (process, actual_session_id) = match ClaudeProcess::spawn(
+            config,
+            session_id,
+            working_dir,
+            resume,
+            &bootstrap_messages,
+        )
+        .await
+        {
+            Ok((proc, id)) => {
+                info!(
+                    requested_session_id = %session_id,
+                    actual_session_id = %id,
+                    "Claude process spawned successfully"
+                );
+                (proc, id)
+            }
+            Err(e) => {
+                error!(
+                    session_id = %session_id,
+                    working_dir = %working_dir.display(),
+                    claude_binary = %config.claude_binary_path.display(),
+                    error = %e,
+                    "Failed to spawn Claude process"
+                );
+                return Err(e);
+            }
+        };
 
         // Extract components from process before moving
         let mut child = process.child;
@@ -651,7 +659,9 @@ impl SessionManager {
                     && parsed_line
                         .get("request")
                         .and_then(|r| r.get("subtype"))
-                        .is_some_and(|st| st == &serde_json::Value::String("can_use_tool".to_string()))
+                        .is_some_and(|st| {
+                            st == &serde_json::Value::String("can_use_tool".to_string())
+                        })
                 {
                     debug!(
                         session_id = %output_session_id,

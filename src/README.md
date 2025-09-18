@@ -108,12 +108,12 @@ Sessions without summaries or timestamps will omit these fields from the respons
   "session_id": "unique-session-identifier",
   "working_dir": "/absolute/path/to/project",
   "resume": true | false,
-  "first_message": ["message1", "message2", ...]
+  "bootstrap_messages": ["message1", "message2", ...]
 }
 ```
 
-**Note about first_message field:**
-- `first_message` is required and must be an array of strings
+**Note about bootstrap_messages field:**
+- `bootstrap_messages` is required and must be an array of strings
 - Each string contains a raw JSON message that will be forwarded directly to Claude's stdin
 - Messages are sent in order, with each message on a separate line
 - All JSON messages are automatically compacted to single-line format before being sent to Claude, as Claude expects each JSON message to be on a single line
@@ -124,7 +124,7 @@ Sessions without summaries or timestamps will omit these fields from the respons
   "session_id": "my-session",
   "working_dir": "/home/user/project",
   "resume": false,
-  "first_message": [
+  "bootstrap_messages": [
     "{\"role\": \"user\", \"content\": \"Hello Claude\"}",
     "{\"role\": \"user\", \"content\": \"Please help me with this project\"}"
   ]
@@ -150,7 +150,7 @@ Note: `session_id` in response may differ from request when `resume: true`
 ```
 
 **Error Codes:**
-- `INVALID_REQUEST`: Malformed JSON or missing required fields (session_id, working_dir, resume, first_message)
+- `INVALID_REQUEST`: Malformed JSON or missing required fields (session_id, working_dir, resume, bootstrap_messages)
 - `WORKING_DIR_INVALID`: Working directory doesn't exist or isn't accessible
 - `CLAUDE_SPAWN_FAILED`: Failed to spawn Claude process
 - `INTERNAL_ERROR`: Unexpected orchestrator error
@@ -379,13 +379,13 @@ For GET /sessions/{session_id}:
      "session_id": "session-123",
      "working_dir": "/home/user/project",
      "resume": false,
-     "first_message": "{\"role\": \"user\", \"content\": \"Hello\"}"
+     "bootstrap_messages": ["{\"role\": \"user\", \"content\": \"Hello\"}"]
    }
    ```
 
 2. **Server validates** request:
    - Parse JSON (if fails → return 400 with `INVALID_REQUEST`)
-   - Check required fields present (session_id, working_dir, resume, first_message)
+   - Check required fields present (session_id, working_dir, resume, bootstrap_messages)
    - Check if session already exists in memory
      - If exists and running → return 200 with existing WebSocket URL immediately
      - If exists but not running → continue to step 3
@@ -397,7 +397,7 @@ For GET /sessions/{session_id}:
 
 4. **Background worker** executes:
    - Spawn Claude process with specified working directory and `--session-id <session id>` and `--output-format stream-json --input-format stream-json --verbose --print` flags
-   - Send first_message raw JSON to Claude stdin
+   - Send bootstrap_messages raw JSON to Claude stdin
    - Wait for Claude's first response to confirm session is ready
    - Update session status to `ready`
    - Store process reference in session map
@@ -423,7 +423,7 @@ For GET /sessions/{session_id}:
      "session_id": "old-session-456",
      "working_dir": "/home/user/project",
      "resume": true,
-     "first_message": "{\"role\": \"user\", \"content\": \"Resume session\"}"
+     "bootstrap_messages": ["{\"role\": \"user\", \"content\": \"Resume session\"}"]
    }
    ```
 
@@ -431,7 +431,7 @@ For GET /sessions/{session_id}:
 
 3. **Background worker** spawns Claude with `--resume <session id>` and `--output-format stream-json --input-format stream-json --verbose --print` flags using provided working directory
 
-4. **Worker sends first_message** raw JSON to Claude stdin
+4. **Worker sends bootstrap_messages** raw JSON to Claude stdin
 
 5. **Worker waits for Claude's first response** to get new session ID
 
@@ -905,7 +905,7 @@ Content-Type: application/json
   "session_id": "abc-123",
   "working_dir": "/home/user/project",
   "resume": false,
-  "first_message": "{\"role\": \"user\", \"content\": \"Hello\"}"
+  "bootstrap_messages": ["{\"role\": \"user\", \"content\": \"Hello\"}"]
 }
 
 HTTP/1.1 200 OK

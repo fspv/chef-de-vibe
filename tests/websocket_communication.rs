@@ -54,7 +54,7 @@ fn create_session_request_with_file(
         session_id: session_id.to_string(),
         working_dir: working_dir.to_path_buf(),
         resume: false,
-        first_message: vec![
+        bootstrap_messages: vec![
             create_file_command,
             r#"{"role": "assistant", "content": "Session started successfully"}"#.to_string(),
         ],
@@ -76,7 +76,6 @@ impl TestServer {
         mock.setup_env_vars();
         Self::new_internal(mock).await
     }
-
 
     async fn new_internal(mock: MockClaude) -> Self {
         let config = Config::from_env().expect("Failed to load config");
@@ -197,7 +196,7 @@ async fn test_websocket_connection() {
 
     let (mut ws_stream, _) = connection_result.unwrap().unwrap();
 
-    // Try to consume any initial messages (might be session start or first_message response)
+    // Try to consume any initial messages (might be session start or bootstrap_messages response)
     // Don't assert specific content as the order and presence of messages can vary
     // based on timing of client connection relative to Claude processing
     let _ = timeout(Duration::from_secs(2), ws_stream.next()).await;
@@ -348,7 +347,7 @@ async fn test_websocket_message_broadcasting() {
     // Give connections time to stabilize and consume initial messages
     tokio::time::sleep(Duration::from_millis(200)).await;
 
-    // Consume initial messages (session start + first_message response)
+    // Consume initial messages (session start + bootstrap_messages response)
     loop {
         let mut any_received = false;
         if timeout(Duration::from_millis(100), ws1.next())
@@ -602,7 +601,7 @@ async fn test_websocket_client_input_echoing_to_other_clients() {
     // Give connections time to stabilize and consume initial messages
     tokio::time::sleep(Duration::from_millis(200)).await;
 
-    // Consume all initial messages for all clients (might include session start and/or first_message response)
+    // Consume all initial messages for all clients (might include session start and/or bootstrap_messages response)
     // We need to consume any buffered messages before sending new test messages
     loop {
         let mut any_received = false;
@@ -727,8 +726,8 @@ async fn test_claude_output_broadcasts_to_all_clients() {
     // Give connections time to stabilize
     tokio::time::sleep(Duration::from_millis(200)).await;
 
-    // Consume initial messages (session start + first_message response from Claude)
-    // Both clients should receive Claude's response to the first_message
+    // Consume initial messages (session start + bootstrap_messages response from Claude)
+    // Both clients should receive Claude's response to the bootstrap_messages
     loop {
         let mut any_received = false;
         if timeout(Duration::from_millis(100), ws1.next())

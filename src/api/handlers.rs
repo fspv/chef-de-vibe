@@ -71,10 +71,10 @@ pub async fn create_session(
         ));
     }
 
-    if request.first_message.is_empty() {
-        warn!("Rejecting session creation request: empty first_message");
+    if request.bootstrap_messages.is_empty() {
+        warn!("Rejecting session creation request: empty bootstrap_messages");
         return Err(crate::error::OrchestratorError::InvalidRequest(
-            "first_message cannot be empty".to_string(),
+            "bootstrap_messages cannot be empty".to_string(),
         ));
     }
 
@@ -85,7 +85,7 @@ pub async fn create_session(
             request.session_id.clone(),
             &request.working_dir,
             request.resume,
-            request.first_message.clone(),
+            request.bootstrap_messages.clone(),
         )
         .await
     {
@@ -299,7 +299,7 @@ done
             session_id: "test-session".to_string(),
             working_dir: working_dir.clone(),
             resume: false,
-            first_message: vec![r#"{"role": "user", "content": "Hello"}"#.to_string()],
+            bootstrap_messages: vec![r#"{"role": "user", "content": "Hello"}"#.to_string()],
         };
 
         let result = create_session(State(state.clone()), Json(request))
@@ -335,7 +335,7 @@ done
             session_id: String::new(),
             working_dir: PathBuf::from("/tmp"),
             resume: false,
-            first_message: vec![r#"{"role": "user", "content": "Hello"}"#.to_string()],
+            bootstrap_messages: vec![r#"{"role": "user", "content": "Hello"}"#.to_string()],
         };
 
         let result = create_session(State(state), Json(request)).await;
@@ -343,7 +343,7 @@ done
     }
 
     #[tokio::test]
-    async fn test_create_session_empty_first_message() {
+    async fn test_create_session_empty_bootstrap_messages() {
         let temp_dir = TempDir::new().unwrap();
         let state = create_test_state(&temp_dir);
 
@@ -351,7 +351,7 @@ done
             session_id: "test-session".to_string(),
             working_dir: PathBuf::from("/tmp"),
             resume: false,
-            first_message: vec![],
+            bootstrap_messages: vec![],
         };
 
         let result = create_session(State(state), Json(request)).await;
@@ -387,7 +387,7 @@ done
             session_id: "testsession".to_string(),
             working_dir: working_dir.clone(),
             resume: false,
-            first_message: vec![r#"{"role": "user", "content": "Hello"}"#.to_string()],
+            bootstrap_messages: vec![r#"{"role": "user", "content": "Hello"}"#.to_string()],
         };
 
         let _ = create_session(State(state.clone()), Json(request))

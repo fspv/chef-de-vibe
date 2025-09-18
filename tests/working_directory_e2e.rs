@@ -174,7 +174,7 @@ async fn test_active_session_working_directory() {
         session_id: "active-session-1".to_string(),
         working_dir: work_dir1.clone(),
         resume: false,
-        first_message: vec![
+        bootstrap_messages: vec![
             create_file_command1,
             r#"{"role": "user", "content": "Test message 1"}"#.to_string(),
         ],
@@ -207,7 +207,7 @@ async fn test_active_session_working_directory() {
         session_id: "active-session-2".to_string(),
         working_dir: work_dir2.clone(),
         resume: false,
-        first_message: vec![
+        bootstrap_messages: vec![
             create_file_command2,
             r#"{"role": "user", "content": "Test message 2"}"#.to_string(),
         ],
@@ -438,7 +438,7 @@ async fn test_session_resume_working_directory() {
         session_id: "original-session".to_string(),
         working_dir: original_work_dir.clone(),
         resume: true,
-        first_message: vec![
+        bootstrap_messages: vec![
             create_file_command,
             session_init_response,
             r#"{"role": "user", "content": "Resume this session"}"#.to_string(),
@@ -509,7 +509,7 @@ async fn test_list_sessions_working_directories() {
         session_id: "active-list-session".to_string(),
         working_dir: active_work_dir.clone(),
         resume: false,
-        first_message: vec![
+        bootstrap_messages: vec![
             create_file_command,
             r#"{"role": "user", "content": "Active session"}"#.to_string(),
         ],
@@ -632,7 +632,7 @@ async fn test_mixed_active_inactive_working_directories() {
         session_id: "web-session".to_string(),
         working_dir: web_project.clone(),
         resume: false,
-        first_message: vec![
+        bootstrap_messages: vec![
             web_create_file_command,
             r#"{"role": "user", "content": "Working on web frontend"}"#.to_string(),
         ],
@@ -642,7 +642,7 @@ async fn test_mixed_active_inactive_working_directories() {
         session_id: "api-session".to_string(),
         working_dir: api_project.clone(),
         resume: false,
-        first_message: vec![
+        bootstrap_messages: vec![
             api_create_file_command,
             r#"{"role": "user", "content": "Working on backend API"}"#.to_string(),
         ],
@@ -774,7 +774,7 @@ async fn test_working_directory_consistency_across_lifecycle() {
         session_id: "lifecycle-session".to_string(),
         working_dir: work_dir.clone(),
         resume: false,
-        first_message: vec![
+        bootstrap_messages: vec![
             create_file_command,
             r#"{"role": "user", "content": "Starting lifecycle test"}"#.to_string(),
         ],

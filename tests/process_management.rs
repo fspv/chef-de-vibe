@@ -19,7 +19,6 @@ use tokio::time::timeout;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use url::Url;
 
-
 struct TestServer {
     pub base_url: String,
     pub ws_url: String,
@@ -35,7 +34,6 @@ impl TestServer {
         mock.setup_env_vars();
         Self::new_internal(mock).await
     }
-
 
     async fn new_internal(mock: MockClaude) -> Self {
         let config = Config::from_env().expect("Failed to load config");
@@ -151,7 +149,7 @@ async fn test_write_queue_fifo_ordering() {
         session_id: "queue-session".to_string(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: vec![create_file_command],
+        bootstrap_messages: vec![create_file_command],
     };
 
     let create_response = client
@@ -225,7 +223,7 @@ async fn test_claude_process_death_simulation() {
         session_id: "death-session".to_string(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: vec![create_file_command],
+        bootstrap_messages: vec![create_file_command],
     };
 
     let response = client

@@ -171,8 +171,7 @@ mod tests {
         let err_str = result.unwrap_err().to_string();
         assert!(
             err_str.contains("CLAUDE_BINARY_PATH not set and 'claude' not found in PATH"),
-            "Error was: {}",
-            err_str
+            "Error was: {err_str}"
         );
     }
 

@@ -17,7 +17,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
 
-
 // Helper function to create test session files on disk
 // These are used to test that the service can find and list historical sessions
 fn create_test_session_file(
@@ -57,7 +56,6 @@ impl TestServer {
         mock.setup_env_vars();
         Self::new_internal(mock).await
     }
-
 
     async fn new_internal(mock: MockClaude) -> Self {
         let config = Config::from_env().expect("Failed to load config");
@@ -227,7 +225,7 @@ async fn test_create_new_session() {
         session_id: "test-session".to_string(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: vec![
+        bootstrap_messages: vec![
             create_file_command,
             r#"{"role": "user", "content": "Hello"}"#.to_string(),
         ],
@@ -276,7 +274,7 @@ async fn test_create_session_invalid_working_dir() {
         session_id: "test-session".to_string(),
         working_dir: server.mock.temp_dir.path().join("non-existent"),
         resume: false,
-        first_message: vec![r#"{"role": "user", "content": "Hello"}"#.to_string()],
+        bootstrap_messages: vec![r#"{"role": "user", "content": "Hello"}"#.to_string()],
     };
 
     let response = client
@@ -339,7 +337,7 @@ async fn test_resume_session() {
         session_id: "old-session".to_string(),
         working_dir: working_dir.clone(),
         resume: true,
-        first_message: vec![
+        bootstrap_messages: vec![
             create_file_command,
             session_init_response,
             r#"{"role": "user", "content": "Resume session"}"#.to_string(),
@@ -377,7 +375,7 @@ async fn test_get_session_active() {
         session_id: "test-session".to_string(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: vec![r#"{"role": "user", "content": "Hello"}"#.to_string()],
+        bootstrap_messages: vec![r#"{"role": "user", "content": "Hello"}"#.to_string()],
     };
 
     client

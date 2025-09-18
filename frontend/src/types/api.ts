@@ -17,7 +17,7 @@ export interface CreateSessionRequest {
   session_id: string;
   working_dir: string;
   resume: boolean;
-  first_message: string[];
+  bootstrap_messages: string[];
 }
 
 export interface CreateSessionResponse {

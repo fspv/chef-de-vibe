@@ -179,7 +179,7 @@ async fn test_session_lifecycle() {
         session_id: "lifecycle-session".to_string(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: vec![
+        bootstrap_messages: vec![
             create_file_command,
             r#"{"role": "user", "content": "Hello"}"#.to_string(),
         ],

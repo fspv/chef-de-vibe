@@ -82,7 +82,7 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
         session_id: newSessionId,
         working_dir: ensureAbsolutePath(selectedDirectory),
         resume: false,
-        first_message: [message]
+        bootstrap_messages: [message]
       };
 
       const response = await onCreateSession(request);
@@ -112,7 +112,7 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
         session_id: sessionId,
         working_dir: sessionDetails.working_directory,
         resume: true,
-        first_message: [message]
+        bootstrap_messages: [message]
       };
 
       const response = await onCreateSession(request);

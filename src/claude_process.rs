@@ -60,14 +60,14 @@ impl ClaudeProcess {
         working_dir = %working_dir.display(),
         resume = resume,
         claude_binary = %config.claude_binary_path.display(),
-        first_message_len = first_message.len()
+        bootstrap_messages_len = bootstrap_messages.len()
     ))]
     pub async fn spawn(
         config: &Config,
         session_id: &str,
         working_dir: &Path,
         resume: bool,
-        first_message: &[String],
+        bootstrap_messages: &[String],
     ) -> OrchestratorResult<(Self, String)> {
         info!(
             session_id = %session_id,
@@ -166,11 +166,11 @@ impl ClaudeProcess {
         // Process each message in the array
         debug!(
             session_id = %session_id,
-            first_message_count = first_message.len(),
-            "Sending first message(s) to trigger Claude response"
+            bootstrap_messages_count = bootstrap_messages.len(),
+            "Sending bootstrap message(s) to trigger Claude response"
         );
 
-        for (line_idx, line) in first_message.iter().enumerate() {
+        for (line_idx, line) in bootstrap_messages.iter().enumerate() {
             if line.trim().is_empty() {
                 debug!(
                     session_id = %session_id,
@@ -182,7 +182,7 @@ impl ClaudeProcess {
 
             // Compact the JSON to ensure it's a single line (Claude expects single-line JSON)
             let compacted_message =
-                compact_json_message(line, &format!("first_message_line_{line_idx}"))?;
+                compact_json_message(line, &format!("bootstrap_messages_line_{line_idx}"))?;
 
             debug!(
                 session_id = %session_id,
@@ -212,9 +212,9 @@ impl ClaudeProcess {
 
         info!(
             session_id = %session_id,
-            first_message_count = first_message.len(),
-            total_messages_sent = first_message.len(),
-            "Successfully sent all first messages to Claude stdin"
+            bootstrap_messages_count = bootstrap_messages.len(),
+            total_messages_sent = bootstrap_messages.len(),
+            "Successfully sent all bootstrap messages to Claude stdin"
         );
 
         // Spawn task to handle stdin writing
@@ -875,7 +875,7 @@ done
     }
 
     #[tokio::test]
-    async fn test_spawn_claude_process_with_multiline_first_message() {
+    async fn test_spawn_claude_process_with_multiline_bootstrap_messages() {
         let temp_dir = TempDir::new().unwrap();
         let working_dir = temp_dir.path().join("work");
         fs::create_dir_all(&working_dir).unwrap();
