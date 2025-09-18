@@ -1,3 +1,7 @@
+Claude in your pocket. Got a brilliant coding idea while away from your laptop? Don't wait - start coding immediately from your phone. Chef De Vibe runs persistent AI coding sessions on your server that you can access from anywhere - phone, tablet, laptop, or any browser. Never lose momentum on great ideas again.
+
+Chef De Vibe is flexible enough to run Claude instances however you prefer - directly on your system for simplicity, or in containers for security and isolation. Need to protect your server from potential AI mishaps? The included [claude-container](/claude-container) wrapper makes containerized execution effortless.
+
 # Run
 
 ## From source
@@ -52,8 +56,8 @@ services:
       # - CONTAINER_RUNTIME=podman
       # If you want to use socket
       # - CONTAINER_HOST=unix:///run/user/1934/podman/podman.sock
-      # If will be similar for docker integration
-      # To make git work in the conntainer
+      # It will be similar for docker integration
+      # To make git work in the container
       # - CONTAINER_ARGS="-v /home/dev/.gitconfig:/root/.gitconfig"
   # If you want to access it via tailscale
   #   network_mode: service:tailscale_chefdevibe
