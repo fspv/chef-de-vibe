@@ -140,7 +140,7 @@ function SessionView() {
       session_id: newSessionId,
       working_dir: directory,
       resume: false,
-      first_message: firstMessage
+      first_message: [firstMessage]
     };
 
     const response = await createSession(request);

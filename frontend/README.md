@@ -28,10 +28,10 @@ Sessions are only created when the user sends their first message. The `first_me
      "session_id": "generated-uuid",
      "working_dir": "/tmp",
      "resume": false,
-     "first_message": "{\"role\": \"user\", \"content\": \"Hello Claude\"}"
+     "first_message": ["{\"role\": \"user\", \"content\": \"Hello Claude\"}"]
    }
    ```
-   Note: `first_message` contains the raw JSON string that the user typed in the input field
+   Note: `first_message` is an array containing raw JSON strings. Each string represents a message to be sent to Claude.
 
 3. **Get WebSocket URLs from Response**:
    ```javascript
@@ -75,10 +75,10 @@ Sessions are only created when the user sends their first message. The `first_me
      "session_id": "old-session-id",
      "working_dir": "/home/user/project",
      "resume": true,
-     "first_message": "{\"role\": \"user\", \"content\": \"Continue our discussion\"}"
+     "first_message": ["{\"role\": \"user\", \"content\": \"Continue our discussion\"}"]
    }
    ```
-   Note: `first_message` is the raw JSON the user typed
+   Note: `first_message` is an array containing the raw JSON messages the user wants to send
 
 2. **Get NEW Session ID and WebSocket URLs**:
    ```javascript
@@ -128,11 +128,11 @@ Users input **raw JSON** directly into the text field:
 {"role": "user", "content": "Hello Claude"}
 ```
 
-This raw JSON string is passed directly as the `first_message` parameter without any parsing or modification.
+This raw JSON string is wrapped in an array and passed as the `first_message` parameter without any parsing or modification of the JSON content.
 
 ### Critical Implementation Details
 
-1. **No Message Parsing**: User inputs raw JSON, frontend passes it as-is
+1. **No Message Parsing**: User inputs raw JSON, frontend wraps it in array and passes as-is
 2. **WebSocket Before Navigation**: Connect immediately after POST response
 3. **Handle Duplicates**: Same message may appear from both WebSocket and GET history
 4. **Session ID Changes on Resume**: Always use the response session_id for navigation
@@ -142,7 +142,7 @@ This raw JSON string is passed directly as the `first_message` parameter without
 ```
 New Session:
 1. User types raw JSON message
-2. POST /api/v1/sessions (with first_message as raw JSON string)
+2. POST /api/v1/sessions (with first_message as array containing raw JSON string)
 3. Connect both WebSockets using response.websocket_url and response.approval_websocket_url
 4. Navigate to /session/{id}
 5. Page loads history via GET /api/v1/sessions/{id}
@@ -150,7 +150,7 @@ New Session:
 
 Resume Session:
 1. User types raw JSON in inactive session
-2. POST /api/v1/sessions (resume=true, first_message as raw JSON)
+2. POST /api/v1/sessions (resume=true, first_message as array containing raw JSON)
 3. Connect both WebSockets to NEW session URLs from response
 4. Navigate to /session/{new-id}
 5. Page loads history (includes old + new messages)
