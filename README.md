@@ -13,15 +13,18 @@ npm run build
 Then build and run backend (will embed frontend files inside)
 
 ```sh
-cargo build
 cargo run
 ```
 
 Then you can access it via ngrok
 ```sh
-ngrok authtoken <your-token>
 ngrok http 3000
 ```
+
+# From precompiled binaries
+
+Precompiled binaries for different platforms are available on the releases
+page.
 
 ## Using docker compose
 

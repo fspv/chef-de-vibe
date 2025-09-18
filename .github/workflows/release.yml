@@ -10,15 +10,91 @@ jobs:
     uses: ./.github/workflows/docker-build-push.yml
     secrets: inherit
     
+  build-binaries:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-gnu
+          - x86_64-pc-windows-gnu
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: false
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            cross: true
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: true
+          - target: x86_64-pc-windows-gnu
+            os: ubuntu-latest
+            cross: true
+          - target: x86_64-apple-darwin
+            os: ubuntu-latest
+            cross: true
+          - target: aarch64-apple-darwin
+            os: ubuntu-latest
+            cross: true
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+        target: ${{ matrix.target }}
+        
+    - name: Install cross
+      if: matrix.cross
+      run: cargo install cross --git https://github.com/cross-rs/cross
+      
+    - name: Build binary
+      run: |
+        if [[ "${{ matrix.cross }}" == "true" ]]; then
+          cross build --release --target ${{ matrix.target }}
+        else
+          cargo build --release --target ${{ matrix.target }}
+        fi
+        
+    - name: Prepare binary
+      run: |
+        mkdir -p artifacts
+        if [[ "${{ matrix.target }}" == *"windows"* ]]; then
+          cp target/${{ matrix.target }}/release/chef-de-vibe.exe artifacts/chef-de-vibe-${{ matrix.target }}.exe
+        else
+          cp target/${{ matrix.target }}/release/chef-de-vibe artifacts/chef-de-vibe-${{ matrix.target }}
+        fi
+        
+    - name: Upload binary artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: binary-${{ matrix.target }}
+        path: artifacts/*
+        retention-days: 7
+    
   create-release:
     runs-on: ubuntu-latest
-    needs: [build-docker]
+    needs: [build-docker, build-binaries]
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
+        
+    - name: Download binary artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: binary-*
+        path: binaries/
+        merge-multiple: true
         
     - name: Get commit info
       id: commit
@@ -60,8 +136,9 @@ jobs:
           DOCKER_IMAGE="nuhotetotniksvoboden/chef-de-vibe:pre-${{ steps.commit.outputs.sha }}"
         fi
         
-        cat << EOF > release_notes.md
-        ## Docker Image
+        if [[ "${{ steps.check_tag.outputs.is_tag }}" == "true" ]]; then
+          cat << EOF > release_notes.md
+        ## 🐳 Docker Image
         
         \`\`\`bash
         docker pull ${DOCKER_IMAGE}
@@ -69,6 +146,17 @@ jobs:
         \`\`\`
         
         **Docker Hub:** https://hub.docker.com/r/nuhotetotniksvoboden/chef-de-vibe/tags
+        
+        ## 📦 Binary Downloads
+        
+        Pre-compiled binaries are available for multiple platforms:
+        
+        - **Linux (x86_64)**: \`chef-de-vibe-x86_64-unknown-linux-gnu\`
+        - **Linux (x86_64, static)**: \`chef-de-vibe-x86_64-unknown-linux-musl\`
+        - **Linux (ARM64)**: \`chef-de-vibe-aarch64-unknown-linux-gnu\`
+        - **Windows (x86_64)**: \`chef-de-vibe-x86_64-pc-windows-gnu.exe\`
+        - **macOS (Intel)**: \`chef-de-vibe-x86_64-apple-darwin\`
+        - **macOS (Apple Silicon)**: \`chef-de-vibe-aarch64-apple-darwin\`
         
         ## Changes
         
@@ -78,6 +166,44 @@ jobs:
         Built from commit: \`${{ steps.commit.outputs.sha }}\`  
         Build date: ${{ steps.commit.outputs.date }}
         EOF
+        else
+          cat << EOF > release_notes.md
+        ## 🐳 Docker Image
+        
+        This pre-release contains the latest development build from commit [\`${{ steps.commit.outputs.sha }}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }}).
+        
+        ### Quick Start
+        \`\`\`bash
+        docker pull ${DOCKER_IMAGE}
+        docker run -p 8080:8080 ${DOCKER_IMAGE}
+        \`\`\`
+        
+        ### 🔗 Links
+        - **📦 [View on Docker Hub](https://hub.docker.com/r/nuhotetotniksvoboden/chef-de-vibe/tags?name=pre-${{ steps.commit.outputs.sha }})**
+        - **🏷️ [All Tags](https://hub.docker.com/r/nuhotetotniksvoboden/chef-de-vibe/tags)**
+        - **💻 [Source Code](https://github.com/${{ github.repository }}/tree/${{ github.sha }})**
+        
+        ## 📦 Binary Downloads
+        
+        Pre-compiled binaries are available for multiple platforms:
+        
+        - **Linux (x86_64)**: \`chef-de-vibe-x86_64-unknown-linux-gnu\`
+        - **Linux (x86_64, static)**: \`chef-de-vibe-x86_64-unknown-linux-musl\`
+        - **Linux (ARM64)**: \`chef-de-vibe-aarch64-unknown-linux-gnu\`
+        - **Windows (x86_64)**: \`chef-de-vibe-x86_64-pc-windows-gnu.exe\`
+        - **macOS (Intel)**: \`chef-de-vibe-x86_64-apple-darwin\`
+        - **macOS (Apple Silicon)**: \`chef-de-vibe-aarch64-apple-darwin\`
+        
+        ## Changes
+        
+        ${CHANGES}
+        
+        ---
+        **⚠️ Pre-release Notice:** This is an automated pre-release build for testing purposes.  
+        Built from commit: [\`${{ steps.commit.outputs.sha }}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})  
+        Build date: ${{ steps.commit.outputs.date }}
+        EOF
+        fi
         
     - name: Create pre-release
       if: steps.check_tag.outputs.is_tag == 'false'
@@ -86,6 +212,7 @@ jobs:
         tag_name: ${{ steps.check_tag.outputs.tag_name }}
         name: "Pre-release ${{ steps.commit.outputs.sha }}"
         body_path: release_notes.md
+        files: binaries/*
         prerelease: true
         make_latest: false
         
@@ -96,5 +223,6 @@ jobs:
         tag_name: ${{ steps.check_tag.outputs.tag_name }}
         name: "Release ${{ steps.check_tag.outputs.tag_name }}"
         body_path: release_notes.md
+        files: binaries/*
         prerelease: false
         make_latest: true
