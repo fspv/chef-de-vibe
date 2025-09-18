@@ -1,6 +1,6 @@
 import { parseDiff, Diff, Hunk } from 'react-diff-view';
 import 'react-diff-view/style/index.css';
-import { type EditToolData } from '../utils/diffUtils';
+import type { FileEditInput } from '@anthropic-ai/claude-code/sdk-tools';
 
 interface DiffViewerProps {
   oldString: string;
@@ -85,7 +85,7 @@ export function DiffViewer({ oldString, newString, fileName = 'file' }: DiffView
 }
 
 // Component specifically for Edit tool usage
-export function EditDiff({ toolInput }: { toolInput: EditToolData }) {
+export function EditDiff({ toolInput }: { toolInput: FileEditInput }) {
   const { file_path, old_string, new_string } = toolInput;
   
   return (

@@ -11,23 +11,34 @@ import {
   type ExtendedSDKMessage,
   type AnyTodoItem
 } from '../types/claude-messages';
+import type { PermissionUpdate } from '@anthropic-ai/claude-code/sdk';
 import { CollapsibleContent } from './CollapsibleContent';
 import { TodoList } from './TodoList';
 import { EditDiff } from './DiffViewer';
-import { isEditTool } from '../utils/diffUtils';
 import { ControlRequestMessage } from './ControlRequestMessage';
-
-// Helper to check if tool input is for Write tool
-function isWriteTool(toolName: string, input: unknown): boolean {
-  return toolName === 'Write' && 
-         typeof input === 'object' && 
-         input !== null &&
-         'file_path' in input &&
-         'content' in input;
-}
+import type { 
+  ToolInputSchemas, 
+  FileWriteInput, 
+  FileEditInput,
+  AgentInput,
+  BashInput,
+  BashOutputInput,
+  ExitPlanModeInput,
+  FileMultiEditInput,
+  FileReadInput,
+  GlobInput,
+  GrepInput,
+  KillShellInput,
+  ListMcpResourcesInput,
+  McpInput,
+  NotebookEditInput,
+  ReadMcpResourceInput,
+  WebFetchInput,
+  WebSearchInput
+} from '@anthropic-ai/claude-code/sdk-tools';
 
 // Component for displaying Write tool content
-function WriteToolDisplay({ input }: { input: { file_path: string; content: string } }) {
+function WriteToolDisplay({ input }: { input: FileWriteInput }) {
   return (
     <div className="write-tool-display">
       <div className="write-tool-header">
@@ -44,12 +55,276 @@ function WriteToolDisplay({ input }: { input: { file_path: string; content: stri
   );
 }
 
+// Component for displaying Agent tool content
+function AgentToolDisplay({ input }: { input: AgentInput }) {
+  return (
+    <div className="agent-tool-display">
+      <div className="agent-tool-header">
+        <h4>🤖 Agent Task</h4>
+        <div className="agent-type">Agent: {input.subagent_type}</div>
+        <div className="task-description">{input.description}</div>
+      </div>
+      <CollapsibleContent 
+        content={input.prompt}
+        className="agent-prompt"
+        maxLines={15}
+      />
+    </div>
+  );
+}
+
+// Component for displaying Bash tool content
+function BashToolDisplay({ input }: { input: BashInput }) {
+  return (
+    <div className="bash-tool-display">
+      <div className="bash-tool-header">
+        <h4>🖥️ Command Execution</h4>
+        {input.description && <div className="bash-description">{input.description}</div>}
+        <div className="bash-flags">
+          {input.run_in_background && <span className="flag">🔄 Background</span>}
+          {input.timeout && <span className="flag">⏱️ Timeout: {input.timeout}ms</span>}
+        </div>
+      </div>
+      <CollapsibleContent 
+        content={input.command}
+        className="bash-command"
+        maxLines={10}
+        isCode={true}
+      />
+    </div>
+  );
+}
+
+// Component for displaying BashOutput tool content
+function BashOutputToolDisplay({ input }: { input: BashOutputInput }) {
+  return (
+    <div className="bash-output-tool-display">
+      <div className="bash-output-header">
+        <h4>📄 Shell Output</h4>
+        <div className="bash-id">Shell ID: {input.bash_id}</div>
+        {input.filter && <div className="output-filter">Filter: {input.filter}</div>}
+      </div>
+    </div>
+  );
+}
+
+// Component for displaying ExitPlanMode tool content
+function ExitPlanModeToolDisplay({ input }: { input: ExitPlanModeInput }) {
+  return (
+    <div className="exit-plan-mode-tool-display">
+      <div className="exit-plan-mode-header">
+        <h4>📋 Plan Review</h4>
+      </div>
+      <CollapsibleContent 
+        content={input.plan}
+        className="plan-content"
+        maxLines={20}
+      />
+    </div>
+  );
+}
+
+// Component for displaying FileMultiEdit tool content
+function FileMultiEditToolDisplay({ input }: { input: FileMultiEditInput }) {
+  return (
+    <div className="file-multi-edit-tool-display">
+      <div className="file-multi-edit-header">
+        <h4>✏️ Multi-Edit Operations</h4>
+        <div className="file-path">📄 {input.file_path}</div>
+        <div className="edit-count">{input.edits.length} operations</div>
+      </div>
+      <div className="edit-operations">
+        {input.edits.map((edit, index) => (
+          <div key={index} className="edit-operation">
+            <div className="edit-header">
+              <span className="edit-number">Edit #{index + 1}</span>
+              {edit.replace_all && <span className="replace-all-flag">Replace All</span>}
+            </div>
+            <EditDiff toolInput={{
+              file_path: input.file_path,
+              old_string: edit.old_string,
+              new_string: edit.new_string,
+              replace_all: edit.replace_all
+            } as FileEditInput} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Component for displaying FileRead tool content
+function FileReadToolDisplay({ input }: { input: FileReadInput }) {
+  return (
+    <div className="file-read-tool-display">
+      <div className="file-read-header">
+        <h4>📖 File Reading</h4>
+        <div className="file-path">📄 {input.file_path}</div>
+        {(input.offset || input.limit) && (
+          <div className="read-range">
+            {input.offset && <span>From line {input.offset}</span>}
+            {input.limit && <span>Read {input.limit} lines</span>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Component for displaying Glob tool content
+function GlobToolDisplay({ input }: { input: GlobInput }) {
+  return (
+    <div className="glob-tool-display">
+      <div className="glob-header">
+        <h4>🔍 Pattern Search</h4>
+        <div className="glob-pattern">Pattern: {input.pattern}</div>
+        {input.path && <div className="search-path">Path: {input.path}</div>}
+      </div>
+    </div>
+  );
+}
+
+// Component for displaying Grep tool content
+function GrepToolDisplay({ input }: { input: GrepInput }) {
+  return (
+    <div className="grep-tool-display">
+      <div className="grep-header">
+        <h4>🔎 Text Search</h4>
+        <div className="grep-pattern">Pattern: {input.pattern}</div>
+        {input.path && <div className="search-path">Path: {input.path}</div>}
+        {input.glob && <div className="glob-filter">Files: {input.glob}</div>}
+        <div className="grep-options">
+          {input.output_mode && <span className="option">Mode: {input.output_mode}</span>}
+          {input['-i'] && <span className="option">Case Insensitive</span>}
+          {input.multiline && <span className="option">Multiline</span>}
+          {input.type && <span className="option">Type: {input.type}</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Component for displaying KillShell tool content
+function KillShellToolDisplay({ input }: { input: KillShellInput }) {
+  return (
+    <div className="kill-shell-tool-display">
+      <div className="kill-shell-header">
+        <h4>⚠️ Terminate Shell</h4>
+        <div className="shell-id">Shell ID: {input.shell_id}</div>
+      </div>
+    </div>
+  );
+}
+
+// Component for displaying ListMcpResources tool content
+function ListMcpResourcesToolDisplay({ input }: { input: ListMcpResourcesInput }) {
+  return (
+    <div className="list-mcp-resources-tool-display">
+      <div className="list-mcp-resources-header">
+        <h4>📚 MCP Resources</h4>
+        {input.server && <div className="server-filter">Server: {input.server}</div>}
+      </div>
+    </div>
+  );
+}
+
+// Component for displaying Mcp tool content
+function McpToolDisplay({ input }: { input: McpInput }) {
+  return (
+    <div className="mcp-tool-display">
+      <div className="mcp-header">
+        <h4>🔌 MCP Operation</h4>
+      </div>
+      <CollapsibleContent 
+        content={JSON.stringify(input, null, 2)}
+        className="mcp-data"
+        maxLines={15}
+        isCode={true}
+      />
+    </div>
+  );
+}
+
+// Component for displaying NotebookEdit tool content
+function NotebookEditToolDisplay({ input }: { input: NotebookEditInput }) {
+  return (
+    <div className="notebook-edit-tool-display">
+      <div className="notebook-edit-header">
+        <h4>📓 Notebook Editing</h4>
+        <div className="notebook-path">📄 {input.notebook_path}</div>
+        <div className="notebook-operation">
+          {input.edit_mode || 'replace'} {input.cell_type && `${input.cell_type} cell`}
+          {input.cell_id && ` (ID: ${input.cell_id})`}
+        </div>
+      </div>
+      <CollapsibleContent 
+        content={input.new_source}
+        className="notebook-source"
+        maxLines={15}
+        isCode={input.cell_type === 'code'}
+      />
+    </div>
+  );
+}
+
+// Component for displaying ReadMcpResource tool content
+function ReadMcpResourceToolDisplay({ input }: { input: ReadMcpResourceInput }) {
+  return (
+    <div className="read-mcp-resource-tool-display">
+      <div className="read-mcp-resource-header">
+        <h4>📖 MCP Resource</h4>
+        <div className="mcp-server">Server: {input.server}</div>
+        <div className="resource-uri">URI: {input.uri}</div>
+      </div>
+    </div>
+  );
+}
+
+// Component for displaying WebFetch tool content
+function WebFetchToolDisplay({ input }: { input: WebFetchInput }) {
+  return (
+    <div className="web-fetch-tool-display">
+      <div className="web-fetch-header">
+        <h4>🌐 Web Fetch</h4>
+        <div className="fetch-url">🔗 {input.url}</div>
+      </div>
+      <CollapsibleContent 
+        content={input.prompt}
+        className="fetch-prompt"
+        maxLines={10}
+      />
+    </div>
+  );
+}
+
+// Component for displaying WebSearch tool content
+function WebSearchToolDisplay({ input }: { input: WebSearchInput }) {
+  return (
+    <div className="web-search-tool-display">
+      <div className="web-search-header">
+        <h4>🔍 Web Search</h4>
+        <div className="search-query">Query: {input.query}</div>
+        {input.allowed_domains && input.allowed_domains.length > 0 && (
+          <div className="domain-filters">
+            <span>Allowed: {input.allowed_domains.join(', ')}</span>
+          </div>
+        )}
+        {input.blocked_domains && input.blocked_domains.length > 0 && (
+          <div className="domain-filters">
+            <span>Blocked: {input.blocked_domains.join(', ')}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface MessageParserProps {
   data: unknown;
   timestamp?: number;
   showRawJson: boolean;
   messageSource: 'session' | 'websocket';
-  onApprove?: (requestId: string, input: Record<string, unknown>, permissionUpdates?: Array<Record<string, unknown>>) => void;
+  onApprove?: (requestId: string, input: ToolInputSchemas, permissionUpdates?: PermissionUpdate[]) => void;
   onDeny?: (requestId: string) => void;
 }
 
@@ -220,7 +495,7 @@ export function MessageParser({ data, timestamp, showRawJson, onApprove, onDeny 
 function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny }: { 
   message: ExtendedSDKMessage; 
   timestamp?: number;
-  onApprove?: (requestId: string, input: Record<string, unknown>, permissionUpdates?: Array<Record<string, unknown>>) => void;
+  onApprove?: (requestId: string, input: ToolInputSchemas, permissionUpdates?: PermissionUpdate[]) => void;
   onDeny?: (requestId: string) => void;
 }) {
   if (isSDKUserMessage(message)) {
@@ -279,10 +554,10 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny }: {
                           />
                         );
                       })()
-                    ) : isEditTool(String(block.name), block.input) ? (
-                      <EditDiff toolInput={block.input} />
-                    ) : isWriteTool(String(block.name), block.input) ? (
-                      <WriteToolDisplay input={block.input} />
+                    ) : String(block.name) === "Edit" ? (
+                      <EditDiff toolInput={block.input as FileEditInput} />
+                    ) : String(block.name) === "Write" ? (
+                      <WriteToolDisplay input={block.input as FileWriteInput} />
                     ) : (
                       <CollapsibleContent 
                         content={JSON.stringify(block.input, null, 2)}
@@ -365,10 +640,40 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny }: {
                         />
                       );
                     })()
-                  ) : isEditTool(String(block.name), block.input) ? (
-                    <EditDiff toolInput={block.input} />
-                  ) : isWriteTool(String(block.name), block.input) ? (
-                    <WriteToolDisplay input={block.input} />
+                  ) : String(block.name) === "Edit" ? (
+                    <EditDiff toolInput={block.input as FileEditInput} />
+                  ) : String(block.name) === "Write" ? (
+                    <WriteToolDisplay input={block.input as FileWriteInput} />
+                  ) : String(block.name) === "Task" ? (
+                    <AgentToolDisplay input={block.input as AgentInput} />
+                  ) : String(block.name) === "Bash" ? (
+                    <BashToolDisplay input={block.input as BashInput} />
+                  ) : String(block.name) === "BashOutput" ? (
+                    <BashOutputToolDisplay input={block.input as BashOutputInput} />
+                  ) : String(block.name) === "ExitPlanMode" ? (
+                    <ExitPlanModeToolDisplay input={block.input as ExitPlanModeInput} />
+                  ) : String(block.name) === "MultiEdit" ? (
+                    <FileMultiEditToolDisplay input={block.input as FileMultiEditInput} />
+                  ) : String(block.name) === "Read" ? (
+                    <FileReadToolDisplay input={block.input as FileReadInput} />
+                  ) : String(block.name) === "Glob" ? (
+                    <GlobToolDisplay input={block.input as GlobInput} />
+                  ) : String(block.name) === "Grep" ? (
+                    <GrepToolDisplay input={block.input as GrepInput} />
+                  ) : String(block.name) === "KillShell" ? (
+                    <KillShellToolDisplay input={block.input as KillShellInput} />
+                  ) : String(block.name) === "ListMcpResources" ? (
+                    <ListMcpResourcesToolDisplay input={block.input as ListMcpResourcesInput} />
+                  ) : String(block.name) === "Mcp" ? (
+                    <McpToolDisplay input={block.input as McpInput} />
+                  ) : String(block.name) === "NotebookEdit" ? (
+                    <NotebookEditToolDisplay input={block.input as NotebookEditInput} />
+                  ) : String(block.name) === "ReadMcpResource" ? (
+                    <ReadMcpResourceToolDisplay input={block.input as ReadMcpResourceInput} />
+                  ) : String(block.name) === "WebFetch" ? (
+                    <WebFetchToolDisplay input={block.input as WebFetchInput} />
+                  ) : String(block.name) === "WebSearch" ? (
+                    <WebSearchToolDisplay input={block.input as WebSearchInput} />
                   ) : (
                     <CollapsibleContent 
                       content={JSON.stringify(block.input, null, 2)}

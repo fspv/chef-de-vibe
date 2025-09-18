@@ -5,6 +5,7 @@ import { SessionList } from './components/SessionList';
 import { ChatWindow } from './components/ChatWindow';
 import { HomePage } from './components/HomePage';
 import { NewChatDialog } from './components/NewChatDialog';
+import { TestChatPage } from './components/TestChatPage';
 import { useCreateSession } from './hooks/useApi';
 import type { CreateSessionRequest } from './types/api';
 import './App.css';
@@ -262,6 +263,7 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<SessionView />} />
+      <Route path="/session/test" element={<TestChatPage />} />
       <Route path="/session/:sessionId" element={<SessionView />} />
     </Routes>
   );

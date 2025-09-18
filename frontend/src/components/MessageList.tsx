@@ -2,13 +2,15 @@ import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 're
 import type { Message } from '../types/api';
 import type { WebSocketMessage } from '../hooks/useWebSocket';
 import { MessageParser } from './MessageParser';
+import type { PermissionUpdate } from '@anthropic-ai/claude-code/sdk';
+import type { ToolInputSchemas } from '@anthropic-ai/claude-code/sdk-tools';
 
 interface MessageListProps {
   sessionMessages: Message[];
   webSocketMessages: WebSocketMessage[];
   debugMode: boolean;
   onAutoScrollStateChange?: (isAtBottom: boolean, autoScrollPaused: boolean) => void;
-  onApprove?: (requestId: string, input: Record<string, unknown>, permissionUpdates?: Array<Record<string, unknown>>) => void;
+  onApprove?: (requestId: string, input: ToolInputSchemas, permissionUpdates?: PermissionUpdate[]) => void;
   onDeny?: (requestId: string) => void;
 }
 

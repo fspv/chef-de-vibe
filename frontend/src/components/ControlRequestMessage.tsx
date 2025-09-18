@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { CollapsibleContent } from './CollapsibleContent';
 import { EditDiff } from './DiffViewer';
 import type { PermissionUpdate } from '@anthropic-ai/claude-code/sdk';
+import type { FileEditInput, ToolInputSchemas } from '@anthropic-ai/claude-code/sdk-tools';
 
 interface ControlRequestMessage {
   type: string;
@@ -9,7 +10,7 @@ interface ControlRequestMessage {
   request: {
     subtype: string;
     tool_name: string;
-    input: Record<string, unknown>;
+    input: ToolInputSchemas;
     permission_suggestions?: PermissionUpdate[];
   };
 }
@@ -17,7 +18,7 @@ interface ControlRequestMessage {
 interface ControlRequestMessageProps {
   message: ControlRequestMessage;
   timestamp?: number;
-  onApprove?: (requestId: string, input: Record<string, unknown>, permissionUpdates: PermissionUpdate[]) => void;
+  onApprove?: (requestId: string, input: ToolInputSchemas, permissionUpdates: PermissionUpdate[]) => void;
   onDeny?: (requestId: string) => void;
 }
 
@@ -89,7 +90,7 @@ export function ControlRequestMessage({ message, timestamp, onApprove, onDeny }:
         {tool_name === 'Edit' && input && typeof input === 'object' && 
          'file_path' in input && 'old_string' in input && 'new_string' in input ? (
           <>
-            <EditDiff toolInput={input} />
+            <EditDiff toolInput={input as FileEditInput} />
             <details className="edit-json-details">
               <summary>Edit JSON (Advanced)</summary>
               <textarea

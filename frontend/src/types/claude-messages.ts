@@ -8,7 +8,8 @@ import type {
   SDKResultMessage, 
   SDKSystemMessage,
   SDKPartialAssistantMessage,
-  SDKCompactBoundaryMessage
+  SDKCompactBoundaryMessage,
+  PermissionUpdate
 } from '@anthropic-ai/claude-code';
 
 // Re-export SDK types for use in components
@@ -116,7 +117,7 @@ export interface SDKControlRequestMessage {
     subtype: 'can_use_tool';
     tool_name: string;
     input: Record<string, unknown>;
-    permission_suggestions?: Array<Record<string, unknown>>;
+    permission_suggestions?: PermissionUpdate[];
   };
 }
 
