@@ -295,7 +295,7 @@ done
             session_id: "test-session".to_string(),
             working_dir: working_dir.clone(),
             resume: false,
-            first_message: r#"{"role": "user", "content": "Hello"}"#.to_string(),
+            first_message: vec![r#"{"role": "user", "content": "Hello"}"#.to_string()],
         };
 
         let result = create_session(State(state.clone()), Json(request))
@@ -325,7 +325,7 @@ done
             session_id: String::new(),
             working_dir: PathBuf::from("/tmp"),
             resume: false,
-            first_message: r#"{"role": "user", "content": "Hello"}"#.to_string(),
+            first_message: vec![r#"{"role": "user", "content": "Hello"}"#.to_string()],
         };
 
         let result = create_session(State(state), Json(request)).await;
@@ -341,7 +341,7 @@ done
             session_id: "test-session".to_string(),
             working_dir: PathBuf::from("/tmp"),
             resume: false,
-            first_message: String::new(),
+            first_message: vec![],
         };
 
         let result = create_session(State(state), Json(request)).await;
@@ -374,7 +374,7 @@ done
             session_id: "testsession".to_string(),
             working_dir: working_dir.clone(),
             resume: false,
-            first_message: r#"{"role": "user", "content": "Hello"}"#.to_string(),
+            first_message: vec![r#"{"role": "user", "content": "Hello"}"#.to_string()],
         };
 
         let _ = create_session(State(state.clone()), Json(request))

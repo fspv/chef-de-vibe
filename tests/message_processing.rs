@@ -10,6 +10,7 @@ use chef_de_vibe::{
 };
 use futures_util::{SinkExt, StreamExt};
 use helpers::mock_claude::MockClaude;
+use helpers::logging::init_logging;
 use reqwest::Client;
 use serial_test::serial;
 use std::fs;
@@ -19,6 +20,24 @@ use tokio::net::TcpListener;
 use tokio::time::timeout;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use url::Url;
+
+fn create_test_session_file(projects_dir: &std::path::Path, project_name: &str, session_id: &str, cwd: &str) {
+    let project_dir = projects_dir.join(project_name);
+    fs::create_dir_all(&project_dir).unwrap();
+
+    let session_file = project_dir.join(format!("{}.jsonl", session_id));
+    let content = format!(
+        r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}
+{{"type": "user", "message": {{"role": "user", "content": "Hello Claude"}}}}
+{{"type": "assistant", "message": {{"role": "assistant", "content": [{{"type": "text", "text": "Hello! How can I help you today?"}}]}}}}
+{{"type": "user", "message": {{"role": "user", "content": "What's 2+2?"}}}}
+{{"type": "assistant", "message": {{"role": "assistant", "content": [{{"type": "text", "text": "2 + 2 equals 4."}}]}}}}
+"#,
+        session_id, cwd
+    );
+
+    fs::write(session_file, content).unwrap();
+}
 
 fn generate_unique_session_id(test_name: &str) -> String {
     format!("{}-{}-{}", 
@@ -41,20 +60,23 @@ struct TestServer {
 
 impl TestServer {
     async fn new() -> Self {
+        init_logging();
         let mock = MockClaude::new();
         mock.setup_env_vars();
         Self::new_internal(mock).await
     }
 
     async fn new_with_approval_binary() -> Self {
+        init_logging();
+        // For the new design, approval binary is the same as regular binary
+        // Tests will send approval requests and responses as needed
         let mock = MockClaude::new();
-        mock.setup_env_vars(); // Setup all environment variables first
-        let approval_binary = mock.create_approval_binary();
-        std::env::set_var("CLAUDE_BINARY_PATH", &approval_binary); // Override with approval binary
+        mock.setup_env_vars();
         Self::new_internal(mock).await
     }
 
     async fn new_with_config() -> Self {
+        init_logging();
         // Create a mock but don't call setup_env_vars - assume env vars are already set
         let mock = MockClaude::new();
         Self::new_internal(mock).await
@@ -216,7 +238,7 @@ async fn test_create_session_empty_first_message_validation() {
         session_id: "empty-first-message-session".to_string(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: String::new(), // Empty first_message should be rejected
+        first_message: vec![], // Empty first_message should be rejected
     };
 
     let response = client
@@ -249,11 +271,27 @@ async fn test_first_message_triggers_claude_response() {
 
     let unique_content = format!("Trigger message {}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
     let session_id = generate_unique_session_id("first-message-trigger");
+    
+    // First message needs to create the session file using the mock's write_file control command
+    let session_file_path = server.mock.projects_dir().join(format!("{}.jsonl", session_id));
+    let session_start_content = format!(r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#, 
+        session_id, working_dir.display());
+    
+    // Escape the content for embedding in JSON
+    let escaped_content = session_start_content.replace('"', r#"\""#);
+    
+    // Create the control command to write the session file, then add the user message
+    let first_message = vec![
+        format!(r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
+            session_file_path.display(), escaped_content),
+        format!(r#"{{"role": "user", "content": "{}"}}"#, unique_content)
+    ];
+    
     let request = CreateSessionRequest {
         session_id: session_id.clone(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: format!(r#"{{"role": "user", "content": "{}"}}"#, unique_content),
+        first_message,
     };
 
     let create_response = client
@@ -302,17 +340,34 @@ async fn test_resume_session_with_first_message() {
     let working_dir = server.mock.temp_dir.path().join("resume_first_message_work");
     fs::create_dir_all(&working_dir).unwrap();
 
-    // Create a test session file
-    server
-        .mock
-        .create_test_session_file("resume_first_message_work", "old-resume-session", working_dir.to_str().unwrap());
+    // Create a test session file directly on disk to simulate an existing session
+    // Use the same helper function as other working tests
+    create_test_session_file(&server.mock.projects_dir, "resume_first_message_work", "old-resume-session", working_dir.to_str().unwrap());
 
     let resume_content = format!("Resume trigger {}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
+    
+    // For resume tests, we need to send a control command to create the new session file with the new session ID
+    // The mock Claude will generate a new session ID and create a new session file
+    let new_session_id = generate_unique_session_id("resumed");
+    let new_session_start_content = format!(r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#, 
+        new_session_id, working_dir.display());
+    let escaped_content = new_session_start_content.replace('"', r#"\""#);
+    let new_session_file_path = server.mock.projects_dir.join("resume_first_message_work").join(format!("{}.jsonl", new_session_id));
+    
+    // For resume mode, the first line output must be JSON with a session_id field
+    // The mock Claude will echo this JSON, and the resume code will parse it to extract session_id
+    let first_message = vec![
+        format!(r#"{{"session_id": "{}"}}"#, new_session_id),
+        format!(r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
+            new_session_file_path.display(), escaped_content),
+        format!(r#"{{"role": "user", "content": "{}"}}"#, resume_content)
+    ];
+    
     let request = CreateSessionRequest {
         session_id: "old-resume-session".to_string(),
         working_dir: working_dir.clone(),
         resume: true,
-        first_message: format!(r#"{{"role": "user", "content": "{}"}}"#, resume_content),
+        first_message,
     };
 
     let response = client
@@ -321,6 +376,16 @@ async fn test_resume_session_with_first_message() {
         .send()
         .await
         .unwrap();
+
+    let status = response.status();
+    if status != 200 {
+        let error_body = response.text().await.unwrap();
+        panic!(
+            "Resume session with first_message failed with status: {}. Error body: {}",
+            status,
+            error_body
+        );
+    }
 
     assert_eq!(response.status(), 200, "Resume session with first_message should succeed");
 
@@ -369,6 +434,16 @@ async fn test_multiline_first_message_compaction() {
     let working_dir = server.mock.temp_dir.path().join("multiline_message_work");
     fs::create_dir_all(&working_dir).unwrap();
 
+    let session_id = "multiline-message-session".to_string();
+    
+    // First message needs to create the session file using the mock's write_file control command
+    let session_file_path = server.mock.projects_dir().join(format!("{}.jsonl", session_id));
+    let session_start_content = format!(r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#, 
+        session_id, working_dir.display());
+    
+    // Escape the content for embedding in JSON
+    let escaped_content = session_start_content.replace('"', r#"\""#);
+    
     // Use a multiline JSON first_message (simulating what frontend might send)
     let multiline_json = r#"{
   "role": "user",
@@ -378,12 +453,19 @@ async fn test_multiline_first_message_compaction() {
     "array": [1, 2, 3]
   }
 }"#;
+    
+    // Create the control command to write the session file, then add the multiline user message
+    let first_message = vec![
+        format!(r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
+            session_file_path.display(), escaped_content),
+        multiline_json.to_string()
+    ];
 
     let request = CreateSessionRequest {
-        session_id: "multiline-message-session".to_string(),
+        session_id,
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: multiline_json.to_string(),
+        first_message,
     };
 
     let response = client
@@ -439,7 +521,7 @@ async fn test_invalid_json_first_message_rejection() {
         session_id: "invalid-json-session".to_string(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: "{ invalid json }".to_string(), // Invalid JSON
+        first_message: vec!["{ invalid json }".to_string()], // Invalid JSON
     };
 
     let response = client
@@ -463,11 +545,28 @@ async fn test_message_queue_json_compaction() {
     let working_dir = server.mock.temp_dir.path().join("queue_compaction_work");
     fs::create_dir_all(&working_dir).unwrap();
 
+    let session_id = "queue-compaction-session".to_string();
+    
+    // First message needs to create the session file using the mock's write_file control command
+    let session_file_path = server.mock.projects_dir().join(format!("{}.jsonl", session_id));
+    let session_start_content = format!(r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#, 
+        session_id, working_dir.display());
+    
+    // Escape the content for embedding in JSON
+    let escaped_content = session_start_content.replace('"', r#"\""#);
+    
+    // Create the control command to write the session file, then add the user message
+    let first_message = vec![
+        format!(r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
+            session_file_path.display(), escaped_content),
+        r#"{"role": "user", "content": "Initial message"}"#.to_string()
+    ];
+    
     let request = CreateSessionRequest {
-        session_id: "queue-compaction-session".to_string(),
+        session_id,
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: r#"{"role": "user", "content": "Initial message"}"#.to_string(),
+        first_message,
     };
 
     let create_response = client
@@ -549,18 +648,35 @@ async fn test_mixed_json_formats_consistency() {
     let working_dir = server.mock.temp_dir.path().join("mixed_formats_work");
     fs::create_dir_all(&working_dir).unwrap();
 
+    let session_id = "mixed-formats-session".to_string();
+    
+    // First message needs to create the session file using the mock's write_file control command
+    let session_file_path = server.mock.projects_dir().join(format!("{}.jsonl", session_id));
+    let session_start_content = format!(r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#, 
+        session_id, working_dir.display());
+    
+    // Escape the content for embedding in JSON
+    let escaped_content = session_start_content.replace('"', r#"\""#);
+    
     // Use multiline first_message
     let multiline_first_message = r#"{
   "role": "user",
   "content": "Multiline first message",
   "type": "initial"
 }"#;
+    
+    // Create the control command to write the session file, then add the multiline user message
+    let first_message = vec![
+        format!(r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
+            session_file_path.display(), escaped_content),
+        multiline_first_message.to_string()
+    ];
 
     let request = CreateSessionRequest {
-        session_id: "mixed-formats-session".to_string(),
+        session_id,
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: multiline_first_message.to_string(),
+        first_message,
     };
 
     let create_response = client

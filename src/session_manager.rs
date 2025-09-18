@@ -136,7 +136,7 @@ impl SessionManager {
 
         // Use timeout to wait for file to be ready
         match timeout(timeout_duration, async {
-            let mut interval = tokio::time::interval(Duration::from_millis(100));
+            let mut interval = tokio::time::interval(Duration::from_millis(2000));
             loop {
                 if check_file_ready().await {
                     return Ok(());
@@ -194,7 +194,7 @@ impl SessionManager {
         session_id: String,
         working_dir: &Path,
         resume: bool,
-        first_message: String,
+        first_message: Vec<String>,
     ) -> OrchestratorResult<String> {
         info!(
             session_id = %session_id,
@@ -383,8 +383,8 @@ impl SessionManager {
                         "Checking if Claude process is still running before waiting for session file"
                     );
                     
-                    // Give the process a moment to stabilize (100ms)
-                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    // Give the process a moment to stabilize (1s)
+                    tokio::time::sleep(Duration::from_millis(1000)).await;
                     
                     // Check if process is still alive
                     if session.get_process_id().await.is_none() {
@@ -465,7 +465,7 @@ impl SessionManager {
         session_id: &str,
         working_dir: &Path,
         resume: bool,
-        first_message: String,
+        first_message: Vec<String>,
         session: Arc<Session>,
     ) -> OrchestratorResult<String> {
         info!(
@@ -1090,7 +1090,7 @@ done
         let manager = SessionManager::new(config);
 
         let session_id = manager
-            .create_session("test-session".to_string(), &working_dir, false, r#"{"role": "user", "content": "Hello"}"#.to_string())
+            .create_session("test-session".to_string(), &working_dir, false, vec![r#"{"role": "user", "content": "Hello"}"#.to_string()])
             .await
             .unwrap();
 
@@ -1112,7 +1112,7 @@ done
 
         let non_existent = temp_dir.path().join("non_existent");
         let result = manager
-            .create_session("test-session".to_string(), &non_existent, false, r#"{"role": "user", "content": "Hello"}"#.to_string())
+            .create_session("test-session".to_string(), &non_existent, false, vec![r#"{"role": "user", "content": "Hello"}"#.to_string()])
             .await;
 
         assert!(result.is_err());
@@ -1137,13 +1137,13 @@ done
 
         // Create first session
         let session_id1 = manager
-            .create_session("test-session".to_string(), &working_dir, false, r#"{"role": "user", "content": "Hello"}"#.to_string())
+            .create_session("test-session".to_string(), &working_dir, false, vec![r#"{"role": "user", "content": "Hello"}"#.to_string()])
             .await
             .unwrap();
 
         // Try to create same session again
         let session_id2 = manager
-            .create_session("test-session".to_string(), &working_dir, false, r#"{"role": "user", "content": "Hello"}"#.to_string())
+            .create_session("test-session".to_string(), &working_dir, false, vec![r#"{"role": "user", "content": "Hello"}"#.to_string()])
             .await
             .unwrap();
 
@@ -1167,7 +1167,7 @@ done
         let manager = SessionManager::new(config);
 
         manager
-            .create_session("test-session".to_string(), &working_dir, false, r#"{"role": "user", "content": "Hello"}"#.to_string())
+            .create_session("test-session".to_string(), &working_dir, false, vec![r#"{"role": "user", "content": "Hello"}"#.to_string()])
             .await
             .unwrap();
 
@@ -1200,7 +1200,7 @@ done
         let manager = SessionManager::new(config);
 
         manager
-            .create_session("test-session".to_string(), &working_dir, false, r#"{"role": "user", "content": "Hello"}"#.to_string())
+            .create_session("test-session".to_string(), &working_dir, false, vec![r#"{"role": "user", "content": "Hello"}"#.to_string()])
             .await
             .unwrap();
 
@@ -1255,7 +1255,7 @@ exit 1
         
         // Try to create session - should fail immediately
         let result = manager
-            .create_session("test-session".to_string(), &working_dir, false, r#"{"role": "user", "content": "Hello"}"#.to_string())
+            .create_session("test-session".to_string(), &working_dir, false, vec![r#"{"role": "user", "content": "Hello"}"#.to_string()])
             .await;
             
         let elapsed = start.elapsed();

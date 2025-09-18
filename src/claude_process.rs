@@ -69,7 +69,7 @@ impl ClaudeProcess {
         session_id: &str,
         working_dir: &Path,
         resume: bool,
-        first_message: &str,
+        first_message: &[String],
     ) -> OrchestratorResult<(Self, String)> {
         info!(
             session_id = %session_id,
@@ -170,31 +170,57 @@ impl ClaudeProcess {
         let (stdin_tx, mut stdin_rx) = mpsc::channel::<String>(100);
         debug!(session_id = %session_id, "Created stdin communication channel");
 
-        // Send the first message immediately to trigger Claude's response
+        // Process each message in the array
         debug!(
             session_id = %session_id,
-            first_message_len = first_message.len(),
-            "Sending first message to trigger Claude response"
+            first_message_count = first_message.len(),
+            "Sending first message(s) to trigger Claude response"
         );
         
-        // Compact the JSON to ensure it's a single line (Claude expects single-line JSON)
-        let compacted_message = compact_json_message(first_message, "first_message")?;
-        
-        if let Err(e) = stdin_tx.send(compacted_message).await {
-            error!(
+        for (line_idx, line) in first_message.iter().enumerate() {
+            if line.trim().is_empty() {
+                debug!(
+                    session_id = %session_id,
+                    line_index = line_idx,
+                    "Skipping empty line in first message"
+                );
+                continue;
+            }
+            
+            // Compact the JSON to ensure it's a single line (Claude expects single-line JSON)
+            let compacted_message = compact_json_message(line, &format!("first_message_line_{}", line_idx))?;
+            
+            debug!(
                 session_id = %session_id,
-                error = %e,
-                "Failed to send first message to Claude stdin"
+                line_index = line_idx,
+                line_content_len = line.len(),
+                "Sending first message line to Claude stdin"
             );
-            return Err(OrchestratorError::ProcessCommunicationError(
-                format!("Failed to send first message to Claude: {e}")
-            ));
+            
+            if let Err(e) = stdin_tx.send(compacted_message).await {
+                error!(
+                    session_id = %session_id,
+                    line_index = line_idx,
+                    error = %e,
+                    "Failed to send first message line to Claude stdin"
+                );
+                return Err(OrchestratorError::ProcessCommunicationError(
+                    format!("Failed to send first message line {} to Claude: {e}", line_idx)
+                ));
+            }
+            
+            debug!(
+                session_id = %session_id,
+                line_index = line_idx,
+                "Successfully sent first message line to Claude stdin"
+            );
         }
         
         info!(
             session_id = %session_id,
-            first_message_len = first_message.len(),
-            "Successfully sent first message to Claude stdin"
+            first_message_count = first_message.len(),
+            total_messages_sent = first_message.len(),
+            "Successfully sent all first messages to Claude stdin"
         );
 
         // Spawn task to handle stdin writing
@@ -709,43 +735,50 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::TempDir;
 
-    async fn create_mock_claude_script(temp_dir: &TempDir) -> PathBuf {
-        let script_path = temp_dir.path().join("mock_claude");
-        let script_content = r#"#!/bin/bash
-echo '{"session_id": "test-session", "type": "start"}'
-while read line; do
-    echo '{"type": "echo", "content": "'$line'"}'
-done
-"#;
-        fs::write(&script_path, script_content).unwrap();
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&script_path).unwrap().permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(&script_path, perms).unwrap();
-        }
-
-        script_path
-    }
 
     #[tokio::test]
     async fn test_spawn_claude_process() {
         let temp_dir = TempDir::new().unwrap();
-        let mock_claude = create_mock_claude_script(&temp_dir).await;
         let working_dir = temp_dir.path().join("work");
         fs::create_dir_all(&working_dir).unwrap();
+        
+        // Create python mock script inline
+        let python_script = include_str!("../tests/helpers/mock_claude.py");
+        let mock_path = temp_dir.path().join("mock_claude.py");
+        fs::write(&mock_path, python_script).unwrap();
+        
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&mock_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&mock_path, perms).unwrap();
+        }
+        
+        let projects_dir = temp_dir.path().join("projects");
+        fs::create_dir_all(&projects_dir).unwrap();
 
         let config = Config {
-            claude_binary_path: mock_claude,
+            claude_binary_path: mock_path,
             http_listen_address: "127.0.0.1:8080".to_string(),
-            claude_projects_dir: temp_dir.path().to_path_buf(),
+            claude_projects_dir: projects_dir.clone(),
             shutdown_timeout: std::time::Duration::from_secs(30),
         };
 
+        // Create session file first using control command
+        let session_file_path = projects_dir.join("test-session.jsonl");
+        let session_content = format!(
+            r#"{{"sessionId": "test-session", "cwd": "{}", "type": "start"}}"#,
+            working_dir.display()
+        );
+        let create_file_command = serde_json::json!({
+            "control": "write_file",
+            "path": session_file_path.to_string_lossy(),
+            "content": session_content
+        }).to_string();
+
         let (mut process, session_id) =
-            ClaudeProcess::spawn(&config, "test-session", &working_dir, false, r#"{"role": "user", "content": "Hello Claude"}"#)
+            ClaudeProcess::spawn(&config, "test-session", &working_dir, false, &vec![create_file_command, r#"{"role": "user", "content": "Hello Claude"}"#.to_string()])
                 .await
                 .unwrap();
 
@@ -812,11 +845,140 @@ done
         };
 
         let (process, actual_session_id) =
-            ClaudeProcess::spawn(&config, "old-session-456", &working_dir, true, r#"{"role": "user", "content": "Resume session"}"#)
+            ClaudeProcess::spawn(&config, "old-session-456", &working_dir, true, &vec![r#"{"role": "user", "content": "Resume session"}"#.to_string()])
                 .await
                 .unwrap();
 
         assert_eq!(actual_session_id, "new-session-789");
+
+        process.kill().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_spawn_claude_process_with_multiline_first_message() {
+        let temp_dir = TempDir::new().unwrap();
+        let working_dir = temp_dir.path().join("work");
+        fs::create_dir_all(&working_dir).unwrap();
+        
+        // Create python mock script inline
+        let python_script = include_str!("../tests/helpers/mock_claude.py");
+        let mock_path = temp_dir.path().join("mock_claude.py");
+        fs::write(&mock_path, python_script).unwrap();
+        
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&mock_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&mock_path, perms).unwrap();
+        }
+        
+        let projects_dir = temp_dir.path().join("projects");
+        fs::create_dir_all(&projects_dir).unwrap();
+
+        let config = Config {
+            claude_binary_path: mock_path,
+            http_listen_address: "127.0.0.1:8080".to_string(),
+            claude_projects_dir: projects_dir.clone(),
+            shutdown_timeout: std::time::Duration::from_secs(30),
+        };
+
+        // Test with multi-line first message - use serde_json for proper JSON formatting
+        let session_file_path = projects_dir.join("test-session.jsonl");
+        let session_content = format!(
+            r#"{{"sessionId": "test-session", "cwd": "{}", "type": "start"}}"#,
+            working_dir.display()
+        );
+        let create_file_command = serde_json::json!({
+            "control": "write_file",
+            "path": session_file_path.to_string_lossy(),
+            "content": session_content
+        }).to_string();
+        
+        let messages = vec![
+            create_file_command,
+            r#"{"sessionId": "test-session", "type": "start"}"#.to_string(),
+            r#"{"role": "user", "content": "First message"}"#.to_string(),
+            r#"{"role": "user", "content": "Second message"}"#.to_string(),
+        ];
+
+        let (mut process, session_id) =
+            ClaudeProcess::spawn(&config, "test-session", &working_dir, false, &messages)
+                .await
+                .unwrap();
+
+        assert_eq!(session_id, "test-session");
+
+        // Test writing and reading
+        process.write(r#"{"role": "user", "content": "Additional message"}"#).await.unwrap();
+
+        // Give the mock process time to respond
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        if let Some(response) = process.read().await {
+            // Just verify we got some response, the exact format may vary
+            assert!(!response.is_empty());
+        }
+
+        process.kill().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_spawn_claude_process_with_empty_lines() {
+        let temp_dir = TempDir::new().unwrap();
+        let working_dir = temp_dir.path().join("work");
+        fs::create_dir_all(&working_dir).unwrap();
+        
+        // Create python mock script inline
+        let python_script = include_str!("../tests/helpers/mock_claude.py");
+        let mock_path = temp_dir.path().join("mock_claude.py");
+        fs::write(&mock_path, python_script).unwrap();
+        
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&mock_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&mock_path, perms).unwrap();
+        }
+        
+        let projects_dir = temp_dir.path().join("projects");
+        fs::create_dir_all(&projects_dir).unwrap();
+
+        let config = Config {
+            claude_binary_path: mock_path,
+            http_listen_address: "127.0.0.1:8080".to_string(),
+            claude_projects_dir: projects_dir.clone(),
+            shutdown_timeout: std::time::Duration::from_secs(30),
+        };
+
+        // Test with empty lines that should be skipped - use serde_json for proper JSON formatting
+        let session_file_path = projects_dir.join("test-session.jsonl");
+        let session_content = format!(
+            r#"{{"sessionId": "test-session", "cwd": "{}", "type": "start"}}"#,
+            working_dir.display()
+        );
+        let create_file_command = serde_json::json!({
+            "control": "write_file",
+            "path": session_file_path.to_string_lossy(),
+            "content": session_content
+        }).to_string();
+        
+        let messages_with_empty_lines = vec![
+            create_file_command,
+            r#"{"sessionId": "test-session", "type": "start"}"#.to_string(),
+            "".to_string(),  // Empty line
+            r#"{"role": "user", "content": "Second message"}"#.to_string(),
+            "".to_string(),  // Empty line
+            r#"{"role": "user", "content": "Third message"}"#.to_string(),
+        ];
+
+        let (process, session_id) =
+            ClaudeProcess::spawn(&config, "test-session", &working_dir, false, &messages_with_empty_lines)
+                .await
+                .unwrap();
+
+        assert_eq!(session_id, "test-session");
 
         process.kill().await.unwrap();
     }

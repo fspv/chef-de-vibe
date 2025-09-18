@@ -106,7 +106,7 @@ pub struct CreateSessionRequest {
     pub session_id: String,
     pub working_dir: PathBuf,
     pub resume: bool,
-    pub first_message: String,
+    pub first_message: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

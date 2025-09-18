@@ -9,6 +9,7 @@ use chef_de_vibe::{
     session_manager::SessionManager,
 };
 use helpers::mock_claude::MockClaude;
+use helpers::logging::init_logging;
 use reqwest::Client;
 use serial_test::serial;
 use std::fs;
@@ -41,20 +42,23 @@ struct TestServer {
 
 impl TestServer {
     async fn new() -> Self {
+        init_logging();
         let mock = MockClaude::new();
         mock.setup_env_vars();
         Self::new_internal(mock).await
     }
 
     async fn new_with_approval_binary() -> Self {
+        init_logging();
+        // For the new design, approval binary is the same as regular binary
+        // Tests will send approval requests and responses as needed
         let mock = MockClaude::new();
-        mock.setup_env_vars(); // Setup all environment variables first
-        let approval_binary = mock.create_approval_binary();
-        std::env::set_var("CLAUDE_BINARY_PATH", &approval_binary); // Override with approval binary
+        mock.setup_env_vars();
         Self::new_internal(mock).await
     }
 
     async fn new_with_config() -> Self {
+        init_logging();
         // Create a mock but don't call setup_env_vars - assume env vars are already set
         let mock = MockClaude::new();
         Self::new_internal(mock).await
@@ -156,12 +160,23 @@ async fn test_write_queue_fifo_ordering() {
     let working_dir = server.mock.temp_dir.path().join("queue_work");
     fs::create_dir_all(&working_dir).unwrap();
 
-    // Create session
+    // Create session - send control command to create session file
+    let session_file_path = server.mock.projects_dir.join("queue-session.jsonl");
+    let session_content = format!(
+        r#"{{"sessionId": "queue-session", "cwd": "{}", "type": "start"}}"#,
+        working_dir.display()
+    );
+    let create_file_command = serde_json::json!({
+        "control": "write_file",
+        "path": session_file_path.to_string_lossy(),
+        "content": session_content
+    }).to_string();
+    
     let request = CreateSessionRequest {
         session_id: "queue-session".to_string(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: r#"{"role": "user", "content": "Hello"}"#.to_string(),
+        first_message: vec![create_file_command],
     };
 
     let create_response = client
@@ -217,12 +232,23 @@ async fn test_claude_process_death_simulation() {
     let working_dir = server.mock.temp_dir.path().join("death_work");
     fs::create_dir_all(&working_dir).unwrap();
 
-    // Create session with normal Claude binary
+    // Create session - send control command to create session file
+    let session_file_path = server.mock.projects_dir.join("death-session.jsonl");
+    let session_content = format!(
+        r#"{{"sessionId": "death-session", "cwd": "{}", "type": "start"}}"#,
+        working_dir.display()
+    );
+    let create_file_command = serde_json::json!({
+        "control": "write_file",
+        "path": session_file_path.to_string_lossy(),
+        "content": session_content
+    }).to_string();
+    
     let request = CreateSessionRequest {
         session_id: "death-session".to_string(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: r#"{"role": "user", "content": "Hello"}"#.to_string(),
+        first_message: vec![create_file_command],
     };
 
     let response = client

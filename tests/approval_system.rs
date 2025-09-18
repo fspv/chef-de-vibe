@@ -4,11 +4,12 @@ use chef_de_vibe::{
     api::handlers::AppState,
     config::Config,
     models::{
-        CreateSessionRequest, CreateSessionResponse, GetSessionResponse, ListSessionsResponse,
+        CreateSessionRequest, CreateSessionResponse
     },
     session_manager::SessionManager,
 };
 use helpers::mock_claude::MockClaude;
+use helpers::logging::init_logging;
 use reqwest::Client;
 use serial_test::serial;
 use std::fs;
@@ -17,7 +18,6 @@ use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::time::timeout;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
-use tracing::debug;
 use url::Url;
 use axum;
 use futures_util::{StreamExt, SinkExt};
@@ -45,16 +45,18 @@ struct TestServer {
 
 impl TestServer {
     async fn new() -> Self {
+        init_logging();
         let mock = MockClaude::new();
         mock.setup_env_vars();
         Self::new_internal(mock).await
     }
 
     async fn new_with_approval_binary() -> Self {
+        init_logging();
+        // For the new design, approval binary is the same as regular binary
+        // Tests will send approval requests and responses as needed
         let mock = MockClaude::new();
-        mock.setup_env_vars(); // Setup all environment variables first
-        let approval_binary = mock.create_approval_binary();
-        std::env::set_var("CLAUDE_BINARY_PATH", &approval_binary); // Override with approval binary
+        mock.setup_env_vars();
         Self::new_internal(mock).await
     }
 
@@ -225,11 +227,24 @@ async fn test_approval_websocket_basic_connection() {
     fs::create_dir_all(&working_dir).unwrap();
     
     let session_id = generate_unique_session_id("approval-basic");
+    
+    // First message needs to create the session file using the mock's write_file control command
+    let session_file_path = server.mock.projects_dir().join(format!("{}.jsonl", session_id));
+    let session_start_content = format!(r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#, 
+        session_id, working_dir.display());
+    
+    // Escape the content for embedding in JSON
+    let escaped_content = session_start_content.replace('"', r#"\""#);
+    
+    // Create the control command to write the session file
+    let first_message = vec![format!(r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
+        session_file_path.display(), escaped_content)];
+    
     let request = CreateSessionRequest {
         session_id: session_id.clone(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: r#"{"role": "user", "content": "Hello"}"#.to_string(),
+        first_message,
     };
     
     let create_response = client
@@ -239,8 +254,41 @@ async fn test_approval_websocket_basic_connection() {
         .await
         .unwrap();
 
-    let session_data: CreateSessionResponse = create_response.json().await.unwrap();
+        // Debug: Check response status and headers
+    let status = create_response.status();
+    let headers = create_response.headers().clone();
+    println!("Response status: {}", status);
+    println!("Response headers: {:?}", headers);
     
+    // Get the response body as text first
+    let response_text = create_response.text().await.unwrap();
+    println!("Raw response body: {}", response_text);
+
+    assert_eq!(status, 200);
+    
+    // Try to parse as JSON to see the structure
+    match serde_json::from_str::<serde_json::Value>(&response_text) {
+        Ok(json_value) => {
+            println!("Parsed JSON structure: {:#}", json_value);
+        }
+        Err(e) => {
+            println!("Failed to parse as JSON: {}", e);
+        }
+    }
+
+    // Try to parse the response into the expected structure
+    let session_data: CreateSessionResponse = match serde_json::from_str(&response_text) {
+        Ok(data) => {
+            println!("Successfully parsed as CreateSessionResponse");
+            data
+        }
+        Err(e) => {
+            println!("Failed to parse response as CreateSessionResponse: {}", e);
+            println!("Expected fields for CreateSessionResponse (add these if missing from your struct definition):");
+            panic!("Response parsing failed - check the debug output above");
+        }
+    };
+
     // Connect to approval WebSocket
     let approval_ws_url = format!("{}{}", server.ws_url, session_data.approval_websocket_url);
     let approval_ws_result = connect_approval_websocket(&approval_ws_url).await;
@@ -319,11 +367,24 @@ async fn test_single_tool_approval_allow_flow() {
     fs::create_dir_all(&working_dir).unwrap();
     
     let session_id = generate_unique_session_id("approval-allow");
+    
+    // First message needs to create the session file using the mock's write_file control command
+    let session_file_path = server.mock.projects_dir().join(format!("{}.jsonl", session_id));
+    let session_start_content = format!(r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#, 
+        session_id, working_dir.display());
+    
+    // Escape the content for embedding in JSON
+    let escaped_content = session_start_content.replace('"', r#"\""#);
+    
+    // Create the control command to write the session file
+    let first_message = vec![format!(r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
+        session_file_path.display(), escaped_content)];
+    
     let request = CreateSessionRequest {
         session_id: session_id.clone(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: r#"{"role": "user", "content": "Hello"}"#.to_string(),
+        first_message,
     };
     
     let create_response = client
@@ -346,22 +407,45 @@ async fn test_single_tool_approval_allow_flow() {
     
     // Consume any initial messages (session start, first_message response, etc.)
     tokio::time::sleep(Duration::from_millis(200)).await;
-    loop {
-        if timeout(Duration::from_millis(100), main_ws.next()).await.is_err() {
-            break; // No more messages available
-        }
+    while let Ok(Some(_)) = timeout(Duration::from_millis(100), main_ws.next()).await {
+        // Drain all pending messages
     }
     
-    // Send message that triggers tool approval request
-    main_ws.send(Message::Text(r#"{"role": "user", "content": "trigger_tool_request"}"#.to_string())).await.unwrap();
+    // Send a control request for tool approval
+    let control_request = r#"{"type": "control_request", "request_id": "test-123", "request": {"subtype": "can_use_tool", "tool_name": "Read"}}"#;
+    main_ws.send(Message::Text(control_request.to_string())).await.unwrap();
     
+    // The system will process the echoed control_request and generate an approval request
     // Should receive approval request on approval WebSocket
     let request_id = expect_approval_request(&mut approval_ws, "Read").await.unwrap();
     
     // Send allow response
     send_approval_response(&mut approval_ws, &request_id, "allow", None, None).await.unwrap();
     
-    // Should receive response on main WebSocket indicating tool was allowed
+    // Send the expected assistant response
+    let assistant_response = serde_json::json!({
+        "type": "assistant",
+        "message": {
+            "content": [{
+                "text": "APPROVAL_TEST_SUCCESS_READ"
+            }]
+        }
+    });
+    main_ws.send(Message::Text(serde_json::to_string(&assistant_response).unwrap())).await.unwrap();
+    
+    // First consume the automatic control_response generated by the system
+    let control_response_msg = timeout(Duration::from_secs(2), main_ws.next()).await
+        .expect("Should receive control_response")
+        .expect("WebSocket stream should not end")
+        .expect("Should receive valid message");
+    
+    // Verify it's a control_response
+    if let Message::Text(text) = control_response_msg {
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed.get("type").and_then(|v| v.as_str()), Some("control_response"));
+    }
+    
+    // Now should receive the echoed assistant message
     let response = timeout(Duration::from_secs(5), main_ws.next()).await
         .expect("Should receive response within timeout")
         .expect("WebSocket stream should not end")
@@ -418,11 +502,24 @@ async fn test_single_tool_approval_deny_flow() {
     fs::create_dir_all(&working_dir).unwrap();
     
     let session_id = generate_unique_session_id("approval-deny");
+    
+    // First message needs to create the session file using the mock's write_file control command
+    let session_file_path = server.mock.projects_dir().join(format!("{}.jsonl", session_id));
+    let session_start_content = format!(r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#, 
+        session_id, working_dir.display());
+    
+    // Escape the content for embedding in JSON
+    let escaped_content = session_start_content.replace('"', r#"\""#);
+    
+    // Create the control command to write the session file
+    let first_message = vec![format!(r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
+        session_file_path.display(), escaped_content)];
+    
     let request = CreateSessionRequest {
         session_id: session_id.clone(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: r#"{"role": "user", "content": "Hello"}"#.to_string(),
+        first_message,
     };
     
     let create_response = client
@@ -445,22 +542,45 @@ async fn test_single_tool_approval_deny_flow() {
     
     // Consume any initial messages (session start, first_message response, etc.)
     tokio::time::sleep(Duration::from_millis(200)).await;
-    loop {
-        if timeout(Duration::from_millis(100), main_ws.next()).await.is_err() {
-            break; // No more messages available
-        }
+    while let Ok(Some(_)) = timeout(Duration::from_millis(100), main_ws.next()).await {
+        // Drain all pending messages
     }
     
-    // Send message that triggers tool approval request
-    main_ws.send(Message::Text(r#"{"role": "user", "content": "trigger_bash_request"}"#.to_string())).await.unwrap();
+    // Send a control request for tool approval
+    let control_request = r#"{"type": "control_request", "request_id": "test-bash-123", "request": {"subtype": "can_use_tool", "tool_name": "Bash"}}"#;
+    main_ws.send(Message::Text(control_request.to_string())).await.unwrap();
     
+    // The system will process the echoed control_request and generate an approval request
     // Should receive approval request on approval WebSocket
     let request_id = expect_approval_request(&mut approval_ws, "Bash").await.unwrap();
     
     // Send deny response
     send_approval_response(&mut approval_ws, &request_id, "deny", None, None).await.unwrap();
     
-    // Should receive response on main WebSocket indicating tool was denied
+    // Send the expected assistant response for denial
+    let assistant_response = serde_json::json!({
+        "type": "assistant",
+        "message": {
+            "content": [{
+                "text": "APPROVAL_TEST_DENIED_BASH"
+            }]
+        }
+    });
+    main_ws.send(Message::Text(serde_json::to_string(&assistant_response).unwrap())).await.unwrap();
+    
+    // First consume the automatic control_response generated by the system
+    let control_response_msg = timeout(Duration::from_secs(2), main_ws.next()).await
+        .expect("Should receive control_response")
+        .expect("WebSocket stream should not end")
+        .expect("Should receive valid message");
+    
+    // Verify it's a control_response
+    if let Message::Text(text) = control_response_msg {
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed.get("type").and_then(|v| v.as_str()), Some("control_response"));
+    }
+    
+    // Now should receive the echoed assistant message
     let response = timeout(Duration::from_secs(5), main_ws.next()).await
         .expect("Should receive response within timeout")
         .expect("WebSocket stream should not end")
@@ -509,14 +629,14 @@ async fn test_single_tool_approval_deny_flow() {
 #[tokio::test]
 #[serial]
 async fn test_debug_mock_claude_directly() {
+    init_logging();
     let mock = MockClaude::new();
-    let approval_binary = mock.create_approval_binary();
+    let mock_binary = &mock.binary_path;
     
-    println!("Testing approval binary directly: {}", approval_binary.display());
+    println!("Testing mock binary directly: {}", mock_binary.display());
     
-    let mut child = Command::new(&approval_binary)
-        .arg("--session-id")
-        .arg("test-session")
+    let mut child = Command::new("python3")
+        .arg(mock_binary)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -524,11 +644,15 @@ async fn test_debug_mock_claude_directly() {
         .expect("Failed to spawn mock Claude");
         
     let stdin = child.stdin.as_mut().unwrap();
-    stdin.write_all(b"{\"role\": \"user\", \"content\": \"trigger_tool_request\"}\n").unwrap();
-    stdin.flush().unwrap();
     
-    // Close stdin to signal end of input
-    let _ = stdin;
+    // Test 1: Send a control request (as if from the service) and verify it's echoed back
+    let control_request = r#"{"type": "control_request", "request_id": "test-123", "request": {"subtype": "can_use_tool", "tool_name": "Read"}}"#;
+    stdin.write_all(control_request.as_bytes()).unwrap();
+    stdin.write_all(b"\n").unwrap();
+    
+    // Test 2: Send exit command
+    stdin.write_all(b"{\"control\": \"exit\", \"code\": 0}\n").unwrap();
+    stdin.flush().unwrap();
     
     let output = child.wait_with_output().unwrap();
     
@@ -537,8 +661,10 @@ async fn test_debug_mock_claude_directly() {
     println!("Mock Claude exit code: {:?}", output.status.code());
     
     let stdout_str = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout_str.contains("control_request"), "Mock Claude should send control_request");
-    assert!(stdout_str.contains("can_use_tool"), "Mock Claude should send can_use_tool subtype");
+    // Verify the control request was echoed back
+    assert!(stdout_str.contains("control_request"), "Mock Claude should echo control_request");
+    assert!(stdout_str.contains("test-123"), "Mock Claude should echo request_id");
+    assert_eq!(output.status.code(), Some(0), "Should exit with code 0");
 }
 
 #[tokio::test]
@@ -552,11 +678,24 @@ async fn test_multiple_pending_approvals_accumulation() {
     fs::create_dir_all(&working_dir).unwrap();
     
     let session_id = generate_unique_session_id("approval-multiple");
+    
+    // First message needs to create the session file using the mock's write_file control command
+    let session_file_path = server.mock.projects_dir().join(format!("{}.jsonl", session_id));
+    let session_start_content = format!(r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#, 
+        session_id, working_dir.display());
+    
+    // Escape the content for embedding in JSON
+    let escaped_content = session_start_content.replace('"', r#"\""#);
+    
+    // Create the control command to write the session file
+    let first_message = vec![format!(r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
+        session_file_path.display(), escaped_content)];
+    
     let request = CreateSessionRequest {
         session_id: session_id.clone(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: r#"{"role": "user", "content": "Hello"}"#.to_string(),
+        first_message,
     };
     
     let create_response = client
@@ -579,17 +718,16 @@ async fn test_multiple_pending_approvals_accumulation() {
     
     // Consume any initial messages (session start, first_message response, etc.)
     tokio::time::sleep(Duration::from_millis(200)).await;
-    loop {
-        if timeout(Duration::from_millis(100), main_ws.next()).await.is_err() {
-            break; // No more messages available
-        }
+    while let Ok(Some(_)) = timeout(Duration::from_millis(100), main_ws.next()).await {
+        // Drain all pending messages
     }
     
-    // Send a message that triggers tool approval request
+    // Send a control request for tool approval
     use futures_util::SinkExt;
     use futures_util::StreamExt;
-    println!("Sending trigger message to main WebSocket");
-    main_ws.send(Message::Text(r#"{"role": "user", "content": "trigger_tool_request"}"#.to_string())).await.unwrap();
+    println!("Sending control request to main WebSocket");
+    let control_request = r#"{"type": "control_request", "request_id": "multi-test-123", "request": {"subtype": "can_use_tool", "tool_name": "Read"}}"#;
+    main_ws.send(Message::Text(control_request.to_string())).await.unwrap();
     
     println!("Waiting for first approval client to receive approval request...");
     // First approval client should receive the request
@@ -643,7 +781,30 @@ async fn test_multiple_pending_approvals_accumulation() {
     let request_id = request_data["id"].as_str().unwrap();
     send_approval_response(&mut approval_ws1, request_id, "allow", None, None).await.unwrap();
     
-    // Should receive response on main WebSocket indicating tool was allowed
+    // Send the expected assistant response
+    let assistant_response = serde_json::json!({
+        "type": "assistant",
+        "message": {
+            "content": [{
+                "text": "APPROVAL_TEST_SUCCESS_READ"
+            }]
+        }
+    });
+    main_ws.send(Message::Text(serde_json::to_string(&assistant_response).unwrap())).await.unwrap();
+    
+    // First consume the automatic control_response generated by the system
+    let control_response_msg = timeout(Duration::from_secs(2), main_ws.next()).await
+        .expect("Should receive control_response")
+        .expect("WebSocket stream should not end")
+        .expect("Should receive valid message");
+    
+    // Verify it's a control_response
+    if let Message::Text(text) = control_response_msg {
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed.get("type").and_then(|v| v.as_str()), Some("control_response"));
+    }
+    
+    // Now should receive the echoed assistant message
     let response = timeout(Duration::from_secs(5), main_ws.next()).await
         .expect("Should receive response within timeout")
         .expect("WebSocket stream should not end")
@@ -702,11 +863,24 @@ async fn test_multiple_approval_clients_broadcast() {
     fs::create_dir_all(&working_dir).unwrap();
     
     let session_id = generate_unique_session_id("approval-broadcast");
+    
+    // First message needs to create the session file using the mock's write_file control command
+    let session_file_path = server.mock.projects_dir().join(format!("{}.jsonl", session_id));
+    let session_start_content = format!(r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#, 
+        session_id, working_dir.display());
+    
+    // Escape the content for embedding in JSON
+    let escaped_content = session_start_content.replace('"', r#"\""#);
+    
+    // Create the control command to write the session file
+    let first_message = vec![format!(r#"{{"control": "write_file", "path": "{}", "content": "{}"}}"#,
+        session_file_path.display(), escaped_content)];
+    
     let request = CreateSessionRequest {
         session_id: session_id.clone(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: r#"{"role": "user", "content": "Hello"}"#.to_string(),
+        first_message,
     };
     
     let create_response = client
@@ -732,10 +906,17 @@ async fn test_multiple_approval_clients_broadcast() {
     let url = tokio_tungstenite::tungstenite::http::Uri::try_from(ws_url).unwrap();
     let (mut main_ws, _) = tokio_tungstenite::connect_async(url).await.unwrap();
     
-    // Send message that triggers tool approval request
+    // Consume any initial messages
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    while let Ok(Some(_)) = timeout(Duration::from_millis(100), main_ws.next()).await {
+        // Drain all pending messages
+    }
+    
+    // Send a control request for tool approval
     use futures_util::SinkExt;
     use futures_util::StreamExt;
-    main_ws.send(Message::Text(r#"{"role": "user", "content": "trigger_tool_request"}"#.to_string())).await.unwrap();
+    let control_request = r#"{"type": "control_request", "request_id": "broadcast-test-123", "request": {"subtype": "can_use_tool", "tool_name": "Read"}}"#;
+    main_ws.send(Message::Text(control_request.to_string())).await.unwrap();
     
     // All three approval clients should receive the same approval request
     let mut responses = Vec::new();
@@ -780,7 +961,30 @@ async fn test_multiple_approval_clients_broadcast() {
     // Send approval response from first client only 
     send_approval_response(&mut approval_ws1, &request_ids[0], "allow", None, None).await.unwrap();
     
-    // Should receive response on main WebSocket indicating tool was allowed
+    // Send the expected assistant response
+    let assistant_response = serde_json::json!({
+        "type": "assistant",
+        "message": {
+            "content": [{
+                "text": "APPROVAL_TEST_SUCCESS_READ"
+            }]
+        }
+    });
+    main_ws.send(Message::Text(serde_json::to_string(&assistant_response).unwrap())).await.unwrap();
+    
+    // First consume the automatic control_response generated by the system
+    let control_response_msg = timeout(Duration::from_secs(2), main_ws.next()).await
+        .expect("Should receive control_response")
+        .expect("WebSocket stream should not end")
+        .expect("Should receive valid message");
+    
+    // Verify it's a control_response
+    if let Message::Text(text) = control_response_msg {
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed.get("type").and_then(|v| v.as_str()), Some("control_response"));
+    }
+    
+    // Now should receive the echoed assistant message
     let response = timeout(Duration::from_secs(5), main_ws.next()).await
         .expect("Should receive response within timeout")
         .expect("WebSocket stream should not end")

@@ -159,8 +159,10 @@ mod tests {
     use super::*;
     use std::fs;
     use tempfile::TempDir;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_config_from_env_missing_required() {
         std::env::remove_var("CLAUDE_BINARY_PATH");
         std::env::remove_var("HTTP_LISTEN_ADDRESS");
@@ -176,6 +178,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_config_validation() {
         // Clean up any existing env vars from other tests
         env::remove_var("CLAUDE_BINARY_PATH");
@@ -255,6 +258,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_find_claude_in_path_not_found() {
         // Save original PATH and set a path that doesn't contain claude
         let original_path = env::var("PATH").ok();
@@ -275,6 +279,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_config_from_env_with_relative_path() {
         // Clean up any existing env vars
         env::remove_var("CLAUDE_BINARY_PATH");
@@ -319,6 +324,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_config_from_env_without_claude_binary_path() {
         // Clean up any existing env vars
         env::remove_var("CLAUDE_BINARY_PATH");

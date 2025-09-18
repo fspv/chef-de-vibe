@@ -9,6 +9,7 @@ use chef_de_vibe::{
     session_manager::SessionManager,
 };
 use helpers::mock_claude::MockClaude;
+use helpers::logging::init_logging;
 use reqwest::Client;
 use serial_test::serial;
 use std::fs;
@@ -17,6 +18,25 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tracing::{info, debug};
+
+// Helper function to create test session files on disk
+fn create_test_session_file(projects_dir: &std::path::Path, project_name: &str, session_id: &str, cwd: &str) {
+    let project_dir = projects_dir.join(project_name);
+    fs::create_dir_all(&project_dir).unwrap();
+
+    let session_file = project_dir.join(format!("{}.jsonl", session_id));
+    let content = format!(
+        r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}
+{{"type": "user", "message": {{"role": "user", "content": "Hello Claude"}}}}
+{{"type": "assistant", "message": {{"role": "assistant", "content": [{{"type": "text", "text": "Hello! How can I help you today?"}}]}}}}
+{{"type": "user", "message": {{"role": "user", "content": "What's 2+2?"}}}}
+{{"type": "assistant", "message": {{"role": "assistant", "content": [{{"type": "text", "text": "2 + 2 equals 4."}}]}}}}
+"#,
+        session_id, cwd
+    );
+
+    fs::write(session_file, content).unwrap();
+}
 
 struct TestServer {
     pub base_url: String,
@@ -27,6 +47,7 @@ struct TestServer {
 
 impl TestServer {
     async fn new() -> Self {
+        init_logging();
         let mock = MockClaude::new();
         mock.setup_env_vars();
         Self::new_internal(mock).await
@@ -129,12 +150,23 @@ async fn test_active_session_working_directory() {
     
     info!("Created test directories: {:?}, {:?}", work_dir1, work_dir2);
     
-    // Create first session
+    // Create first session with control command to create session file
+    let session_file_path1 = server.mock.projects_dir.join("active-session-1.jsonl");
+    let session_content1 = format!(
+        r#"{{"sessionId": "active-session-1", "cwd": "{}", "type": "start"}}"#,
+        work_dir1.display()
+    );
+    let create_file_command1 = serde_json::json!({
+        "control": "write_file",
+        "path": session_file_path1.to_string_lossy(),
+        "content": session_content1
+    }).to_string();
+    
     let request1 = CreateSessionRequest {
         session_id: "active-session-1".to_string(),
         working_dir: work_dir1.clone(),
         resume: false,
-        first_message: r#"{"role": "user", "content": "Test message 1"}"#.to_string(),
+        first_message: vec![create_file_command1, r#"{"role": "user", "content": "Test message 1"}"#.to_string()],
     };
     
     let response1 = client
@@ -147,12 +179,23 @@ async fn test_active_session_working_directory() {
     assert_eq!(response1.status(), 200);
     debug!("Created first active session");
     
-    // Create second session
+    // Create second session with control command to create session file
+    let session_file_path2 = server.mock.projects_dir.join("active-session-2.jsonl");
+    let session_content2 = format!(
+        r#"{{"sessionId": "active-session-2", "cwd": "{}", "type": "start"}}"#,
+        work_dir2.display()
+    );
+    let create_file_command2 = serde_json::json!({
+        "control": "write_file",
+        "path": session_file_path2.to_string_lossy(),
+        "content": session_content2
+    }).to_string();
+    
     let request2 = CreateSessionRequest {
         session_id: "active-session-2".to_string(),
         working_dir: work_dir2.clone(),
         resume: false,
-        first_message: r#"{"role": "user", "content": "Test message 2"}"#.to_string(),
+        first_message: vec![create_file_command2, r#"{"role": "user", "content": "Test message 2"}"#.to_string()],
     };
     
     let response2 = client
@@ -215,9 +258,9 @@ async fn test_inactive_session_working_directory_from_disk() {
     let work_dir3 = "/tmp/workspace";
     
     // Create session files on disk (these will be inactive)
-    server.mock.create_test_session_file("project1", "disk-session-1", work_dir1);
-    server.mock.create_test_session_file("project2", "disk-session-2", work_dir2);  
-    server.mock.create_test_session_file("workspace", "disk-session-3", work_dir3);
+    create_test_session_file(&server.mock.projects_dir, "project1", "disk-session-1", work_dir1);
+    create_test_session_file(&server.mock.projects_dir, "project2", "disk-session-2", work_dir2);  
+    create_test_session_file(&server.mock.projects_dir, "workspace", "disk-session-3", work_dir3);
     
     debug!("Created test session files on disk");
     
@@ -293,16 +336,35 @@ async fn test_session_resume_working_directory() {
     
     // Create an existing session file on disk with specific working directory
     let original_cwd = original_work_dir.to_str().unwrap();
-    server.mock.create_test_session_file("resume_test", "original-session", original_cwd);
+    create_test_session_file(&server.mock.projects_dir, "resume_test", "original-session", original_cwd);
     
     debug!("Created original session file for resume test with working directory: {}", original_cwd);
     
-    // Resume the session
+    // Resume the session - create control commands for resume mode
+    let new_session_id = "resumed-session-123";
+    let session_file_path = server.mock.projects_dir.join(format!("{}.jsonl", new_session_id));
+    let session_content = format!(
+        r#"{{"sessionId": "{}", "cwd": "{}", "type": "start"}}"#,
+        new_session_id, original_work_dir.display()
+    );
+    
+    // Create control commands to return the new session ID and create its file
+    let create_file_command = serde_json::json!({
+        "control": "write_file",
+        "path": session_file_path.to_string_lossy(),
+        "content": session_content
+    }).to_string();
+    
+    let session_init_response = serde_json::json!({
+        "session_id": new_session_id,
+        "type": "start"
+    }).to_string();
+    
     let resume_request = CreateSessionRequest {
         session_id: "original-session".to_string(),
         working_dir: original_work_dir.clone(),
         resume: true,
-        first_message: r#"{"role": "user", "content": "Resume this session"}"#.to_string(),
+        first_message: vec![create_file_command, session_init_response, r#"{"role": "user", "content": "Resume this session"}"#.to_string()],
     };
     
     let resume_response = client
@@ -343,15 +405,26 @@ async fn test_list_sessions_working_directories() {
     let server = TestServer::new().await;
     let client = Client::new();
     
-    // Create active session
+    // Create active session with control command to create session file
     let active_work_dir = server.mock.temp_dir.path().join("active_list_test");
     fs::create_dir_all(&active_work_dir).unwrap();
+    
+    let session_file_path = server.mock.projects_dir.join("active-list-session.jsonl");
+    let session_content = format!(
+        r#"{{"sessionId": "active-list-session", "cwd": "{}", "type": "start"}}"#,
+        active_work_dir.display()
+    );
+    let create_file_command = serde_json::json!({
+        "control": "write_file",
+        "path": session_file_path.to_string_lossy(),
+        "content": session_content
+    }).to_string();
     
     let active_request = CreateSessionRequest {
         session_id: "active-list-session".to_string(),
         working_dir: active_work_dir.clone(),
         resume: false,
-        first_message: r#"{"role": "user", "content": "Active session"}"#.to_string(),
+        first_message: vec![create_file_command, r#"{"role": "user", "content": "Active session"}"#.to_string()],
     };
     
     client
@@ -362,8 +435,8 @@ async fn test_list_sessions_working_directories() {
         .unwrap();
     
     // Create inactive sessions on disk
-    server.mock.create_test_session_file("list_project1", "inactive-list-1", "/home/user/list1");
-    server.mock.create_test_session_file("list_project2", "inactive-list-2", "/home/user/list2");
+    create_test_session_file(&server.mock.projects_dir, "list_project1", "inactive-list-1", "/home/user/list1");
+    create_test_session_file(&server.mock.projects_dir, "list_project2", "inactive-list-2", "/home/user/list2");
     
     debug!("Created active and inactive sessions for list test");
     
@@ -417,19 +490,41 @@ async fn test_mixed_active_inactive_working_directories() {
     fs::create_dir_all(&web_project).unwrap();
     fs::create_dir_all(&api_project).unwrap();
     
-    // Create active sessions
+    // Create active sessions with control commands to create session files
+    let web_session_file_path = server.mock.projects_dir.join("web-session.jsonl");
+    let web_session_content = format!(
+        r#"{{"sessionId": "web-session", "cwd": "{}", "type": "start"}}"#,
+        web_project.display()
+    );
+    let web_create_file_command = serde_json::json!({
+        "control": "write_file",
+        "path": web_session_file_path.to_string_lossy(),
+        "content": web_session_content
+    }).to_string();
+    
+    let api_session_file_path = server.mock.projects_dir.join("api-session.jsonl");
+    let api_session_content = format!(
+        r#"{{"sessionId": "api-session", "cwd": "{}", "type": "start"}}"#,
+        api_project.display()
+    );
+    let api_create_file_command = serde_json::json!({
+        "control": "write_file",
+        "path": api_session_file_path.to_string_lossy(),
+        "content": api_session_content
+    }).to_string();
+    
     let web_request = CreateSessionRequest {
         session_id: "web-session".to_string(),
         working_dir: web_project.clone(),
         resume: false,
-        first_message: r#"{"role": "user", "content": "Working on web frontend"}"#.to_string(),
+        first_message: vec![web_create_file_command, r#"{"role": "user", "content": "Working on web frontend"}"#.to_string()],
     };
     
     let api_request = CreateSessionRequest {
         session_id: "api-session".to_string(),
         working_dir: api_project.clone(),
         resume: false,
-        first_message: r#"{"role": "user", "content": "Working on backend API"}"#.to_string(),
+        first_message: vec![api_create_file_command, r#"{"role": "user", "content": "Working on backend API"}"#.to_string()],
     };
     
     // Create the active sessions
@@ -448,8 +543,8 @@ async fn test_mixed_active_inactive_working_directories() {
         .unwrap();
     
     // Create inactive sessions on disk
-    server.mock.create_test_session_file("mobile", "mobile-session", "/home/user/mobile-app");
-    server.mock.create_test_session_file("scripts", "script-session", "/usr/local/scripts");
+    create_test_session_file(&server.mock.projects_dir, "mobile", "mobile-session", "/home/user/mobile-app");
+    create_test_session_file(&server.mock.projects_dir, "scripts", "script-session", "/usr/local/scripts");
     
     debug!("Created mixed active and inactive sessions");
     
@@ -517,12 +612,23 @@ async fn test_working_directory_consistency_across_lifecycle() {
     let work_dir = server.mock.temp_dir.path().join("consistency_test");
     fs::create_dir_all(&work_dir).unwrap();
     
-    // 1. Create session
+    // 1. Create session with control command to create session file
+    let session_file_path = server.mock.projects_dir.join("lifecycle-session.jsonl");
+    let session_content = format!(
+        r#"{{"sessionId": "lifecycle-session", "cwd": "{}", "type": "start"}}"#,
+        work_dir.display()
+    );
+    let create_file_command = serde_json::json!({
+        "control": "write_file",
+        "path": session_file_path.to_string_lossy(),
+        "content": session_content
+    }).to_string();
+    
     let create_request = CreateSessionRequest {
         session_id: "lifecycle-session".to_string(),
         working_dir: work_dir.clone(),
         resume: false,
-        first_message: r#"{"role": "user", "content": "Starting lifecycle test"}"#.to_string(),
+        first_message: vec![create_file_command, r#"{"role": "user", "content": "Starting lifecycle test"}"#.to_string()],
     };
     
     let create_response = client

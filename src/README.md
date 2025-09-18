@@ -108,11 +108,28 @@ Sessions without summaries or timestamps will omit these fields from the respons
   "session_id": "unique-session-identifier",
   "working_dir": "/absolute/path/to/project",
   "resume": true | false,
-  "first_message": "raw JSON message to send to Claude stdin"
+  "first_message": ["message1", "message2", ...]
 }
 ```
 
-Note: `first_message` is required and contains raw JSON that will be forwarded directly to Claude's stdin to trigger the initial response needed for session setup. All JSON messages (including `first_message` and WebSocket messages) are automatically compacted to single-line format before being sent to Claude, as Claude expects each JSON message to be on a single line.
+**Note about first_message field:**
+- `first_message` is required and must be an array of strings
+- Each string contains a raw JSON message that will be forwarded directly to Claude's stdin
+- Messages are sent in order, with each message on a separate line
+- All JSON messages are automatically compacted to single-line format before being sent to Claude, as Claude expects each JSON message to be on a single line
+
+**Example:**
+```json
+{
+  "session_id": "my-session",
+  "working_dir": "/home/user/project",
+  "resume": false,
+  "first_message": [
+    "{\"role\": \"user\", \"content\": \"Hello Claude\"}",
+    "{\"role\": \"user\", \"content\": \"Please help me with this project\"}"
+  ]
+}
+```
 
 **Response (200 OK):**
 ```json

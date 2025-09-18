@@ -9,6 +9,7 @@ use chef_de_vibe::{
     session_manager::SessionManager,
 };
 use helpers::mock_claude::MockClaude;
+use helpers::logging::init_logging;
 use reqwest::Client;
 use serial_test::serial;
 use std::fs;
@@ -19,6 +20,22 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 use url::Url;
 use futures_util::SinkExt;
 
+// Helper function to create a session file with complete structure for testing
+fn create_complete_session_file(projects_dir: &std::path::Path, project_name: &str, session_id: &str, cwd: &str) {
+    let project_dir = projects_dir.join(project_name);
+    fs::create_dir_all(&project_dir).unwrap();
+
+    let session_file = project_dir.join(format!("{}.jsonl", session_id));
+
+    let content = format!(
+        r#"{{"parentUuid":null,"isSidechain":false,"userType":"external","cwd":"{}","sessionId":"{}","version":"1.0.65","gitBranch":"master","type":"user","message":{{"role":"user","content":"fix all the clippy warnings"}},"uuid":"30644cc3-c5cd-4e9e-953a-bbe299394703","timestamp":"2025-09-09T21:51:18.091Z"}}
+{{"parentUuid":"30644cc3-c5cd-4e9e-953a-bbe299394703","isSidechain":false,"userType":"external","cwd":"{}","sessionId":"{}","version":"1.0.65","gitBranch":"master","message":{{"id":"msg_01SZg91CWiohGz1EGpKNtiNc","type":"message","role":"assistant","model":"claude-sonnet-4-20250514","content":[{{"type":"text","text":"I'll use the rust-linter-fixer agent..."}}],"stop_reason":null,"stop_sequence":null,"usage":{{"input_tokens":4,"cache_creation_input_tokens":17902,"cache_read_input_tokens":0,"cache_creation":{{"ephemeral_5m_input_tokens":17902,"ephemeral_1h_input_tokens":0}},"output_tokens":3,"service_tier":"standard"}}}},"requestId":"req_011CSyZqUfBhmGuMy8ymqeNp","type":"assistant","uuid":"44f23e72-dd74-467a-b7b2-bd1bb905abe4","timestamp":"2025-09-09T21:51:21.682Z"}}
+{{"type":"system","message":"Session started","timestamp":"2025-09-09T21:51:22.000Z","sessionId":"{}"}}"#,
+        cwd, session_id, cwd, session_id, session_id
+    );
+
+    fs::write(session_file, content).unwrap();
+}
 
 struct TestServer {
     pub base_url: String,
@@ -30,6 +47,7 @@ struct TestServer {
 
 impl TestServer {
     async fn new() -> Self {
+        init_logging();
         let mock = MockClaude::new();
         mock.setup_env_vars();
         Self::new_internal(mock).await
@@ -142,12 +160,23 @@ async fn test_session_lifecycle() {
     let working_dir = server.mock.temp_dir.path().join("lifecycle_work");
     fs::create_dir_all(&working_dir).unwrap();
 
-    // 3. Create new session
+    // 3. Create new session - send control command to create session file
+    let session_file_path = server.mock.projects_dir.join("lifecycle-session.jsonl");
+    let session_content = format!(
+        r#"{{"sessionId": "lifecycle-session", "cwd": "{}", "type": "start"}}"#,
+        working_dir.display()
+    );
+    let create_file_command = serde_json::json!({
+        "control": "write_file",
+        "path": session_file_path.to_string_lossy(),
+        "content": session_content
+    }).to_string();
+    
     let request = CreateSessionRequest {
         session_id: "lifecycle-session".to_string(),
         working_dir: working_dir.clone(),
         resume: false,
-        first_message: r#"{"role": "user", "content": "Hello"}"#.to_string(),
+        first_message: vec![create_file_command, r#"{"role": "user", "content": "Hello"}"#.to_string()],
     };
 
     let response = client
@@ -266,9 +295,7 @@ async fn test_complete_session_content_preservation() {
     let client = Client::new();
 
     // Create session file with complete JSON structure
-    server
-        .mock
-        .create_complete_session_file("project1", "complete-session", "/home/user/project1");
+    create_complete_session_file(&server.mock.projects_dir, "project1", "complete-session", "/home/user/project1");
 
     let response = client
         .get(format!("{}/api/v1/sessions/complete-session", server.base_url))
