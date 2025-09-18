@@ -27,7 +27,7 @@ function isWriteTool(toolName: string, input: unknown): boolean {
 }
 
 // Component for displaying Write tool content
-function WriteToolDisplay({ input }: { input: any }) {
+function WriteToolDisplay({ input }: { input: { file_path: string; content: string } }) {
   return (
     <div className="write-tool-display">
       <div className="write-tool-header">

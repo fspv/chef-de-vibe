@@ -157,7 +157,7 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
       // Remove from approval messages display
       setApprovalMessages(prev =>
         prev.filter(msg => {
-          const data = msg.data as any;
+          const data = msg.data as { request_id?: string };
           return data.request_id !== response.id;
         })
       );

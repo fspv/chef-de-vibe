@@ -9,6 +9,7 @@ import { MessageInput } from './MessageInput';
 import { SessionStatusIndicator } from './SessionStatusIndicator';
 import { api } from '../services/api';
 import type { CreateSessionRequest, CreateSessionResponse } from '../types/api';
+import type { PermissionUpdate } from '@anthropic-ai/claude-code/sdk';
 
 interface ChatWindowProps {
   sessionId: string | null;
@@ -50,14 +51,14 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
   const [pendingApprovalWebSocket, setPendingApprovalWebSocket] = useState<WebSocket | null>(null);
 
   // Approval handlers
-  const handleApprove = useCallback((requestId: string, input: Record<string, unknown>, permissionUpdates?: Array<Record<string, unknown>>) => {
+  const handleApprove = useCallback((requestId: string, input: Record<string, unknown>, permissionUpdates: PermissionUpdate[] = []) => {
     // Send approval response through the approval websocket
     approvalWs.sendApprovalResponse({
       id: requestId,
       response: {
         behavior: 'allow',
         updatedInput: input,
-        updatedPermissions: permissionUpdates as any // Type cast since we know the structure
+        updatedPermissions: permissionUpdates
       }
     });
   }, [approvalWs]);

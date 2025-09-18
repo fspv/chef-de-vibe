@@ -1,11 +1,23 @@
 import { useState } from 'react';
 import { CollapsibleContent } from './CollapsibleContent';
 import { EditDiff } from './DiffViewer';
+import type { PermissionUpdate } from '@anthropic-ai/claude-code/sdk';
+
+interface ControlRequestMessage {
+  type: string;
+  request_id: string;
+  request: {
+    subtype: string;
+    tool_name: string;
+    input: Record<string, unknown>;
+    permission_suggestions?: PermissionUpdate[];
+  };
+}
 
 interface ControlRequestMessageProps {
-  message: any; // Control request message
+  message: ControlRequestMessage;
   timestamp?: number;
-  onApprove?: (requestId: string, input: Record<string, unknown>, permissionUpdates?: Array<Record<string, unknown>>) => void;
+  onApprove?: (requestId: string, input: Record<string, unknown>, permissionUpdates: PermissionUpdate[]) => void;
   onDeny?: (requestId: string) => void;
 }
 
@@ -42,12 +54,12 @@ export function ControlRequestMessage({ message, timestamp, onApprove, onDeny }:
         
         // Get selected permissions
         const selectedPerms = message.request.permission_suggestions?.filter(
-          (_: any, index: number) => selectedPermissions[index]
-        );
+          (_, index: number) => selectedPermissions[index]
+        ) || [];
         
         onApprove(message.request_id, finalInput, selectedPerms);
         setIsProcessed(true);
-      } catch (err) {
+      } catch {
         setInputError('Invalid JSON format');
       }
     }
@@ -77,7 +89,7 @@ export function ControlRequestMessage({ message, timestamp, onApprove, onDeny }:
         {tool_name === 'Edit' && input && typeof input === 'object' && 
          'file_path' in input && 'old_string' in input && 'new_string' in input ? (
           <>
-            <EditDiff toolInput={input as any} />
+            <EditDiff toolInput={input} />
             <details className="edit-json-details">
               <summary>Edit JSON (Advanced)</summary>
               <textarea
@@ -141,7 +153,7 @@ export function ControlRequestMessage({ message, timestamp, onApprove, onDeny }:
         {message.request.permission_suggestions && message.request.permission_suggestions.length > 0 && (
           <div className="permission-suggestions-inline">
             <h4>Permission Suggestions:</h4>
-            {message.request.permission_suggestions.map((suggestion: any, index: number) => (
+            {message.request.permission_suggestions.map((suggestion: PermissionUpdate, index: number) => (
               <div key={index} className="permission-checkbox-line">
                 <input
                   type="checkbox"
