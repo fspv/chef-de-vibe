@@ -11,7 +11,7 @@ jobs:
     secrets: inherit
     
   build-binaries:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         target:
@@ -35,11 +35,11 @@ jobs:
             os: ubuntu-latest
             cross: true
           - target: x86_64-apple-darwin
-            os: ubuntu-latest
-            cross: true
+            os: macos-13
+            cross: false
           - target: aarch64-apple-darwin
-            os: ubuntu-latest
-            cross: true
+            os: macos-14
+            cross: false
     
     steps:
     - name: Checkout code
