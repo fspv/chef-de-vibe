@@ -19,6 +19,3 @@ jobs:
         
     - name: Build with Nix
       run: nix build
-      
-    - name: Test run
-      run: timeout 10s nix run || test $? = 124

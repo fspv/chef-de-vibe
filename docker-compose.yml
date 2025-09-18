@@ -23,6 +23,21 @@ services:
       retries: 3
       start_period: 40s
 
+  frontend-dev:
+    image: node:20
+    working_dir: /app
+    environment:
+      - VITE_BACKEND_URL=${VITE_BACKEND_URL:-http://localhost:3000}
+      - VITE_PORT=${VITE_PORT:-8811}
+    ports:
+      - "${FRONTEND_HOST_PORT:-8811}:${VITE_PORT:-8811}"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev -- --port ${VITE_PORT:-8811}"
+    depends_on:
+      - chef-de-vibe
+
 volumes:
   chef_de_vibe_projects:
     driver: local
