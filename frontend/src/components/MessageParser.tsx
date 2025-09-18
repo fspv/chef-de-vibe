@@ -7,6 +7,7 @@ import {
   isSDKPartialAssistantMessage,
   isSDKCompactBoundaryMessage,
   isSDKControlRequestMessage,
+  isSDKControlResponseMessage,
   isLikelyClaudeCodeMessage,
   type ExtendedSDKMessage,
   type AnyTodoItem
@@ -38,7 +39,7 @@ import type {
 } from '@anthropic-ai/claude-code/sdk-tools';
 
 // Component for displaying Write tool content
-function WriteToolDisplay({ input }: { input: FileWriteInput }) {
+export function WriteToolDisplay({ input }: { input: FileWriteInput }) {
   return (
     <div className="write-tool-display">
       <div className="write-tool-header">
@@ -56,7 +57,7 @@ function WriteToolDisplay({ input }: { input: FileWriteInput }) {
 }
 
 // Component for displaying Agent tool content
-function AgentToolDisplay({ input }: { input: AgentInput }) {
+export function AgentToolDisplay({ input }: { input: AgentInput }) {
   return (
     <div className="agent-tool-display">
       <div className="agent-tool-header">
@@ -74,7 +75,7 @@ function AgentToolDisplay({ input }: { input: AgentInput }) {
 }
 
 // Component for displaying Bash tool content
-function BashToolDisplay({ input }: { input: BashInput }) {
+export function BashToolDisplay({ input }: { input: BashInput }) {
   return (
     <div className="bash-tool-display">
       <div className="bash-tool-header">
@@ -96,7 +97,7 @@ function BashToolDisplay({ input }: { input: BashInput }) {
 }
 
 // Component for displaying BashOutput tool content
-function BashOutputToolDisplay({ input }: { input: BashOutputInput }) {
+export function BashOutputToolDisplay({ input }: { input: BashOutputInput }) {
   return (
     <div className="bash-output-tool-display">
       <div className="bash-output-header">
@@ -109,7 +110,7 @@ function BashOutputToolDisplay({ input }: { input: BashOutputInput }) {
 }
 
 // Component for displaying ExitPlanMode tool content
-function ExitPlanModeToolDisplay({ input }: { input: ExitPlanModeInput }) {
+export function ExitPlanModeToolDisplay({ input }: { input: ExitPlanModeInput }) {
   return (
     <div className="exit-plan-mode-tool-display">
       <div className="exit-plan-mode-header">
@@ -125,7 +126,7 @@ function ExitPlanModeToolDisplay({ input }: { input: ExitPlanModeInput }) {
 }
 
 // Component for displaying FileMultiEdit tool content
-function FileMultiEditToolDisplay({ input }: { input: FileMultiEditInput }) {
+export function FileMultiEditToolDisplay({ input }: { input: FileMultiEditInput }) {
   return (
     <div className="file-multi-edit-tool-display">
       <div className="file-multi-edit-header">
@@ -154,7 +155,7 @@ function FileMultiEditToolDisplay({ input }: { input: FileMultiEditInput }) {
 }
 
 // Component for displaying FileRead tool content
-function FileReadToolDisplay({ input }: { input: FileReadInput }) {
+export function FileReadToolDisplay({ input }: { input: FileReadInput }) {
   return (
     <div className="file-read-tool-display">
       <div className="file-read-header">
@@ -173,7 +174,7 @@ function FileReadToolDisplay({ input }: { input: FileReadInput }) {
 }
 
 // Component for displaying Glob tool content
-function GlobToolDisplay({ input }: { input: GlobInput }) {
+export function GlobToolDisplay({ input }: { input: GlobInput }) {
   return (
     <div className="glob-tool-display">
       <div className="glob-header">
@@ -186,7 +187,7 @@ function GlobToolDisplay({ input }: { input: GlobInput }) {
 }
 
 // Component for displaying Grep tool content
-function GrepToolDisplay({ input }: { input: GrepInput }) {
+export function GrepToolDisplay({ input }: { input: GrepInput }) {
   return (
     <div className="grep-tool-display">
       <div className="grep-header">
@@ -206,7 +207,7 @@ function GrepToolDisplay({ input }: { input: GrepInput }) {
 }
 
 // Component for displaying KillShell tool content
-function KillShellToolDisplay({ input }: { input: KillShellInput }) {
+export function KillShellToolDisplay({ input }: { input: KillShellInput }) {
   return (
     <div className="kill-shell-tool-display">
       <div className="kill-shell-header">
@@ -218,7 +219,7 @@ function KillShellToolDisplay({ input }: { input: KillShellInput }) {
 }
 
 // Component for displaying ListMcpResources tool content
-function ListMcpResourcesToolDisplay({ input }: { input: ListMcpResourcesInput }) {
+export function ListMcpResourcesToolDisplay({ input }: { input: ListMcpResourcesInput }) {
   return (
     <div className="list-mcp-resources-tool-display">
       <div className="list-mcp-resources-header">
@@ -230,7 +231,7 @@ function ListMcpResourcesToolDisplay({ input }: { input: ListMcpResourcesInput }
 }
 
 // Component for displaying Mcp tool content
-function McpToolDisplay({ input }: { input: McpInput }) {
+export function McpToolDisplay({ input }: { input: McpInput }) {
   return (
     <div className="mcp-tool-display">
       <div className="mcp-header">
@@ -247,7 +248,7 @@ function McpToolDisplay({ input }: { input: McpInput }) {
 }
 
 // Component for displaying NotebookEdit tool content
-function NotebookEditToolDisplay({ input }: { input: NotebookEditInput }) {
+export function NotebookEditToolDisplay({ input }: { input: NotebookEditInput }) {
   return (
     <div className="notebook-edit-tool-display">
       <div className="notebook-edit-header">
@@ -269,7 +270,7 @@ function NotebookEditToolDisplay({ input }: { input: NotebookEditInput }) {
 }
 
 // Component for displaying ReadMcpResource tool content
-function ReadMcpResourceToolDisplay({ input }: { input: ReadMcpResourceInput }) {
+export function ReadMcpResourceToolDisplay({ input }: { input: ReadMcpResourceInput }) {
   return (
     <div className="read-mcp-resource-tool-display">
       <div className="read-mcp-resource-header">
@@ -282,7 +283,7 @@ function ReadMcpResourceToolDisplay({ input }: { input: ReadMcpResourceInput }) 
 }
 
 // Component for displaying WebFetch tool content
-function WebFetchToolDisplay({ input }: { input: WebFetchInput }) {
+export function WebFetchToolDisplay({ input }: { input: WebFetchInput }) {
   return (
     <div className="web-fetch-tool-display">
       <div className="web-fetch-header">
@@ -299,7 +300,7 @@ function WebFetchToolDisplay({ input }: { input: WebFetchInput }) {
 }
 
 // Component for displaying WebSearch tool content
-function WebSearchToolDisplay({ input }: { input: WebSearchInput }) {
+export function WebSearchToolDisplay({ input }: { input: WebSearchInput }) {
   return (
     <div className="web-search-tool-display">
       <div className="web-search-header">
@@ -388,6 +389,9 @@ function getMessageTypeDescription(message: ExtendedSDKMessage): string {
   }
   if (isSDKControlRequestMessage(message)) {
     return 'Tool Approval Request';
+  }
+  if (isSDKControlResponseMessage(message)) {
+    return 'Control Response';
   }
   return 'Unknown Message';
 }
@@ -789,6 +793,45 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny }: {
 
   if (isSDKControlRequestMessage(message)) {
     return <ControlRequestMessage message={message} timestamp={timestamp} onApprove={onApprove} onDeny={onDeny} />;
+  }
+
+  if (isSDKControlResponseMessage(message)) {
+    const response = message.response;
+    const isSuccess = response.subtype === 'success';
+    
+    return (
+      <div className={`control-response-message ${isSuccess ? 'success' : 'error'}`}>
+        <div className="message-role">
+          {isSuccess ? '✅ Control Success' : '❌ Control Error'}
+          {timestamp && (
+            <span className="message-timestamp">
+              {new Date(timestamp).toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+        <div className="control-response-content">
+          <div className="control-response-details">
+            <div className="response-id">Request ID: <code>{response.request_id}</code></div>
+            {isSuccess && response.response ? (
+              <div className="response-data">
+                <h4>Response:</h4>
+                <CollapsibleContent 
+                  content={JSON.stringify(response.response, null, 2)}
+                  className="response-content"
+                  maxLines={10}
+                  isCode={true}
+                />
+              </div>
+            ) : response.error ? (
+              <div className="response-error">
+                <h4>Error:</h4>
+                <div className="error-message">{response.error}</div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // Fallback for unknown message types

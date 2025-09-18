@@ -1,16 +1,94 @@
 import { useState } from 'react';
-import { CollapsibleContent } from './CollapsibleContent';
 import { EditDiff } from './DiffViewer';
+import { 
+  WriteToolDisplay, 
+  AgentToolDisplay, 
+  BashToolDisplay, 
+  BashOutputToolDisplay,
+  ExitPlanModeToolDisplay,
+  FileMultiEditToolDisplay,
+  FileReadToolDisplay,
+  GlobToolDisplay,
+  GrepToolDisplay,
+  KillShellToolDisplay,
+  ListMcpResourcesToolDisplay,
+  McpToolDisplay,
+  NotebookEditToolDisplay,
+  ReadMcpResourceToolDisplay,
+  WebFetchToolDisplay,
+  WebSearchToolDisplay
+} from './MessageParser';
 import type { PermissionUpdate } from '@anthropic-ai/claude-code/sdk';
-import type { FileEditInput, ToolInputSchemas } from '@anthropic-ai/claude-code/sdk-tools';
+import type { 
+  FileEditInput, 
+  ToolInputSchemas,
+  FileWriteInput,
+  ExitPlanModeInput,
+  AgentInput,
+  BashInput,
+  BashOutputInput,
+  FileMultiEditInput,
+  FileReadInput,
+  GlobInput,
+  GrepInput,
+  KillShellInput,
+  ListMcpResourcesInput,
+  McpInput,
+  NotebookEditInput,
+  ReadMcpResourceInput,
+  WebFetchInput,
+  WebSearchInput
+} from '@anthropic-ai/claude-code/sdk-tools';
+
+// Helper function to render tool-specific content
+function renderToolContent(toolName: string, input: ToolInputSchemas) {
+  switch (toolName) {
+    case 'ExitPlanMode':
+      return <ExitPlanModeToolDisplay input={input as ExitPlanModeInput} />;
+    case 'Task':
+      return <AgentToolDisplay input={input as AgentInput} />;
+    case 'Bash':
+      return <BashToolDisplay input={input as BashInput} />;
+    case 'BashOutput':
+      return <BashOutputToolDisplay input={input as BashOutputInput} />;
+    case 'Write':
+      return <WriteToolDisplay input={input as FileWriteInput} />;
+    case 'Edit':
+      return <EditDiff toolInput={input as FileEditInput} />;
+    case 'MultiEdit':
+      return <FileMultiEditToolDisplay input={input as FileMultiEditInput} />;
+    case 'Read':
+      return <FileReadToolDisplay input={input as FileReadInput} />;
+    case 'Glob':
+      return <GlobToolDisplay input={input as GlobInput} />;
+    case 'Grep':
+      return <GrepToolDisplay input={input as GrepInput} />;
+    case 'KillShell':
+      return <KillShellToolDisplay input={input as KillShellInput} />;
+    case 'ListMcpResources':
+      return <ListMcpResourcesToolDisplay input={input as ListMcpResourcesInput} />;
+    case 'Mcp':
+      return <McpToolDisplay input={input as McpInput} />;
+    case 'NotebookEdit':
+      return <NotebookEditToolDisplay input={input as NotebookEditInput} />;
+    case 'ReadMcpResource':
+      return <ReadMcpResourceToolDisplay input={input as ReadMcpResourceInput} />;
+    case 'WebFetch':
+      return <WebFetchToolDisplay input={input as WebFetchInput} />;
+    case 'WebSearch':
+      return <WebSearchToolDisplay input={input as WebSearchInput} />;
+    default:
+      return null;
+  }
+}
 
 interface ControlRequestMessage {
   type: string;
   request_id: string;
   request: {
     subtype: string;
-    tool_name: string;
-    input: ToolInputSchemas;
+    tool_name?: string;
+    input?: ToolInputSchemas;
     permission_suggestions?: PermissionUpdate[];
   };
 }
@@ -34,6 +112,26 @@ export function ControlRequestMessage({ message, timestamp, onApprove, onDeny }:
   const [isProcessed, setIsProcessed] = useState(false);
 
   const { tool_name, input } = message.request;
+  
+  // Only show tool approval UI for can_use_tool requests
+  if (message.request.subtype !== 'can_use_tool' || !tool_name || !input) {
+    return (
+      <div className="control-request-message">
+        <div className="message-role">
+          ⚠️ Control Request
+          {timestamp && (
+            <span className="message-timestamp">
+              {new Date(timestamp).toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+        <div className="control-request-content">
+          <div className="control-subtype">Type: {message.request.subtype}</div>
+          <pre>{JSON.stringify(message.request, null, 2)}</pre>
+        </div>
+      </div>
+    );
+  }
 
   const handlePermissionToggle = (index: number) => {
     setSelectedPermissions(prev => {
@@ -86,69 +184,49 @@ export function ControlRequestMessage({ message, timestamp, onApprove, onDeny }:
       <div className="tool-approval-content">
         <div className="tool-name">🛠️ Tool: {tool_name}</div>
         
-        {/* Show tool-specific content or editable JSON */}
-        {tool_name === 'Edit' && input && typeof input === 'object' && 
-         'file_path' in input && 'old_string' in input && 'new_string' in input ? (
-          <>
-            <EditDiff toolInput={input as FileEditInput} />
-            <details className="edit-json-details">
-              <summary>Edit JSON (Advanced)</summary>
-              <textarea
-                value={modifiedInput}
-                onChange={(e) => {
-                  setModifiedInput(e.target.value);
-                  setInputError(null);
-                }}
-                className="tool-input-editor"
-                rows={8}
-                disabled={isProcessed}
-              />
-              {inputError && <div className="input-error">{inputError}</div>}
-            </details>
-          </>
-        ) : tool_name === 'Write' && input && typeof input === 'object' && 
-           'file_path' in input && 'content' in input ? (
-          <>
-            <div className="write-tool-content">
-              <div className="file-path">📄 File: {String(input.file_path)}</div>
-              <CollapsibleContent 
-                content={String(input.content)}
-                className="file-content"
-                maxLines={20}
-                isCode={true}
-              />
-            </div>
-            <details className="edit-json-details">
-              <summary>Edit JSON (Advanced)</summary>
-              <textarea
-                value={modifiedInput}
-                onChange={(e) => {
-                  setModifiedInput(e.target.value);
-                  setInputError(null);
-                }}
-                className="tool-input-editor"
-                rows={8}
-                disabled={isProcessed}
-              />
-              {inputError && <div className="input-error">{inputError}</div>}
-            </details>
-          </>
-        ) : (
-          <div className="tool-input-section">
-            <h4>Tool Input:</h4>
-            <textarea
-              value={modifiedInput}
-              onChange={(e) => {
-                setModifiedInput(e.target.value);
-                setInputError(null);
-              }}
-              className="tool-input-editor"
-              rows={8}
-              disabled={isProcessed}
-            />
-            {inputError && <div className="input-error">{inputError}</div>}
-          </div>
-        )}
+        {/* Show tool-specific content */}
+        {(() => {
+          const toolContent = renderToolContent(tool_name, input);
+          
+          if (toolContent) {
+            return (
+              <>
+                {toolContent}
+                <details className="edit-json-details">
+                  <summary>Edit JSON (Advanced)</summary>
+                  <textarea
+                    value={modifiedInput}
+                    onChange={(e) => {
+                      setModifiedInput(e.target.value);
+                      setInputError(null);
+                    }}
+                    className="tool-input-editor"
+                    rows={8}
+                    disabled={isProcessed}
+                  />
+                  {inputError && <div className="input-error">{inputError}</div>}
+                </details>
+              </>
+            );
+          } else {
+            return (
+              <div className="tool-input-section">
+                <h4>Tool Input:</h4>
+                <textarea
+                  value={modifiedInput}
+                  onChange={(e) => {
+                    setModifiedInput(e.target.value);
+                    setInputError(null);
+                  }}
+                  className="tool-input-editor"
+                  rows={8}
+                  disabled={isProcessed}
+                />
+                {inputError && <div className="input-error">{inputError}</div>}
+              </div>
+            );
+          }
+        })()}
         
         {/* Permission suggestions with checkboxes */}
         {message.request.permission_suggestions && message.request.permission_suggestions.length > 0 && (

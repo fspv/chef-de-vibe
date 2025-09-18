@@ -9,8 +9,9 @@ import { MessageInput } from './MessageInput';
 import { SessionStatusIndicator } from './SessionStatusIndicator';
 import { api } from '../services/api';
 import type { CreateSessionRequest, CreateSessionResponse } from '../types/api';
-import type { PermissionUpdate } from '@anthropic-ai/claude-code/sdk';
+import type { PermissionUpdate, PermissionMode } from '@anthropic-ai/claude-code/sdk';
 import type { ToolInputSchemas } from '@anthropic-ai/claude-code/sdk-tools';
+import { isSDKControlResponseMessage } from '../types/claude-messages';
 
 interface ChatWindowProps {
   sessionId: string | null;
@@ -26,6 +27,7 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
   const { sessionDetails, loading, error } = useSessionDetails(sessionId);
   const [debugMode, setDebugMode] = useState(false);
   const [autoScrollPaused, setAutoScrollPaused] = useState(false);
+  const [currentMode, setCurrentMode] = useState<PermissionMode>('default');
   const messageListRef = useRef<MessageListRef>(null);
   
   // Helper function to ensure directory path starts with /
@@ -172,6 +174,37 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
     messageListRef.current?.toggleAutoScroll();
   }, []);
 
+  const handleModeChange = useCallback((newMode: PermissionMode) => {
+    setCurrentMode(newMode);
+    
+    // Send control request to change permission mode
+    if (sessionDetails?.websocket_url && isConnected) {
+      const controlRequest = {
+        request_id: Math.random().toString(36).substring(2, 15),
+        type: "control_request",
+        request: {
+          subtype: "set_permission_mode",
+          mode: newMode
+        }
+      };
+      sendMessage(JSON.stringify(controlRequest));
+    }
+  }, [sessionDetails, isConnected, sendMessage]);
+
+  // Listen for control response messages to update the mode
+  useEffect(() => {
+    if (webSocketMessages.length > 0) {
+      const latestMessage = webSocketMessages[webSocketMessages.length - 1];
+      if (isSDKControlResponseMessage(latestMessage.data)) {
+        const controlResponse = latestMessage.data;
+        if (controlResponse.response.subtype === 'success' && 
+            controlResponse.response.response?.mode) {
+          setCurrentMode(controlResponse.response.response.mode as PermissionMode);
+        }
+      }
+    }
+  }, [webSocketMessages]);
+
   if (!sessionId) {
     return (
       <div className="chat-window">
@@ -188,6 +221,8 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
             onDebugModeChange={setDebugMode}
             autoScrollPaused={autoScrollPaused}
             onToggleAutoScroll={handleToggleAutoScroll}
+            currentMode={currentMode}
+            onModeChange={handleModeChange}
           />
         )}
         
@@ -261,6 +296,8 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
           onDebugModeChange={setDebugMode}
           autoScrollPaused={autoScrollPaused}
           onToggleAutoScroll={handleToggleAutoScroll}
+          currentMode={currentMode}
+          onModeChange={handleModeChange}
         />
       )}
 

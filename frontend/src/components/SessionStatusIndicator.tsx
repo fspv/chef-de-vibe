@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { ModeSwitcher } from './ModeSwitcher';
+import type { PermissionMode } from '@anthropic-ai/claude-code/sdk';
 
 interface SessionStatusIndicatorProps {
   isActive: boolean;
@@ -12,6 +14,8 @@ interface SessionStatusIndicatorProps {
   onDebugModeChange: (value: boolean) => void;
   autoScrollPaused: boolean;
   onToggleAutoScroll: () => void;
+  currentMode: PermissionMode;
+  onModeChange: (mode: PermissionMode) => void;
 }
 
 export function SessionStatusIndicator({
@@ -25,7 +29,9 @@ export function SessionStatusIndicator({
   debugMode,
   onDebugModeChange,
   autoScrollPaused,
-  onToggleAutoScroll
+  onToggleAutoScroll,
+  currentMode,
+  onModeChange
 }: SessionStatusIndicatorProps) {
   const [showDetails, setShowDetails] = useState(false);
 
@@ -81,6 +87,11 @@ export function SessionStatusIndicator({
         >
           {autoScrollPaused ? '⏵' : '⏸'}
         </button>
+        
+        <ModeSwitcher 
+          currentMode={currentMode}
+          onModeChange={onModeChange}
+        />
       </div>
 
       {showDetails && (

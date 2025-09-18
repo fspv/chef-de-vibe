@@ -301,6 +301,133 @@ Note: The backend automatically handles setting the correct `request_id` from th
 - Clear user feedback for connection status
 - Frontend must handle raw Claude request format parsing
 
+## Control Requests
+
+The frontend can send control requests to modify Claude's behavior, such as changing permission modes. These requests use the same format as the Claude Code SDK.
+
+### Control Request Format
+
+Control requests are sent via the main WebSocket connection using this structure:
+
+```json
+{
+  "request_id": "random_generated_id",
+  "type": "control_request",
+  "request": {
+    "subtype": "command_type",
+    // Additional command-specific fields...
+  }
+}
+```
+
+### Supported Control Commands
+
+#### Set Permission Mode
+
+Changes Claude's permission mode for the current session:
+
+```json
+{
+  "request_id": "abc123xyz789",
+  "type": "control_request",
+  "request": {
+    "subtype": "set_permission_mode",
+    "mode": "acceptEdits"
+  }
+}
+```
+
+**Valid Permission Modes:**
+- `"default"` - Normal permission checking (default behavior)
+- `"acceptEdits"` - Auto-approve file edit operations  
+- `"bypassPermissions"` - Skip all permission checks
+- `"plan"` - Planning mode for task breakdown
+
+#### Interrupt Execution
+
+Stops Claude's current processing:
+
+```json
+{
+  "request_id": "def456uvw012", 
+  "type": "control_request",
+  "request": {
+    "subtype": "interrupt"
+  }
+}
+```
+
+#### Set Model
+
+Changes the Claude model for subsequent requests:
+
+```json
+{
+  "request_id": "ghi789rst345",
+  "type": "control_request", 
+  "request": {
+    "subtype": "set_model",
+    "model": "claude-3-5-sonnet-20241022"
+  }
+}
+```
+
+### Usage Example
+
+To send a permission mode change before a user message:
+
+```javascript
+// First send permission mode change
+const permissionRequest = {
+  request_id: Math.random().toString(36).substring(2, 15),
+  type: "control_request",
+  request: {
+    subtype: "set_permission_mode",
+    mode: "acceptEdits"
+  }
+};
+webSocket.send(JSON.stringify(permissionRequest));
+
+// Then send user message
+const userMessage = {
+  type: "user", 
+  message: {
+    role: "user",
+    content: "Please refactor this code"
+  },
+  parent_tool_use_id: null,
+  uuid: uuidv4(),
+  session_id: ""
+};
+webSocket.send(JSON.stringify(userMessage));
+```
+
+### Control Responses
+
+The backend will respond to control requests with success or error responses:
+
+```json
+// Success response
+{
+  "type": "control_response",
+  "response": {
+    "subtype": "success", 
+    "request_id": "abc123xyz789",
+    "response": {} // Command-specific response data
+  }
+}
+
+// Error response  
+{
+  "type": "control_response",
+  "response": {
+    "subtype": "error",
+    "request_id": "abc123xyz789", 
+    "error": "Invalid permission mode"
+  }
+}
+```
+
 ## Development
 
 ```bash

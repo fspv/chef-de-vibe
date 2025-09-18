@@ -23,8 +23,8 @@ export type {
   SDKCompactBoundaryMessage
 };
 
-// Extended SDKMessage type to include control requests
-export type ExtendedSDKMessage = SDKMessage | SDKControlRequestMessage;
+// Extended SDKMessage type to include control requests and responses
+export type ExtendedSDKMessage = SDKMessage | SDKControlRequestMessage | SDKControlResponseMessage;
 
 // Extended todo types to handle actual usage patterns
 export interface TodoItem {
@@ -99,25 +99,39 @@ export function isSDKCompactBoundaryMessage(message: unknown): message is SDKCom
          message.subtype === 'compact_boundary';
 }
 
-export function isSDKMessage(message: unknown): message is SDKMessage | SDKControlRequestMessage {
+export function isSDKMessage(message: unknown): message is SDKMessage | SDKControlRequestMessage | SDKControlResponseMessage {
   return isSDKUserMessage(message) ||
          isSDKAssistantMessage(message) ||
          isSDKResultMessage(message) ||
          isSDKSystemMessage(message) ||
          isSDKPartialAssistantMessage(message) ||
          isSDKCompactBoundaryMessage(message) ||
-         isSDKControlRequestMessage(message);
+         isSDKControlRequestMessage(message) ||
+         isSDKControlResponseMessage(message);
 }
 
-// Control request message type (for approval requests)
+// Control request message type (for approval requests and other control operations)
 export interface SDKControlRequestMessage {
   type: 'control_request';
   request_id: string;
   request: {
-    subtype: 'can_use_tool';
-    tool_name: string;
-    input: Record<string, unknown>;
+    subtype: 'can_use_tool' | 'set_permission_mode' | 'interrupt' | 'set_model';
+    tool_name?: string;
+    input?: Record<string, unknown>;
     permission_suggestions?: PermissionUpdate[];
+    mode?: string;
+    model?: string;
+  };
+}
+
+// Control response message type (for control request responses)
+export interface SDKControlResponseMessage {
+  type: 'control_response';
+  response: {
+    subtype: 'success' | 'error';
+    request_id: string;
+    response?: Record<string, unknown>;
+    error?: string;
   };
 }
 
@@ -133,8 +147,19 @@ export function isSDKControlRequestMessage(message: unknown): message is SDKCont
     obj.type === 'control_request' &&
     typeof obj.request === 'object' &&
     obj.request !== null &&
-    (obj.request as Record<string, unknown>).subtype === 'can_use_tool'
+    typeof (obj.request as Record<string, unknown>).subtype === 'string'
   );
+}
+
+// Type guard for control response messages
+export function isSDKControlResponseMessage(message: unknown): message is SDKControlResponseMessage {
+  if (typeof message !== 'object' || message === null) {
+    return false;
+  }
+  
+  const obj = message as Record<string, unknown>;
+  
+  return obj.type === 'control_response';
 }
 
 // Helper function to detect if raw data might be a Claude Code message
@@ -148,12 +173,13 @@ export function isLikelyClaudeCodeMessage(data: unknown): boolean {
   // Check for key indicators of Claude Code messages
   return (
     'type' in obj &&
-    ('session_id' in obj || 'sessionId' in obj || obj.type === 'control_request') &&
+    ('session_id' in obj || 'sessionId' in obj || obj.type === 'control_request' || obj.type === 'control_response') &&
     (obj.type === 'user' || 
      obj.type === 'assistant' || 
      obj.type === 'result' || 
      obj.type === 'system' ||
      obj.type === 'stream_event' ||
-     obj.type === 'control_request')
+     obj.type === 'control_request' ||
+     obj.type === 'control_response')
   );
 }

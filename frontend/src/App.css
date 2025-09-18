@@ -969,6 +969,124 @@ html, body {
   background-color: #e0a800;
 }
 
+/* Mode Switcher Button */
+.mode-switcher {
+  height: 44px;
+  padding: 0 12px;
+  border-radius: 22px;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+  user-select: none;
+  white-space: nowrap;
+  min-width: 80px;
+}
+
+.mode-switcher:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.mode-switcher:active {
+  transform: scale(0.95);
+}
+
+.mode-switcher.mode-default {
+  background-color: #6c757d;
+  color: white;
+}
+
+.mode-switcher.mode-default:hover {
+  background-color: #5a6268;
+}
+
+.mode-switcher.mode-acceptEdits {
+  background-color: #28a745;
+  color: white;
+}
+
+.mode-switcher.mode-acceptEdits:hover {
+  background-color: #218838;
+}
+
+.mode-switcher.mode-plan {
+  background-color: #17a2b8;
+  color: white;
+}
+
+.mode-switcher.mode-plan:hover {
+  background-color: #138496;
+}
+
+.mode-switcher.mode-bypassPermissions {
+  background-color: #dc3545;
+  color: white;
+}
+
+.mode-switcher.mode-bypassPermissions:hover {
+  background-color: #c82333;
+}
+
+/* Control Response Message Styles */
+.control-response-message {
+  margin: 10px 0;
+  padding: 12px;
+  border-radius: 8px;
+  border-left: 4px solid;
+}
+
+.control-response-message.success {
+  background-color: #f0f9f0;
+  border-left-color: #28a745;
+}
+
+.control-response-message.error {
+  background-color: #fdf2f2;
+  border-left-color: #dc3545;
+}
+
+.control-response-content {
+  margin-top: 8px;
+}
+
+.control-response-details {
+  font-size: 14px;
+}
+
+.response-id {
+  margin-bottom: 8px;
+  color: #666;
+}
+
+.response-id code {
+  background-color: #f8f9fa;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.response-data h4,
+.response-error h4 {
+  margin: 8px 0 4px 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.response-error .error-message {
+  color: #dc3545;
+  font-weight: 500;
+}
+
 /* Session Details Popup */
 .session-details-overlay {
   position: fixed;
@@ -2079,6 +2197,13 @@ html, body {
     width: 36px;
     height: 36px;
     font-size: 14px;
+  }
+
+  .mode-switcher {
+    height: 36px;
+    padding: 0 8px;
+    font-size: 10px;
+    min-width: 60px;
   }
   
   .session-details-overlay {

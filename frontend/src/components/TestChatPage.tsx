@@ -4,6 +4,7 @@ import { MessageList, type MessageListRef } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { SessionList } from './SessionList';
 import { SessionStatusIndicator } from './SessionStatusIndicator';
+import type { PermissionMode } from '@anthropic-ai/claude-code/sdk';
 
 const testMessages = [
   // System initialization message
@@ -536,6 +537,173 @@ const testMessages = [
     num_turns: 15,
     total_cost_usd: 0.0245,
     timestamp: Date.now() + 100
+  },
+
+  // Approval request messages for testing
+  {
+    id: "approval-msg-1",
+    type: "control_request",
+    request_id: "approval-test-1",
+    request: {
+      subtype: "can_use_tool",
+      tool_name: "ExitPlanMode",
+      input: {
+        plan: "To ping google.com, I will:\n1. Execute the ping command with google.com as the target\n2. Use the `-c 4` flag to limit it to 4 packets (standard practice on Linux)\n3. Display the results showing packet loss and round-trip times"
+      }
+    },
+    timestamp: Date.now() + 200
+  },
+
+  {
+    id: "approval-msg-2", 
+    type: "control_request",
+    request_id: "approval-test-2",
+    request: {
+      subtype: "can_use_tool",
+      tool_name: "Bash",
+      input: {
+        command: "find /var/log -name '*.log' -mtime -7 | head -10",
+        description: "Find recent log files in /var/log directory",
+        timeout: 30000
+      }
+    },
+    timestamp: Date.now() + 300
+  },
+
+  {
+    id: "approval-msg-3",
+    type: "control_request", 
+    request_id: "approval-test-3",
+    request: {
+      subtype: "can_use_tool",
+      tool_name: "Write",
+      input: {
+        file_path: "/tmp/test-config.json",
+        content: "{\n  \"environment\": \"production\",\n  \"database\": {\n    \"host\": \"localhost\",\n    \"port\": 5432,\n    \"name\": \"analytics_db\"\n  },\n  \"features\": {\n    \"real_time_analytics\": true,\n    \"data_export\": true,\n    \"privacy_mode\": false\n  }\n}"
+      }
+    },
+    timestamp: Date.now() + 400
+  },
+
+  {
+    id: "approval-msg-4",
+    type: "control_request",
+    request_id: "approval-test-4", 
+    request: {
+      subtype: "can_use_tool",
+      tool_name: "Edit",
+      input: {
+        file_path: "/home/user/config.py",
+        old_string: "DEBUG = True\nLOG_LEVEL = 'INFO'",
+        new_string: "DEBUG = False\nLOG_LEVEL = 'WARNING'"
+      }
+    },
+    timestamp: Date.now() + 500
+  },
+
+  {
+    id: "approval-msg-5",
+    type: "control_request",
+    request_id: "approval-test-5",
+    request: {
+      subtype: "can_use_tool", 
+      tool_name: "WebSearch",
+      input: {
+        query: "best practices user analytics privacy GDPR compliance 2024",
+        allowed_domains: ["gdpr.eu", "privacyguides.org", "owasp.org"]
+      }
+    },
+    timestamp: Date.now() + 600
+  },
+
+  {
+    id: "approval-msg-6",
+    type: "control_request",
+    request_id: "approval-test-6",
+    request: {
+      subtype: "can_use_tool",
+      tool_name: "Task",
+      input: {
+        subagent_type: "python-code-quality-enforcer",
+        description: "Review analytics code",
+        prompt: "Please review the analytics.py file for code quality issues. Check for:\n- Type annotations\n- Error handling\n- Performance optimizations\n- Security vulnerabilities\n- PEP8 compliance\n\nProvide specific recommendations for improvement."
+      }
+    },
+    timestamp: Date.now() + 700
+  },
+
+  {
+    id: "approval-msg-7", 
+    type: "control_request",
+    request_id: "approval-test-7",
+    request: {
+      subtype: "can_use_tool",
+      tool_name: "Grep",
+      input: {
+        pattern: "TODO|FIXME|HACK",
+        path: "/home/user/project",
+        glob: "*.py",
+        output_mode: "content",
+        "-i": true,
+        "-n": true
+      }
+    },
+    timestamp: Date.now() + 800
+  },
+
+  {
+    id: "approval-msg-8",
+    type: "control_request", 
+    request_id: "approval-test-8",
+    request: {
+      subtype: "can_use_tool",
+      tool_name: "NotebookEdit",
+      input: {
+        notebook_path: "/home/user/analytics/data_analysis.ipynb",
+        cell_type: "code",
+        edit_mode: "replace",
+        new_source: "import pandas as pd\nimport matplotlib.pyplot as plt\nimport seaborn as sns\n\n# Load analytics data\ndf = pd.read_csv('user_events.csv')\n\n# Create visualization\nplt.figure(figsize=(12, 6))\nsns.countplot(data=df, x='event_type', order=df['event_type'].value_counts().index)\nplt.title('User Event Distribution')\nplt.xticks(rotation=45)\nplt.tight_layout()\nplt.show()"
+      }
+    },
+    timestamp: Date.now() + 900
+  },
+
+  // Control response messages for testing
+  {
+    id: "control-response-1",
+    type: "control_response",
+    response: {
+      subtype: "success",
+      request_id: "h03cdpa8fmj",
+      response: {
+        mode: "acceptEdits"
+      }
+    },
+    timestamp: Date.now() + 1000
+  },
+
+  {
+    id: "control-response-2", 
+    type: "control_response",
+    response: {
+      subtype: "success",
+      request_id: "mode-change-123",
+      response: {
+        mode: "plan"
+      }
+    },
+    timestamp: Date.now() + 1100
+  },
+
+  {
+    id: "control-response-3",
+    type: "control_response",
+    response: {
+      subtype: "error",
+      request_id: "invalid-request-456",
+      error: "Invalid permission mode: bypassAll"
+    },
+    timestamp: Date.now() + 1200
   }
 ];
 
@@ -546,6 +714,7 @@ export function TestChatPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [debugMode, setDebugMode] = useState(false);
   const [autoScrollPaused, setAutoScrollPaused] = useState(false);
+  const [currentMode, setCurrentMode] = useState<PermissionMode>('default');
   const messageListRef = useRef<MessageListRef>(null);
   const [directoryPopup, setDirectoryPopup] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
@@ -673,6 +842,8 @@ export function TestChatPage() {
                 onDebugModeChange={setDebugMode}
                 autoScrollPaused={autoScrollPaused}
                 onToggleAutoScroll={() => setAutoScrollPaused(!autoScrollPaused)}
+                currentMode={currentMode}
+                onModeChange={setCurrentMode}
               />
               
               <button 
