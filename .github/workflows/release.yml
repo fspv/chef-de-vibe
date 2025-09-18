@@ -16,20 +16,12 @@ jobs:
       matrix:
         target:
           - x86_64-unknown-linux-gnu
-          - x86_64-unknown-linux-musl
-          - x86_64-pc-windows-gnu
           - x86_64-apple-darwin
           - aarch64-apple-darwin
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             cross: false
-          - target: x86_64-unknown-linux-musl
-            os: ubuntu-latest
-            cross: true
-          - target: x86_64-pc-windows-gnu
-            os: ubuntu-latest
-            cross: true
           - target: x86_64-apple-darwin
             os: macos-13
             cross: false
@@ -163,8 +155,6 @@ jobs:
         Pre-compiled binaries are available for multiple platforms:
         
         - **Linux (x86_64)**: \`chef-de-vibe-x86_64-unknown-linux-gnu\`
-        - **Linux (x86_64, static)**: \`chef-de-vibe-x86_64-unknown-linux-musl\`
-        - **Windows (x86_64)**: \`chef-de-vibe-x86_64-pc-windows-gnu.exe\`
         - **macOS (Intel)**: \`chef-de-vibe-x86_64-apple-darwin\`
         - **macOS (Apple Silicon)**: \`chef-de-vibe-aarch64-apple-darwin\`
         
@@ -198,8 +188,6 @@ jobs:
         Pre-compiled binaries are available for multiple platforms:
         
         - **Linux (x86_64)**: \`chef-de-vibe-x86_64-unknown-linux-gnu\`
-        - **Linux (x86_64, static)**: \`chef-de-vibe-x86_64-unknown-linux-musl\`
-        - **Windows (x86_64)**: \`chef-de-vibe-x86_64-pc-windows-gnu.exe\`
         - **macOS (Intel)**: \`chef-de-vibe-x86_64-apple-darwin\`
         - **macOS (Apple Silicon)**: \`chef-de-vibe-aarch64-apple-darwin\`
         
