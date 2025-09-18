@@ -55,11 +55,6 @@ services:
       - /home/dev:/home/dev
       # if you want to use podman via socket
       # - /run/user/1934/podman/podman.sock:/run/user/1934/podman/podman.sock
-    security_opt:
-      - label:disable
-      - seccomp:unconfined
-    cap_add:
-      - ALL
     environment:
       - HTTP_LISTEN_ADDRESS=0.0.0.0:3000
       - HOME=/home/dev
@@ -69,8 +64,8 @@ services:
       # If you want to use socket
       # - CONTAINER_HOST=unix:///run/user/1934/podman/podman.sock
       # It will be similar for docker integration
-      # To make git work in the container
-      # - CONTAINER_ARGS="-v /home/dev/.gitconfig:/root/.gitconfig"
+      # To make git and podman socket work in the container
+      # - CONTAINER_ARGS=-e CONTAINER_HOST=unix:///run/user/1934/podman/podman.sock -v /home/dev/.gitconfig:/root/.gitconfig -v /run/user/1934/podman/podman.sock:/run/user/1934/podman/podman.sock
   # If you want to access it via tailscale
   #   network_mode: service:tailscale_chefdevibe
   #   depends_on:
