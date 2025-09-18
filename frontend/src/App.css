@@ -2737,11 +2737,98 @@ pre,
 }
 
 .diff-content .diff-gutter-col {
-  width: 60px;
+  width: 20px;
+  min-width: 20px;
+  max-width: 20px;
 }
 
 .diff-content .diff-code-col {
-  width: calc(100% - 60px);
+  width: calc(100% - 16px);
+}
+
+/* Hide line numbers and make gutter minimal */
+.diff-content .diff-gutter {
+  width: 20px;
+  min-width: 20px;
+  text-align: center;
+  padding: 0 2px;
+  font-size: 0.85rem;
+}
+
+.diff-content .diff-gutter-col .diff-gutter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Hide line numbers, show only +/-/~ symbols */
+.diff-content .diff-gutter .diff-gutter-item {
+  display: none;
+}
+
+/* More specific overrides for react-diff-view library */
+.diff-content .diff-gutter-col {
+  width: 8px !important;
+  min-width: 8px !important;
+  max-width: 8px !important;
+  padding: 0 !important;
+}
+
+.diff-content .diff-gutter {
+  width: 8px !important;
+  min-width: 8px !important;
+  padding: 0 !important;
+  text-align: center !important;
+  font-size: 0 !important; /* Hide the line numbers */
+  position: relative !important;
+}
+
+/* Hide line numbers by making font-size 0 and override with pseudo-elements */
+.diff-content .diff-gutter-normal,
+.diff-content .diff-gutter-add,
+.diff-content .diff-gutter-delete,
+.diff-content .diff-gutter-insert {
+  font-size: 0 !important; /* Hide line numbers */
+  position: relative !important;
+  width: 8px !important;
+  text-align: center !important;
+}
+
+/* Add visual indicators using pseudo-elements */
+/* First column (old/left): only show "-" for deleted lines */
+.diff-content .diff-gutter-col:first-child .diff-gutter-normal::after,
+.diff-content .diff-gutter-col:first-child .diff-gutter-add::after,
+.diff-content .diff-gutter-col:first-child .diff-gutter-insert::after {
+  content: '' !important;
+}
+
+.diff-content .diff-gutter-col:first-child .diff-gutter-delete::after {
+  content: '−' !important;
+  color: #dc3545 !important;
+  font-weight: bold !important;
+  font-size: 10px !important;
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+}
+
+/* Second column (new/right): only show "+" for added lines */
+.diff-content .diff-gutter-col:last-child .diff-gutter-normal::after,
+.diff-content .diff-gutter-col:last-child .diff-gutter-delete::after {
+  content: '' !important;
+}
+
+.diff-content .diff-gutter-col:last-child .diff-gutter-add::after,
+.diff-content .diff-gutter-col:last-child .diff-gutter-insert::after {
+  content: '+' !important;
+  color: #28a745 !important;
+  font-weight: bold !important;
+  font-size: 10px !important;
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
 }
 /* Control request (approval) message styles */
 .control-request-message {

@@ -163,6 +163,7 @@ function FileReadToolDisplay({ input }: { input: FileReadInput }) {
         {(input.offset || input.limit) && (
           <div className="read-range">
             {input.offset && <span>From line {input.offset}</span>}
+            {input.offset && input.limit && <span> • </span>}
             {input.limit && <span>Read {input.limit} lines</span>}
           </div>
         )}

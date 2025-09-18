@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="chefHat" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f8f9fa;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="speech" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3498db;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2980b9;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="utensils" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e9ecef;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#adb5bd;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="2" dy="4" stdDeviation="3" flood-color="#00000020"/>
+    </filter>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="128" cy="128" r="120" fill="#f8f9fa" stroke="#dee2e6" stroke-width="2" filter="url(#shadow)"/>
+  
+  <!-- Traditional Chef's Hat Band (bottom part) -->
+  <rect x="88" y="170" width="80" height="18" rx="3" fill="url(#chefHat)" stroke="#dee2e6" stroke-width="2"/>
+  
+  <!-- Traditional Chef's Hat Toque (tall puffy part) -->
+  <ellipse cx="128" cy="170" rx="40" ry="8" fill="#dee2e6"/>
+  <path d="M 88 170 
+           Q 88 120 100 100
+           Q 110 85 128 80
+           Q 146 85 156 100
+           Q 168 120 168 170 Z" 
+           fill="url(#chefHat)" stroke="#dee2e6" stroke-width="2"/>
+  
+  <!-- Chef hat pleats (traditional vertical folds) -->
+  <path d="M 105 170 Q 105 130 108 110" stroke="#dee2e6" stroke-width="1.5" fill="none" opacity="0.7"/>
+  <path d="M 118 170 Q 118 125 120 105" stroke="#dee2e6" stroke-width="1.5" fill="none" opacity="0.7"/>
+  <path d="M 138 170 Q 138 125 136 105" stroke="#dee2e6" stroke-width="1.5" fill="none" opacity="0.7"/>
+  <path d="M 151 170 Q 151 130 148 110" stroke="#dee2e6" stroke-width="1.5" fill="none" opacity="0.7"/>
+  
+  <!-- Speech bubble -->
+  <ellipse cx="175" cy="85" rx="38" ry="28" fill="url(#speech)" stroke="#2c3e50" stroke-width="2"/>
+  <polygon points="152,108 170,118 160,123" fill="url(#speech)" stroke="#2c3e50" stroke-width="1"/>
+  
+  <!-- Chat dots in speech bubble -->
+  <circle cx="165" cy="80" r="3.5" fill="white"/>
+  <circle cx="175" cy="80" r="3.5" fill="white"/>
+  <circle cx="185" cy="80" r="3.5" fill="white"/>
+  <circle cx="170" cy="90" r="3.5" fill="white"/>
+  <circle cx="180" cy="90" r="3.5" fill="white"/>
+  
+  <!-- Crossed utensils behind chef hat -->
+  <g transform="translate(128,145) rotate(-30)">
+    <rect x="-2" y="-30" width="4" height="55" fill="url(#utensils)" stroke="#6c757d" stroke-width="1"/>
+    <circle cx="0" cy="-28" r="7" fill="url(#utensils)" stroke="#6c757d" stroke-width="1"/>
+  </g>
+  
+  <g transform="translate(128,145) rotate(30)">
+    <rect x="-2" y="-30" width="4" height="45" fill="url(#utensils)" stroke="#6c757d" stroke-width="1"/>
+    <path d="M -5,-30 L 5,-30 L 3,-25 L -3,-25 Z" fill="url(#utensils)" stroke="#6c757d" stroke-width="1"/>
+    <path d="M -3,-25 L 3,-25 L 2,-20 L -2,-20 Z" fill="url(#utensils)" stroke="#6c757d" stroke-width="1"/>
+    <path d="M -4,-33 L 4,-33 L 3,-30 L -3,-30 Z" fill="url(#utensils)" stroke="#6c757d" stroke-width="1"/>
+  </g>
+  
+  <!-- Sparkles for "vibe" effect -->
+  <g fill="#ffc107" stroke="#e0a800" stroke-width="1">
+    <path d="M 55,65 L 60,75 L 70,70 L 60,80 L 55,65 Z" opacity="0.8"/>
+    <path d="M 205,115 L 208,122 L 215,119 L 208,126 L 205,115 Z" opacity="0.7"/>
+    <path d="M 75,205 L 79,213 L 87,210 L 79,217 L 75,205 Z" opacity="0.6"/>
+    <circle cx="215" cy="185" r="2" opacity="0.9"/>
+    <circle cx="45" cy="125" r="1.5" opacity="0.8"/>
+  </g>
+</svg>

@@ -129,7 +129,7 @@ const testMessages = [
     timestamp: Date.now() - 6000
   },
 
-  // Assistant message with search operations
+  // Assistant message with single edit operation
   {
     id: "asst-msg-4",
     type: "assistant",
@@ -137,7 +137,33 @@ const testMessages = [
       content: [
         {
           type: "text",
-          text: "Let me search for existing analytics code in the project:"
+          text: "Let me fix a small issue in the analytics service - I need to add proper error handling:"
+        },
+        {
+          type: "tool_use",
+          id: "edit-123",
+          name: "Edit",
+          input: {
+            file_path: "/home/user/test-project/src/analytics/service.py",
+            old_string: "    def _save_event(self, event: Dict) -> bool:\n        # Implementation for saving to database\n        pass",
+            new_string: "    def _save_event(self, event: Dict) -> bool:\n        \"\"\"Save event to database with proper error handling\"\"\"\n        try:\n            # Implementation for saving to database\n            return True\n        except Exception as e:\n            print(f\"Failed to save event: {e}\")\n            return False",
+            replace_all: false
+          }
+        }
+      ]
+    },
+    timestamp: Date.now() - 5500
+  },
+
+  // Assistant message with search operations
+  {
+    id: "asst-msg-5",
+    type: "assistant",
+    message: {
+      content: [
+        {
+          type: "text",
+          text: "Now let me search for existing analytics code in the project:"
         },
         {
           type: "tool_use",
@@ -155,7 +181,7 @@ const testMessages = [
 
   // Assistant message with Grep search
   {
-    id: "asst-msg-5",
+    id: "asst-msg-6",
     type: "assistant",
     message: {
       content: [
@@ -184,7 +210,7 @@ const testMessages = [
 
   // Assistant message with bash command
   {
-    id: "asst-msg-6",
+    id: "asst-msg-7",
     type: "assistant",
     message: {
       content: [
@@ -210,7 +236,7 @@ const testMessages = [
 
   // Assistant message with multi-edit
   {
-    id: "asst-msg-7",
+    id: "asst-msg-8",
     type: "assistant",
     message: {
       content: [
@@ -250,7 +276,7 @@ const testMessages = [
 
   // Assistant message with notebook editing
   {
-    id: "asst-msg-8",
+    id: "asst-msg-9",
     type: "assistant", 
     message: {
       content: [
@@ -277,7 +303,7 @@ const testMessages = [
 
   // Web operations messages
   {
-    id: "asst-msg-9",
+    id: "asst-msg-10",
     type: "assistant",
     message: {
       content: [
@@ -302,7 +328,7 @@ const testMessages = [
 
   // Web fetch message
   {
-    id: "asst-msg-10",
+    id: "asst-msg-11",
     type: "assistant",
     message: {
       content: [
@@ -326,7 +352,7 @@ const testMessages = [
 
   // File read operation
   {
-    id: "asst-msg-11", 
+    id: "asst-msg-12", 
     type: "assistant",
     message: {
       content: [
@@ -351,7 +377,7 @@ const testMessages = [
 
   // MCP operations
   {
-    id: "asst-msg-12",
+    id: "asst-msg-13",
     type: "assistant",
     message: {
       content: [
@@ -374,7 +400,7 @@ const testMessages = [
 
   // Read MCP resource
   {
-    id: "asst-msg-13",
+    id: "asst-msg-14",
     type: "assistant",
     message: {
       content: [
@@ -398,7 +424,7 @@ const testMessages = [
 
   // Generic MCP operation
   {
-    id: "asst-msg-14",
+    id: "asst-msg-15",
     type: "assistant",
     message: {
       content: [
@@ -428,7 +454,7 @@ const testMessages = [
 
   // Background shell operations
   {
-    id: "asst-msg-15",
+    id: "asst-msg-16",
     type: "assistant",
     message: {
       content: [
@@ -454,7 +480,7 @@ const testMessages = [
 
   // BashOutput tool
   {
-    id: "asst-msg-16",
+    id: "asst-msg-17",
     type: "assistant",
     message: {
       content: [
@@ -478,7 +504,7 @@ const testMessages = [
 
   // Plan mode and cleanup
   {
-    id: "asst-msg-17",
+    id: "asst-msg-18",
     type: "assistant",
     message: {
       content: [
