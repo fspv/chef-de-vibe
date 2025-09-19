@@ -1,0 +1,15 @@
+import { Side } from '../../interface';
+import { ChangeData, HunkData } from '../parse';
+type ComputeLine = (change: ChangeData) => number;
+export declare function computeLineNumberFactory(side: Side): ComputeLine;
+type IsInHunk = (hunk: HunkData, lineNumber: number) => boolean;
+type StartProperty = 'oldStart' | 'newStart';
+type LinesProperty = 'oldLines' | 'newLines';
+export declare function isInHunkFactory(startProperty: StartProperty, linesProperty: LinesProperty): IsInHunk;
+type IsBetweenHunks = (previousHunk: HunkData, nextHunk: HunkData, lineNumber: number) => boolean;
+export declare function isBetweenHunksFactory(startProperty: StartProperty, linesProperty: LinesProperty): IsBetweenHunks;
+type FindChangeByLineNumber = (hunks: HunkData[], lineNumber: number) => ChangeData | undefined;
+export declare function findChangeByLineNumberFactory(side: Side): FindChangeByLineNumber;
+type GetCorrespondingLineNumber = (hunks: HunkData[], lineNumber: number) => number;
+export declare function getCorrespondingLineNumberFactory(baseSide: Side): GetCorrespondingLineNumber;
+export {};

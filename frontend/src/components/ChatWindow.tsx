@@ -6,6 +6,7 @@ import { useWebSocket } from '../hooks/useWebSocket';
 import { useApprovalWebSocket } from '../hooks/useApprovalWebSocket';
 import { MessageList, type MessageListRef } from './MessageList';
 import { MessageInput } from './MessageInput';
+import { LoadingScreen, type LogEntry } from './LoadingScreen';
 // Lazy load the SessionStatusIndicator to prevent blocking
 const SessionStatusIndicator = lazy(() => 
   import('./SessionStatusIndicator').then(module => ({
@@ -33,6 +34,9 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
   const [debugMode, setDebugMode] = useState(false);
   const [currentMode, setCurrentMode] = useState<PermissionMode>('default');
   const messageListRef = useRef<MessageListRef>(null);
+  const [loadingLogs, setLoadingLogs] = useState<LogEntry[]>([]);
+  const [loadingOperation, setLoadingOperation] = useState<'creating' | 'resuming' | 'loading'>('loading');
+  const [isSessionLoading, setIsSessionLoading] = useState(false);
   
   // Helper function to ensure directory path starts with /
   const ensureAbsolutePath = (path: string | undefined | null): string => {
@@ -43,6 +47,10 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
   
   // Get selected directory from navigation state (for new chats)
   const selectedDirectory = location.state?.selectedDirectory;
+  
+  const addLog = useCallback((message: string, type: 'info' | 'success' | 'error' | 'warning' = 'info') => {
+    setLoadingLogs(prev => [...prev, { timestamp: Date.now(), message, type }]);
+  }, []);
   
   const webSocketUrl = sessionDetails?.websocket_url 
     ? api.buildWebSocketUrl(sessionDetails.websocket_url)
@@ -85,61 +93,114 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
     // Determine session state
     if (!sessionId) {
       // New session case
+      setIsSessionLoading(true);
+      setLoadingOperation('creating');
+      setLoadingLogs([]);
+      
       const newSessionId = uuidv4();
+      addLog(`Generating new session ID: ${newSessionId}`, 'info');
+      
       const request: CreateSessionRequest = {
         session_id: newSessionId,
         working_dir: ensureAbsolutePath(selectedDirectory),
         resume: false,
         bootstrap_messages: [message]
       };
+      
+      addLog(`Creating session with working directory: ${request.working_dir}`, 'info');
+      addLog('Sending create session request to backend...', 'info');
 
       const response = await onCreateSession(request);
       if (response) {
+        addLog(`Session created successfully with ID: ${response.session_id}`, 'success');
+        
         // Connect both WebSockets before navigation
         const wsUrl = api.buildWebSocketUrl(response.websocket_url);
         const approvalWsUrl = api.buildWebSocketUrl(response.approval_websocket_url);
         
+        addLog('Connecting to main WebSocket...', 'info');
         const ws = new WebSocket(wsUrl);
+        
+        ws.onopen = () => addLog('Main WebSocket connected', 'success');
+        ws.onerror = () => addLog('Main WebSocket connection error', 'error');
+        
+        addLog('Connecting to approval WebSocket...', 'info');
         const approvalWs = new WebSocket(approvalWsUrl);
+        
+        approvalWs.onopen = () => addLog('Approval WebSocket connected', 'success');
+        approvalWs.onerror = () => addLog('Approval WebSocket connection error', 'error');
         
         setPendingWebSocket(ws);
         setPendingApprovalWebSocket(approvalWs);
         
+        addLog('Waiting for session initialization...', 'info');
         // Wait briefly to ensure backend has fully processed the session before navigation
         await new Promise(resolve => setTimeout(resolve, 2000));
         
+        addLog('Navigating to session...', 'success');
         // Navigate to new session
         navigate(`/session/${response.session_id}`);
+      } else {
+        addLog('Failed to create session', 'error');
+        setIsSessionLoading(false);
       }
     } else if (sessionDetails && !sessionDetails.websocket_url) {
       // Inactive session - need to resume  
+      setIsSessionLoading(true);
+      setLoadingOperation('resuming');
+      setLoadingLogs([]);
+      
+      addLog(`Resuming session: ${sessionId}`, 'info');
+      
       if (!sessionDetails.working_directory) {
+        addLog('Cannot resume session: working directory not available', 'error');
+        setIsSessionLoading(false);
         throw new Error('Cannot resume session: working directory not available');
       }
+      
       const request: CreateSessionRequest = {
         session_id: sessionId,
         working_dir: sessionDetails.working_directory,
         resume: true,
         bootstrap_messages: [message]
       };
+      
+      addLog(`Resuming with working directory: ${request.working_dir}`, 'info');
+      addLog('Sending resume session request to backend...', 'info');
 
       const response = await onCreateSession(request);
       if (response) {
+        addLog(`Session resumed successfully with new ID: ${response.session_id}`, 'success');
+        
         // Connect both WebSockets to new session before navigation
         const wsUrl = api.buildWebSocketUrl(response.websocket_url);
         const approvalWsUrl = api.buildWebSocketUrl(response.approval_websocket_url);
         
+        addLog('Connecting to main WebSocket...', 'info');
         const ws = new WebSocket(wsUrl);
+        
+        ws.onopen = () => addLog('Main WebSocket connected', 'success');
+        ws.onerror = () => addLog('Main WebSocket connection error', 'error');
+        
+        addLog('Connecting to approval WebSocket...', 'info');
         const approvalWs = new WebSocket(approvalWsUrl);
+        
+        approvalWs.onopen = () => addLog('Approval WebSocket connected', 'success');
+        approvalWs.onerror = () => addLog('Approval WebSocket connection error', 'error');
         
         setPendingWebSocket(ws);
         setPendingApprovalWebSocket(approvalWs);
         
+        addLog('Waiting for session initialization...', 'info');
         // Wait briefly to ensure backend has fully processed the session before navigation
         await new Promise(resolve => setTimeout(resolve, 2000));
         
+        addLog('Navigating to resumed session...', 'success');
         // Navigate to new session (ID will be different from request)
         navigate(`/session/${response.session_id}`);
+      } else {
+        addLog('Failed to resume session', 'error');
+        setIsSessionLoading(false);
       }
     } else {
       // Active session - send via WebSocket
@@ -154,7 +215,7 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
       }
       sendMessage(message);
     }
-  }, [sessionId, sessionDetails, onCreateSession, navigate, sendMessage, addMessage, debugMode, selectedDirectory]);
+  }, [sessionId, sessionDetails, onCreateSession, navigate, sendMessage, addMessage, debugMode, selectedDirectory, addLog]);
 
   // Clean up pending WebSockets on unmount
   useEffect(() => {
@@ -201,6 +262,43 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
       }
     }
   }, [webSocketMessages]);
+  
+  // Monitor WebSocket connections for logging
+  useEffect(() => {
+    if (loading && sessionId) {
+      setIsSessionLoading(true);
+      setLoadingOperation('loading');
+      setLoadingLogs([]);
+      addLog(`Getting session details for: ${sessionId}`, 'info');
+    }
+  }, [loading, sessionId, addLog]);
+  
+  useEffect(() => {
+    if (sessionDetails && isSessionLoading) {
+      addLog('Session details retrieved', 'success');
+      
+      if (sessionDetails.websocket_url) {
+        addLog('Connecting to main WebSocket...', 'info');
+      } else {
+        addLog('Session is inactive, send a message to resume', 'warning');
+        setIsSessionLoading(false);
+      }
+    }
+  }, [sessionDetails, isSessionLoading, addLog]);
+  
+  useEffect(() => {
+    if (isConnected && isSessionLoading) {
+      addLog('Main WebSocket connected successfully', 'success');
+    }
+  }, [isConnected, isSessionLoading, addLog]);
+  
+  useEffect(() => {
+    if (approvalWs.isConnected && isSessionLoading) {
+      addLog('Approval WebSocket connected successfully', 'success');
+      addLog('Session ready!', 'success');
+      setTimeout(() => setIsSessionLoading(false), 1000);
+    }
+  }, [approvalWs.isConnected, isSessionLoading, addLog]);
 
   if (!sessionId) {
     return (
@@ -236,13 +334,13 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
     );
   }
 
-  if (loading) {
+  if (loading || isSessionLoading) {
     return (
-      <div className="chat-window">
-        <div className="loading-chat">
-          <p>Loading session...</p>
-        </div>
-      </div>
+      <LoadingScreen 
+        sessionId={sessionId}
+        operation={loadingOperation}
+        logs={loadingLogs}
+      />
     );
   }
 

@@ -12,7 +12,8 @@
       "Bash(npm run:*)",
       "Bash(git commit:*)",
       "Bash(grep:*)",
-      "Bash(cargo clippy:*)"
+      "Bash(cargo clippy:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": []
   },

@@ -1,0 +1,23 @@
+{
+  "name": "gitdiff-parser",
+  "version": "0.3.1",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "devDependencies": {
+    "parse-diff": "0.4.0",
+    "jest": "^24.1.0"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ecomfe/gitdiff-parser.git"
+  },
+  "author": "",
+  "license": "MIT"
+}

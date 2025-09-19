@@ -1,0 +1,10 @@
+export { insertHunk, textLinesToHunk } from './insertHunk';
+export { getChangeKey } from './getChangeKey';
+export { expandCollapsedBlockBy, getCollapsedLinesCountBetween, expandFromRawCode } from './expandCollapsedBlockBy';
+export type { Source } from './expandCollapsedBlockBy';
+export declare const computeOldLineNumber: (change: import("gitdiff-parser").Change) => number;
+export declare const computeNewLineNumber: (change: import("gitdiff-parser").Change) => number;
+export declare const findChangeByOldLineNumber: (hunks: import("gitdiff-parser").Hunk[], lineNumber: number) => import("gitdiff-parser").Change | undefined;
+export declare const findChangeByNewLineNumber: (hunks: import("gitdiff-parser").Hunk[], lineNumber: number) => import("gitdiff-parser").Change | undefined;
+export declare const getCorrespondingOldLineNumber: (hunks: import("gitdiff-parser").Hunk[], lineNumber: number) => number;
+export declare const getCorrespondingNewLineNumber: (hunks: import("gitdiff-parser").Hunk[], lineNumber: number) => number;

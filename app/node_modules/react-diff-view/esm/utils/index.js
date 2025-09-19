@@ -1,0 +1,3 @@
+export { computeNewLineNumber, computeOldLineNumber, expandCollapsedBlockBy, expandFromRawCode, findChangeByNewLineNumber, findChangeByOldLineNumber, getChangeKey, getCollapsedLinesCountBetween, getCorrespondingNewLineNumber, getCorrespondingOldLineNumber, insertHunk, textLinesToHunk, } from './diff';
+export { parseDiff, isInsert, isDelete, isNormal } from './parse';
+//# sourceMappingURL=index.js.map
