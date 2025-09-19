@@ -241,7 +241,11 @@ export function SessionList({ selectedSessionId, onSessionSelect, onNewChat, dir
                         <div
                           key={session.session_id}
                           className={`session-item ${selectedSessionId === session.session_id ? 'selected' : ''}`}
-                          onClick={() => onSessionSelect(session.session_id)}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onSessionSelect(session.session_id);
+                          }}
                         >
                           <div className="session-info">
                             <div className="session-summary">

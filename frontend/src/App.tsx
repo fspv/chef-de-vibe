@@ -108,7 +108,7 @@ function SessionView() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [sidebarCollapsed, directoryPopup, showNewChatDialog]);
 
-  // Handle swipe gestures for mobile
+  // Handle swipe gestures for mobile - Telegram-like behavior
   useEffect(() => {
     let touchStartX = 0;
     let touchStartY = 0;
@@ -116,22 +116,25 @@ function SessionView() {
     let touchEndY = 0;
     let isSwiping = false;
     let isSwipingFromEdge = false;
-    let isSwipingOnSidebar = false;
+    let isSwipingOnChat = false;
+    let mainElement: HTMLElement | null = null;
     let sidebarElement: HTMLElement | null = null;
     let animationFrameId: number | null = null;
     
     // Cache DOM elements on mount
     setTimeout(() => {
+      mainElement = document.querySelector('.app-main');
       sidebarElement = document.querySelector('.app-sidebar');
     }, 0);
 
     const handleTouchStart = (e: TouchEvent) => {
       if (!e.touches || e.touches.length === 0) return;
       
-      // Don't handle touch if it's on a clickable session item
       const target = e.target as HTMLElement;
-      if (target.closest('.session-item')) {
-        return; // Let the click handler handle this
+      
+      // Don't interfere with clicks on interactive elements
+      if (target.closest('.session-item, .group-header, button, a, input, textarea, .show-more-button')) {
+        return;
       }
       
       touchStartX = e.touches[0].clientX;
@@ -139,39 +142,21 @@ function SessionView() {
       touchEndX = touchStartX;
       touchEndY = touchStartY;
       
-      // Quick edge check before setting up swipe
-      if (touchStartX < 20 && sidebarCollapsed) {
-        isSwipingFromEdge = true;
-        isSwiping = true;
-        // Save scroll position and lock body scrolling during swipe
-        const scrollY = window.scrollY;
-        document.body.style.overflow = 'hidden';
-        document.body.style.position = 'fixed';
-        document.body.style.width = '100%';
-        document.body.style.top = `-${scrollY}px`;
-        document.body.style.touchAction = 'none';
-        document.documentElement.style.overflow = 'hidden';
-        document.documentElement.style.touchAction = 'none';
-        // Get sidebar if not cached
-        if (!sidebarElement) {
-          sidebarElement = document.querySelector('.app-sidebar');
-        }
-        if (sidebarElement) {
-          // Pre-warm the sidebar by removing collapsed class but keeping it off-screen
-          sidebarElement.classList.remove('collapsed');
-          sidebarElement.style.transform = 'translate3d(-100%, 0, 0)';
-          sidebarElement.style.transition = 'none';
-          sidebarElement.style.willChange = 'transform';
-        }
-      } else if (!sidebarCollapsed) {
-        // Check if swipe started on sidebar
-        if (!sidebarElement) {
-          sidebarElement = document.querySelector('.app-sidebar');
-        }
-        if (sidebarElement?.contains(target)) {
-          isSwipingOnSidebar = true;
+      // Get elements if not cached
+      if (!mainElement) {
+        mainElement = document.querySelector('.app-main');
+      }
+      if (!sidebarElement) {
+        sidebarElement = document.querySelector('.app-sidebar');
+      }
+      
+      // Telegram-like behavior: drag the main content to reveal sidebar
+      if (sidebarCollapsed) {
+        // Check if starting drag from edge or from main content
+        if (touchStartX < 20 || mainElement?.contains(target)) {
+          isSwipingFromEdge = true;
           isSwiping = true;
-          // Save scroll position and lock body scrolling during swipe
+          // Lock body scrolling during swipe
           const scrollY = window.scrollY;
           document.body.style.overflow = 'hidden';
           document.body.style.position = 'fixed';
@@ -180,34 +165,69 @@ function SessionView() {
           document.body.style.touchAction = 'none';
           document.documentElement.style.overflow = 'hidden';
           document.documentElement.style.touchAction = 'none';
-          sidebarElement.style.willChange = 'transform';
-          sidebarElement.style.transition = 'none';
+          
+          if (mainElement) {
+            mainElement.style.transition = 'none';
+            mainElement.style.willChange = 'transform';
+          }
+        }
+      } else {
+        // Sidebar is open - allow swiping from anywhere (sidebar or main content)
+        isSwipingOnChat = true;
+        isSwiping = true;
+        // Lock body scrolling during swipe
+        const scrollY = window.scrollY;
+        document.body.style.overflow = 'hidden';
+        document.body.style.position = 'fixed';
+        document.body.style.width = '100%';
+        document.body.style.top = `-${scrollY}px`;
+        document.body.style.touchAction = 'none';
+        document.documentElement.style.overflow = 'hidden';
+        document.documentElement.style.touchAction = 'none';
+        
+        if (mainElement) {
+          mainElement.style.willChange = 'transform';
+          mainElement.style.transition = 'none';
         }
       }
     };
 
     const updateSwipePosition = (deltaX: number) => {
-      if (!sidebarElement) return;
+      if (!mainElement) return;
       
-      // Handle edge swipe to open
-      if (isSwipingFromEdge) {
-        // Direct calculation without intermediate variables
-        const translateX = Math.min(deltaX - window.innerWidth, 0);
+      // Handle swipe to open sidebar (drag main content right)
+      if (isSwipingFromEdge && deltaX > 0) {
+        // Limit the drag to the width of the viewport
+        const translateX = Math.min(deltaX, window.innerWidth);
+        mainElement.style.transform = `translateX(${translateX}px)`;
         
-        // Single transform update
-        sidebarElement.style.transform = `translateX(${translateX}px)`;
+        // Update overlay opacity based on drag progress
+        const overlay = mainElement.querySelector('.sidebar-overlay') as HTMLElement;
+        if (overlay) {
+          const progress = translateX / window.innerWidth;
+          overlay.style.display = 'block';
+          overlay.style.opacity = String(progress);
+        }
       }
       
-      // Handle swipe on sidebar to close
-      if (isSwipingOnSidebar && deltaX < 0) {
-        // Direct pixel-based transform
-        sidebarElement.style.transform = `translateX(${deltaX}px)`;
+      // Handle swipe to close sidebar
+      if (isSwipingOnChat) {
+        // Start from open position (100vw) and apply delta
+        const translateX = Math.min(Math.max(window.innerWidth + deltaX, 0), window.innerWidth);
+        mainElement.style.transform = `translateX(${translateX}px)`;
+        
+        // Update overlay opacity based on drag progress
+        const overlay = mainElement.querySelector('.sidebar-overlay') as HTMLElement;
+        if (overlay) {
+          const progress = translateX / window.innerWidth;
+          overlay.style.opacity = String(progress);
+        }
       }
     };
 
     const handleTouchMove = (e: TouchEvent) => {
       if (!isSwiping || !e.touches || e.touches.length === 0) return;
-      if (!sidebarElement) return;
+      if (!mainElement) return;
       
       touchEndX = e.touches[0].clientX;
       touchEndY = e.touches[0].clientY;
@@ -215,12 +235,12 @@ function SessionView() {
       const deltaX = touchEndX - touchStartX;
       const deltaY = touchEndY - touchStartY;
       
-      // Always prevent default scrolling when swiping the sidebar
-      if (isSwipingFromEdge || isSwipingOnSidebar) {
+      // Prevent default scrolling when swiping
+      if (isSwipingFromEdge || isSwipingOnChat) {
         e.preventDefault();
         e.stopPropagation();
         
-        // If vertical movement is too significant compared to horizontal, still prevent but don't update position
+        // If vertical movement is too significant, still prevent but don't update position
         if (Math.abs(deltaY) > Math.abs(deltaX) * 2 && Math.abs(deltaY) > 50) {
           return;
         }
@@ -251,7 +271,7 @@ function SessionView() {
       let shouldOpen = false;
       if (isSwipingFromEdge) {
         shouldOpen = deltaX > threshold;
-      } else if (isSwipingOnSidebar) {
+      } else if (isSwipingOnChat) {
         shouldOpen = deltaX > -threshold;
       }
       
@@ -274,23 +294,22 @@ function SessionView() {
           window.scrollTo(0, parseInt(scrollY.replace('-', '').replace('px', ''), 10));
         }
       }
-      // If shouldOpen is true, keep scrolling locked (will be handled by the useEffect)
       
-      // Immediately set final transform position
-      if (sidebarElement) {
+      // Set final transform position on main content
+      if (mainElement) {
         // Clear will-change and set final position
-        sidebarElement.style.willChange = '';
-        sidebarElement.style.transform = shouldOpen ? '' : 'translate3d(-100%, 0, 0)';
+        mainElement.style.willChange = '';
+        mainElement.style.transform = shouldOpen ? 'translateX(100vw)' : 'translateX(0)';
         // Re-enable transition after next frame
         requestAnimationFrame(() => {
-          if (sidebarElement) {
-            sidebarElement.style.transition = '';
+          if (mainElement) {
+            mainElement.style.transition = '';
           }
         });
       }
       
       // Update overlay
-      const overlay = document.querySelector('.sidebar-overlay') as HTMLElement;
+      const overlay = mainElement?.querySelector('.sidebar-overlay') as HTMLElement;
       if (overlay) {
         overlay.style.display = shouldOpen ? 'block' : 'none';
         overlay.style.opacity = shouldOpen ? '1' : '0';
@@ -308,18 +327,13 @@ function SessionView() {
         }
       }
       
-      // Update React state much later
-      const timeoutId = setTimeout(() => setSidebarCollapsed(!shouldOpen), 150);
-      // Track timeout for potential cancellation
-      if (!(window as any).__touchTimeouts) {
-        (window as any).__touchTimeouts = [];
-      }
-      (window as any).__touchTimeouts.push(timeoutId);
+      // Update React state
+      setTimeout(() => setSidebarCollapsed(!shouldOpen), 150);
       
       // Reset all flags
       isSwiping = false;
       isSwipingFromEdge = false;
-      isSwipingOnSidebar = false;
+      isSwipingOnChat = false;
       
       // Cancel any pending frames
       if (animationFrameId) {
@@ -329,46 +343,39 @@ function SessionView() {
     };
 
     const handleTouchCancel = () => {
-      // Clean up on cancel (e.g., when another app takes focus)
+      // Clean up on cancel
       if (isSwiping) {
         isSwiping = false;
         
-        // Restore body scrolling if sidebar is collapsed
-        if (sidebarCollapsed) {
-          const scrollY = document.body.style.top;
-          document.body.style.overflow = '';
-          document.body.style.position = '';
-          document.body.style.width = '';
-          document.body.style.top = '';
-          document.body.style.touchAction = '';
-          document.documentElement.style.overflow = '';
-          document.documentElement.style.touchAction = '';
-          
-          // Restore scroll position
-          if (scrollY) {
-            window.scrollTo(0, parseInt(scrollY.replace('-', '').replace('px', ''), 10));
-          }
+        // Restore body scrolling
+        const scrollY = document.body.style.top;
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.width = '';
+        document.body.style.top = '';
+        document.body.style.touchAction = '';
+        document.documentElement.style.overflow = '';
+        document.documentElement.style.touchAction = '';
+        
+        // Restore scroll position
+        if (scrollY) {
+          window.scrollTo(0, parseInt(scrollY.replace('-', '').replace('px', ''), 10));
         }
         
-        // Reset sidebar
-        if (sidebarElement) {
-          sidebarElement.style.transition = '';
-          sidebarElement.style.transform = '';
-          sidebarElement.style.willChange = '';
+        // Reset main element
+        if (mainElement) {
+          mainElement.style.transition = '';
+          mainElement.style.transform = '';
+          mainElement.style.willChange = '';
         }
         
-        // Remove temporary overlay
-        const tempOverlay = document.querySelector('.sidebar-overlay-temp');
-        if (tempOverlay) {
-          tempOverlay.remove();
-        }
-        
-        // Reset regular overlay
-        const regularOverlay = document.querySelector('.sidebar-overlay') as HTMLElement;
-        if (regularOverlay) {
-          regularOverlay.style.transition = '';
-          regularOverlay.style.opacity = '';
-          regularOverlay.style.pointerEvents = '';
+        // Reset overlay
+        const overlay = mainElement?.querySelector('.sidebar-overlay') as HTMLElement;
+        if (overlay) {
+          overlay.style.transition = '';
+          overlay.style.opacity = '';
+          overlay.style.display = '';
+          overlay.style.pointerEvents = '';
         }
         
         // Cancel any pending animation frame
@@ -396,17 +403,19 @@ function SessionView() {
         cancelAnimationFrame(animationFrameId);
       }
       
-      // Clean up any temporary overlay
-      const tempOverlay = document.querySelector('.sidebar-overlay-temp');
-      if (tempOverlay) {
-        tempOverlay.remove();
-      }
     };
   }, [sidebarCollapsed]);
 
-  const handleSessionSelect = (sessionId: string) => {
-    // Set sidebar state FIRST to avoid race conditions
-    // This ensures the state is updated before navigation causes re-renders
+  const handleSessionSelect = (newSessionId: string) => {
+    // If clicking on the same session, just close the sidebar
+    if (sessionId === newSessionId) {
+      if (!sidebarCollapsed) {
+        setSidebarCollapsed(true);
+      }
+      return; // Don't navigate, we're already on this session
+    }
+    
+    // For different session, close sidebar immediately
     if (!sidebarCollapsed) {
       // Cancel any pending touch state updates
       const pendingTimeouts = (window as any).__touchTimeouts;
@@ -415,11 +424,31 @@ function SessionView() {
         (window as any).__touchTimeouts = [];
       }
       
+      // Close sidebar instantly without animation for smooth transition
+      const mainElement = document.querySelector('.app-main') as HTMLElement;
+      const overlay = mainElement?.querySelector('.sidebar-overlay') as HTMLElement;
+      
+      if (mainElement) {
+        mainElement.style.transition = 'none';
+        mainElement.style.transform = 'translateX(0)';
+      }
+      
+      if (overlay) {
+        overlay.style.display = 'none';
+      }
+      
       setSidebarCollapsed(true);
+      
+      // Re-enable transitions after a frame
+      requestAnimationFrame(() => {
+        if (mainElement) {
+          mainElement.style.transition = '';
+        }
+      });
     }
     
-    // Navigate after state is set
-    navigate(`/session/${sessionId}`);
+    // Navigate to the new session
+    navigate(`/session/${newSessionId}`);
   };
 
   const handleNewChat = () => {
@@ -430,6 +459,30 @@ function SessionView() {
 
   const handleStartChat = async (directory: string, firstMessage: string) => {
     setShowNewChatDialog(false);
+    
+    // Close sidebar immediately for smooth transition
+    if (!sidebarCollapsed) {
+      const mainElement = document.querySelector('.app-main') as HTMLElement;
+      const overlay = mainElement?.querySelector('.sidebar-overlay') as HTMLElement;
+      
+      if (mainElement) {
+        mainElement.style.transition = 'none';
+        mainElement.style.transform = 'translateX(0)';
+      }
+      
+      if (overlay) {
+        overlay.style.display = 'none';
+      }
+      
+      setSidebarCollapsed(true);
+      
+      // Re-enable transitions after a frame
+      requestAnimationFrame(() => {
+        if (mainElement) {
+          mainElement.style.transition = '';
+        }
+      });
+    }
     
     // Create the session immediately with the first message
     const newSessionId = uuidv4();
@@ -442,8 +495,6 @@ function SessionView() {
 
     const response = await createSession(request);
     if (response) {
-      // Close sidebar to give user space
-      setSidebarCollapsed(true);
       // Navigate to the new session
       navigate(`/session/${response.session_id}`);
     } else {
@@ -485,17 +536,6 @@ function SessionView() {
 
   return (
     <div className={`app ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-      {/* Sidebar overlay for mobile - always in DOM, visibility controlled by CSS/JS */}
-      <div 
-        className="sidebar-overlay"
-        style={{
-          display: sidebarCollapsed ? 'none' : 'block',
-          opacity: sidebarCollapsed ? 0 : 1,
-          pointerEvents: sidebarCollapsed ? 'none' : 'auto'
-        }}
-        onClick={() => setSidebarCollapsed(true)}
-      />
-      
       <div className={`app-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <SessionList
           selectedSessionId={sessionId || null}
@@ -513,6 +553,15 @@ function SessionView() {
       ></button>
       
       <div className="app-main">
+        {/* Overlay attached to main content so it moves with it */}
+        <div 
+          className="sidebar-overlay"
+          style={{
+            display: sidebarCollapsed ? 'none' : 'block',
+            opacity: sidebarCollapsed ? 0 : 1,
+          }}
+          onClick={() => setSidebarCollapsed(true)}
+        />
         {sessionId ? (
           <ChatWindow
             sessionId={sessionId}

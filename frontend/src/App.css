@@ -422,55 +422,42 @@ html, body {
   border-right: 1px solid #34495e;
   display: flex;
   flex-direction: column;
-  transform: translate3d(0, 0, 0);
-  transition: transform 60ms linear;
   position: fixed;
   top: 0;
   left: 0;
   height: 100vh;
-  z-index: 100;
-  box-shadow: 2px 0 20px rgba(0, 0, 0, 0.3);
-  padding-right: 30px; /* Add space for wider toggle button when open */
+  z-index: 90; /* Behind main content when closed */
+  /* No transform - sidebar stays static behind main content */
   /* Enable hardware acceleration */
-  will-change: auto;
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
-  /* Prevent scrolling when touching the sidebar */
-  touch-action: pan-x;
+  /* Ensure sidebar can receive clicks */
+  pointer-events: auto;
+  touch-action: auto;
   -webkit-overflow-scrolling: auto;
 }
 
-.app-sidebar.no-animation {
-  transition: none !important;
+/* When sidebar is open, ensure it can receive clicks */
+.app:not(.sidebar-collapsed) .app-sidebar {
+  z-index: 90; /* Still behind main but main is moved away */
+  pointer-events: auto;
 }
 
+/* Sidebar doesn't move */
 .app-sidebar.collapsed {
-  transform: translate3d(-100%, 0, 0);
+  /* Sidebar stays in place */
 }
 
-.app-sidebar.no-animation.collapsed {
-  transition: none !important;
-  transform: translate3d(-100%, 0, 0);
-}
-
-.app.sidebar-collapsed .app-sidebar {
-  transform: translate3d(-100%, 0, 0);
-}
-
-.app.sidebar-collapsed .app-sidebar.no-animation {
-  transition: none !important;
-}
-
-/* Sidebar overlay for mobile */
+/* Sidebar overlay for mobile - attached to main content */
 .sidebar-overlay {
-  position: fixed;
+  position: absolute; /* Absolute to main content */
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
   background-color: rgba(0, 0, 0, 0.5);
-  z-index: 99; /* Below sidebar but above content */
-  transition: opacity 60ms linear;
+  z-index: 101; /* Above chat content */
+  transition: opacity 0.3s linear;
   will-change: opacity;
   /* Prevent any touch interactions except taps */
   touch-action: none;
@@ -542,20 +529,21 @@ html, body {
   display: flex;
   flex-direction: column;
   background-color: white;
-  transition: margin-left 0.3s ease, margin-right 0.3s ease;
-  min-width: 0;
+  min-width: 100vw;
   overflow-x: hidden;
-  margin-left: 0; /* Default: no margin */
+  position: relative;
+  z-index: 100; /* Above sidebar */
+  transform: translateX(0);
+  transition: transform 0.3s ease;
+  will-change: transform;
 }
 
 .app.sidebar-collapsed .app-main {
-  margin-left: 30px; /* Account for collapsed sidebar toggle button */
-  margin-right: 0;
+  transform: translateX(0);
 }
 
 .app:not(.sidebar-collapsed) .app-main {
-  margin-left: 0;
-  margin-right: 0; /* No margin needed - sidebar padding handles toggle button space */
+  transform: translateX(100vw); /* Slide right to reveal sidebar */
 }
 
 /* Session List Styles */
@@ -678,6 +666,8 @@ html, body {
   cursor: pointer;
   transition: all 0.2s;
   position: relative;
+  pointer-events: auto;
+  z-index: 95;
 }
 
 .session-item::before {
@@ -2334,19 +2324,8 @@ html, body {
     max-width: 100%;
   }
   .app-sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    height: 100vh;
-    width: 100vw;
+    width: 100vw; /* Full width on mobile */
     min-width: 100vw;
-    z-index: 150;
-    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
-    padding-right: 0; /* No toggle button on mobile */
-  }
-  
-  .app-sidebar.collapsed {
-    transform: translateX(-100%);
   }
   
   .sidebar-toggle {
@@ -2354,21 +2333,17 @@ html, body {
   }
   
   .app-main {
-    width: 100%;
-    margin-left: 0;
-    margin-right: 0;
+    width: 100vw;
+    transform: translateX(0);
+    transition: transform 0.3s ease;
   }
   
   .app.sidebar-collapsed .app-main {
-    width: 100%;
-    margin-left: 0;
-    margin-right: 0;
+    transform: translateX(0);
   }
   
   .app:not(.sidebar-collapsed) .app-main {
-    width: 100%;
-    margin-left: 0;
-    margin-right: 0;
+    transform: translateX(100vw);
   }
   
   .group-header {
