@@ -8,6 +8,7 @@ import { NewChatDialog } from './components/NewChatDialog';
 import { TestChatPage } from './components/TestChatPage';
 import { useCreateSession } from './hooks/useApi';
 import type { CreateSessionRequest } from './types/api';
+import type { PermissionMode } from '@anthropic-ai/claude-code/sdk';
 import './App.css';
 
 const SIDEBAR_COLLAPSED_KEY = 'chef-de-vibe-sidebar-collapsed';
@@ -498,14 +499,35 @@ function SessionView() {
     // Don't close sidebar when opening new chat dialog
   };
 
-  const handleStartChat = async (directory: string, firstMessage: string) => {
+  const handleStartChat = async (directory: string, firstMessage: string, mode: PermissionMode) => {
     // Create the session immediately with the first message
     const newSessionId = uuidv4();
+    
+    // Create control message to set the mode
+    const controlMessage = {
+      request_id: Math.random().toString(36).substring(2, 15),
+      type: "control_request",
+      request: {
+        subtype: "set_permission_mode",
+        mode: mode
+      }
+    };
+    
+    const bootstrapMessages: string[] = [];
+    
+    // Only add control message if mode is not default
+    if (mode !== 'default') {
+      bootstrapMessages.push(JSON.stringify(controlMessage));
+    }
+    
+    // Add the user's first message
+    bootstrapMessages.push(firstMessage);
+    
     const request: CreateSessionRequest = {
       session_id: newSessionId,
       working_dir: directory,
       resume: false,
-      bootstrap_messages: [firstMessage]
+      bootstrap_messages: bootstrapMessages
     };
 
     const response = await createSession(request);

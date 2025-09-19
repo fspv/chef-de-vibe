@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { DirectoryPicker } from './DirectoryPicker';
+import { ModeSelector } from './ModeSelector';
+import type { PermissionMode } from '@anthropic-ai/claude-code/sdk';
 
 interface NewChatDialogProps {
-  onStartChat: (directory: string, firstMessage: string) => Promise<void>;
+  onStartChat: (directory: string, firstMessage: string, mode: PermissionMode) => Promise<void>;
   onCancel: () => void;
 }
 
 export function NewChatDialog({ onStartChat, onCancel }: NewChatDialogProps) {
   const [selectedDirectory, setSelectedDirectory] = useState('');
   const [firstMessage, setFirstMessage] = useState('');
+  const [selectedMode, setSelectedMode] = useState<PermissionMode>('default');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,7 +35,7 @@ export function NewChatDialog({ onStartChat, onCancel }: NewChatDialogProps) {
       };
       
       try {
-        await onStartChat(selectedDirectory.trim(), JSON.stringify(message));
+        await onStartChat(selectedDirectory.trim(), JSON.stringify(message), selectedMode);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to create session');
         setIsLoading(false);
@@ -81,6 +84,14 @@ export function NewChatDialog({ onStartChat, onCancel }: NewChatDialogProps) {
               onChange={setSelectedDirectory}
               placeholder="Type or select a directory path..."
               className="new-chat-picker"
+            />
+          </div>
+          
+          <div className="mode-selector-section">
+            <label>Session Mode:</label>
+            <ModeSelector
+              value={selectedMode}
+              onChange={setSelectedMode}
             />
           </div>
           

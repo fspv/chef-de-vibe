@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import type { PermissionMode } from '@anthropic-ai/claude-code/sdk';
 
 interface MessageInputProps {
   onSendMessage: (message: string) => void;
@@ -8,9 +9,20 @@ interface MessageInputProps {
   isSessionActive?: boolean;
   isLoading?: boolean;
   initialValue?: string;
+  currentMode?: PermissionMode;
+  onSendMessages?: (messages: string[]) => void;
 }
 
-export function MessageInput({ onSendMessage, disabled, debugMode, isSessionActive = true, isLoading = false, initialValue = '' }: MessageInputProps) {
+export function MessageInput({ 
+  onSendMessage, 
+  disabled, 
+  debugMode, 
+  isSessionActive = true, 
+  isLoading = false, 
+  initialValue = '',
+  currentMode = 'default',
+  onSendMessages
+}: MessageInputProps) {
   const [input, setInput] = useState(initialValue);
   const [isMobile, setIsMobile] = useState(false);
   
@@ -49,7 +61,7 @@ export function MessageInput({ onSendMessage, disabled, debugMode, isSessionActi
         }
       } else {
         // Normal text mode - format as minimal Claude message
-        const message = {
+        const userMessage = {
           type: 'user',
           message: {
             role: 'user',
@@ -59,7 +71,25 @@ export function MessageInput({ onSendMessage, disabled, debugMode, isSessionActi
           uuid: uuidv4(),
           session_id: '' // This will be filled by the backend
         };
-        onSendMessage(JSON.stringify(message));
+        
+        // Always send control message first when session is active
+        if (isSessionActive && onSendMessages) {
+          const controlMessage = {
+            request_id: Math.random().toString(36).substring(2, 15),
+            type: "control_request",
+            request: {
+              subtype: "set_permission_mode",
+              mode: currentMode
+            }
+          };
+          
+          // Send both messages
+          onSendMessages([JSON.stringify(controlMessage), JSON.stringify(userMessage)]);
+        } else {
+          // Send only user message (for inactive sessions or if onSendMessages not provided)
+          onSendMessage(JSON.stringify(userMessage));
+        }
+        
         // Always clear input after sending
         setInput('');
       }

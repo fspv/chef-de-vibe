@@ -12,7 +12,7 @@ import {
   type ExtendedSDKMessage,
   type AnyTodoItem
 } from '../types/claude-messages';
-import type { PermissionUpdate } from '@anthropic-ai/claude-code/sdk';
+import type { PermissionUpdate, PermissionMode } from '@anthropic-ai/claude-code/sdk';
 import { CollapsibleContent } from './CollapsibleContent';
 import { TodoList } from './TodoList';
 import { EditDiff } from './DiffViewer';
@@ -328,6 +328,7 @@ interface MessageParserProps {
   messageSource: 'session' | 'websocket';
   onApprove?: (requestId: string, input: ToolInputSchemas, permissionUpdates?: PermissionUpdate[]) => void;
   onDeny?: (requestId: string) => void;
+  onModeChange?: (mode: PermissionMode) => void;
 }
 
 interface ParsedMessageResult {
@@ -422,7 +423,7 @@ function parseTodosFromToolUse(input: unknown): AnyTodoItem[] | null {
   });
 }
 
-export function MessageParser({ data, timestamp, showRawJson, onApprove, onDeny }: MessageParserProps) {
+export function MessageParser({ data, timestamp, showRawJson, onApprove, onDeny, onModeChange }: MessageParserProps) {
   const parsed = parseMessage(data);
 
   if (showRawJson) {
@@ -448,7 +449,7 @@ export function MessageParser({ data, timestamp, showRawJson, onApprove, onDeny 
 
   if (parsed.isClaudeMessage && parsed.message) {
     try {
-      return <FormattedClaudeMessage message={parsed.message} timestamp={timestamp} onApprove={onApprove} onDeny={onDeny} />;
+      return <FormattedClaudeMessage message={parsed.message} timestamp={timestamp} onApprove={onApprove} onDeny={onDeny} onModeChange={onModeChange} />;
     } catch (error) {
       console.error('Error rendering Claude message:', error, 'Message data:', parsed.message);
       return (
@@ -497,11 +498,12 @@ export function MessageParser({ data, timestamp, showRawJson, onApprove, onDeny 
   );
 }
 
-function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny }: { 
+function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeChange }: { 
   message: ExtendedSDKMessage; 
   timestamp?: number;
   onApprove?: (requestId: string, input: ToolInputSchemas, permissionUpdates?: PermissionUpdate[]) => void;
   onDeny?: (requestId: string) => void;
+  onModeChange?: (mode: PermissionMode) => void;
 }) {
   if (isSDKUserMessage(message)) {
     return (
@@ -792,7 +794,7 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny }: {
   }
 
   if (isSDKControlRequestMessage(message)) {
-    return <ControlRequestMessage message={message} timestamp={timestamp} onApprove={onApprove} onDeny={onDeny} />;
+    return <ControlRequestMessage message={message} timestamp={timestamp} onApprove={onApprove} onDeny={onDeny} onModeChange={onModeChange} />;
   }
 
   if (isSDKControlResponseMessage(message)) {

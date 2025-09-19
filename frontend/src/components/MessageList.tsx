@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useLayout
 import type { Message } from '../types/api';
 import type { WebSocketMessage } from '../hooks/useWebSocket';
 import { MessageParser } from './MessageParser';
-import type { PermissionUpdate } from '@anthropic-ai/claude-code/sdk';
+import type { PermissionUpdate, PermissionMode } from '@anthropic-ai/claude-code/sdk';
 import type { ToolInputSchemas } from '@anthropic-ai/claude-code/sdk-tools';
 
 interface MessageListProps {
@@ -11,13 +11,14 @@ interface MessageListProps {
   debugMode: boolean;
   onApprove?: (requestId: string, input: ToolInputSchemas, permissionUpdates?: PermissionUpdate[]) => void;
   onDeny?: (requestId: string) => void;
+  onModeChange?: (mode: PermissionMode) => void;
 }
 
 export interface MessageListRef {
   toggleAutoScroll: () => void;
 }
 
-export const MessageList = forwardRef<MessageListRef, MessageListProps>(({ sessionMessages, webSocketMessages, debugMode, onApprove, onDeny }, ref) => {
+export const MessageList = forwardRef<MessageListRef, MessageListProps>(({ sessionMessages, webSocketMessages, debugMode, onApprove, onDeny, onModeChange }, ref) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -162,6 +163,7 @@ export const MessageList = forwardRef<MessageListRef, MessageListProps>(({ sessi
               messageSource="session"
               onApprove={onApprove}
               onDeny={onDeny}
+              onModeChange={onModeChange}
             />
           ))}
           {webSocketMessages.map((wsMessage, index) => (
@@ -173,6 +175,7 @@ export const MessageList = forwardRef<MessageListRef, MessageListProps>(({ sessi
               messageSource="websocket"
               onApprove={onApprove}
               onDeny={onDeny}
+              onModeChange={onModeChange}
             />
           ))}
         </>

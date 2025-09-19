@@ -68,9 +68,9 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
 
   // Approval handlers
-  const handleApprove = useCallback((requestId: string, input: ToolInputSchemas, permissionUpdates: PermissionUpdate[] = []) => {
+  const handleApprove = useCallback(async (requestId: string, input: ToolInputSchemas, permissionUpdates: PermissionUpdate[] = []): Promise<void> => {
     // Send approval response through the approval websocket
-    approvalWs.sendApprovalResponse({
+    return approvalWs.sendApprovalResponse({
       id: requestId,
       response: {
         behavior: 'allow',
@@ -80,9 +80,9 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
     });
   }, [approvalWs]);
 
-  const handleDeny = useCallback((requestId: string) => {
+  const handleDeny = useCallback(async (requestId: string): Promise<void> => {
     // Send deny response through the approval websocket
-    approvalWs.sendApprovalResponse({
+    return approvalWs.sendApprovalResponse({
       id: requestId,
       response: {
         behavior: 'deny',
@@ -91,7 +91,7 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
     });
   }, [approvalWs]);
 
-  const handleSendMessage = useCallback(async (message: string) => {
+  const handleSendMessage = useCallback(async (message: string, allMessages?: string[]) => {
     // Determine session state
     if (!sessionId) {
       // New session case
@@ -102,11 +102,28 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
       const newSessionId = uuidv4();
       addLog(`Generating new session ID: ${newSessionId}`, 'info');
       
+      // Include control message in bootstrap messages
+      const bootstrapMessages: string[] = [];
+      
+      // Add control message for mode
+      const controlMessage = {
+        request_id: Math.random().toString(36).substring(2, 15),
+        type: "control_request",
+        request: {
+          subtype: "set_permission_mode",
+          mode: currentMode
+        }
+      };
+      bootstrapMessages.push(JSON.stringify(controlMessage));
+      
+      // Add the user message
+      bootstrapMessages.push(message);
+      
       const request: CreateSessionRequest = {
         session_id: newSessionId,
         working_dir: ensureAbsolutePath(selectedDirectory),
         resume: false,
-        bootstrap_messages: [message]
+        bootstrap_messages: bootstrapMessages
       };
       
       addLog(`Creating session with working directory: ${request.working_dir}`, 'info');
@@ -176,11 +193,28 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
       }
       
       try {
+        // Include all messages (control + user) in bootstrap for fork
+        const bootstrapMessages: string[] = allMessages || [];
+        
+        // If no allMessages provided (backward compatibility), create control message
+        if (!allMessages || allMessages.length === 0) {
+          const controlMessage = {
+            request_id: Math.random().toString(36).substring(2, 15),
+            type: "control_request",
+            request: {
+              subtype: "set_permission_mode",
+              mode: currentMode
+            }
+          };
+          bootstrapMessages.push(JSON.stringify(controlMessage));
+          bootstrapMessages.push(message);
+        }
+        
         const request: CreateSessionRequest = {
           session_id: sessionId,
           working_dir: sessionDetails.working_directory,
           resume: true,
-          bootstrap_messages: [message]
+          bootstrap_messages: bootstrapMessages
         };
         
         addLog(`Resuming with working directory: ${request.working_dir}`, 'info');
@@ -250,7 +284,30 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
       }
       sendMessage(message);
     }
-  }, [sessionId, sessionDetails, onCreateSession, navigate, sendMessage, addMessage, debugMode, selectedDirectory, addLog]);
+  }, [sessionId, sessionDetails, onCreateSession, navigate, sendMessage, addMessage, debugMode, selectedDirectory, addLog, currentMode]);
+
+  // Handle sending multiple messages (for control + user message)
+  const handleSendMessages = useCallback(async (messages: string[]) => {
+    // For active sessions, send all messages through WebSocket
+    const sessionIsActive = sessionDetails && !!sessionDetails.websocket_url;
+    if (sessionIsActive && isConnected) {
+      messages.forEach(msg => sendMessage(msg));
+    } else {
+      // For inactive/new sessions, use the first user message for bootstrap
+      const userMessage = messages.find(msg => {
+        try {
+          const parsed = JSON.parse(msg);
+          return parsed.type === 'user';
+        } catch {
+          return false;
+        }
+      });
+      
+      if (userMessage) {
+        await handleSendMessage(userMessage, messages);
+      }
+    }
+  }, [sessionDetails, isConnected, sendMessage, handleSendMessage]);
 
   // Clear pendingMessage after it's been set to input
   useEffect(() => {
@@ -446,10 +503,18 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
         <MessageList 
           ref={messageListRef}
           sessionMessages={sessionDetails.content} 
-          webSocketMessages={[...webSocketMessages, ...approvalWs.approvalMessages]}
+          webSocketMessages={[
+            ...webSocketMessages.filter(msg => {
+              const data = msg.data as { type?: string; request?: { subtype?: string } };
+              // Filter out control_request messages from main WebSocket as they come through approval WebSocket
+              return data?.type !== 'control_request' || data?.request?.subtype !== 'can_use_tool';
+            }), 
+            ...(sessionId && approvalWebSocketUrl ? approvalWs.approvalMessages : [])
+          ]}
           debugMode={debugMode}
           onApprove={handleApprove}
           onDeny={handleDeny}
+          onModeChange={handleModeChange}
         />
         {!isActive && (
           <div className="session-finished-notice">
@@ -469,11 +534,13 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
       <div className="chat-input">
         <MessageInput 
           onSendMessage={handleSendMessage}
+          onSendMessages={handleSendMessages}
           disabled={createLoading || (isActive && !isConnected)}
           debugMode={debugMode}
           isSessionActive={isActive}
           isLoading={isResumingSession}
           initialValue={pendingMessage || ''}
+          currentMode={currentMode}
         />
       </div>
       

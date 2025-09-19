@@ -8,7 +8,7 @@ export interface ApprovalWebSocketHookReturn {
   pendingRequests: ApprovalRequest[];
   approvalMessages: Array<{data: unknown; timestamp: number}>;
   error: string | null;
-  sendApprovalResponse: (response: ApprovalResponseMessage) => void;
+  sendApprovalResponse: (response: ApprovalResponseMessage) => Promise<void>;
   reconnect: () => void;
 }
 
@@ -145,23 +145,32 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
     setIsConnected(false);
   }, []);
 
-  const sendApprovalResponse = useCallback((response: ApprovalResponseMessage) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(response));
-      
-      // Remove from pending requests
-      setPendingRequests(prev => 
-        prev.filter(req => req.id !== response.id)
-      );
-      
-      // Remove from approval messages display
-      setApprovalMessages(prev =>
-        prev.filter(msg => {
-          const data = msg.data as { request_id?: string };
-          return data.request_id !== response.id;
-        })
-      );
-    }
+  const sendApprovalResponse = useCallback((response: ApprovalResponseMessage): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        try {
+          wsRef.current.send(JSON.stringify(response));
+          
+          // Remove from pending requests
+          setPendingRequests(prev => 
+            prev.filter(req => req.id !== response.id)
+          );
+          
+          // Remove from approval messages display
+          setApprovalMessages(prev =>
+            prev.filter(msg => {
+              const data = msg.data as { request_id?: string };
+              return data.request_id !== response.id;
+            })
+          );
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      } else {
+        reject(new Error('WebSocket is not connected'));
+      }
+    });
   }, []);
 
   const reconnect = useCallback(() => {

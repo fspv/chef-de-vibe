@@ -18,7 +18,7 @@ import {
   WebFetchToolDisplay,
   WebSearchToolDisplay
 } from './MessageParser';
-import type { PermissionUpdate } from '@anthropic-ai/claude-code/sdk';
+import type { PermissionUpdate, PermissionMode } from '@anthropic-ai/claude-code/sdk';
 import type { 
   FileEditInput, 
   ToolInputSchemas,
@@ -96,20 +96,33 @@ interface ControlRequestMessage {
 interface ControlRequestMessageProps {
   message: ControlRequestMessage;
   timestamp?: number;
-  onApprove?: (requestId: string, input: ToolInputSchemas, permissionUpdates: PermissionUpdate[]) => void;
-  onDeny?: (requestId: string) => void;
+  onApprove?: (requestId: string, input: ToolInputSchemas, permissionUpdates: PermissionUpdate[]) => Promise<void> | void;
+  onDeny?: (requestId: string) => Promise<void> | void;
+  onModeChange?: (mode: PermissionMode) => void;
 }
 
-export function ControlRequestMessage({ message, timestamp, onApprove, onDeny }: ControlRequestMessageProps) {
+export function ControlRequestMessage({ message, timestamp, onApprove, onDeny, onModeChange }: ControlRequestMessageProps) {
+  // Check for setMode permission and extract it
+  const setModePermission = message.request.permission_suggestions?.find(
+    (perm: any) => perm.type === 'setMode' && perm.destination === 'session'
+  );
+  
+  // Filter out setMode permission from regular permissions
+  const regularPermissions = message.request.permission_suggestions?.filter(
+    (perm: any) => !(perm.type === 'setMode' && perm.destination === 'session')
+  ) || [];
+  
   const [selectedPermissions, setSelectedPermissions] = useState<boolean[]>(
-    message.request.permission_suggestions ? 
-    new Array(message.request.permission_suggestions.length).fill(false) : []
+    regularPermissions.length > 0 ? new Array(regularPermissions.length).fill(false) : []
   );
   const [modifiedInput, setModifiedInput] = useState<string>(
     JSON.stringify(message.request.input, null, 2)
   );
   const [inputError, setInputError] = useState<string | null>(null);
   const [isProcessed, setIsProcessed] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingAction, setLoadingAction] = useState<'approve' | 'deny' | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const { tool_name, input } = message.request;
   
@@ -141,7 +154,7 @@ export function ControlRequestMessage({ message, timestamp, onApprove, onDeny }:
     });
   };
 
-  const handleApprove = () => {
+  const handleApprove = async (includeSetMode = false) => {
     if (onApprove) {
       try {
         let finalInput = input;
@@ -151,23 +164,57 @@ export function ControlRequestMessage({ message, timestamp, onApprove, onDeny }:
           finalInput = JSON.parse(modifiedInput);
         }
         
-        // Get selected permissions
-        const selectedPerms = message.request.permission_suggestions?.filter(
+        // Get selected permissions from regular permissions
+        const selectedPerms = regularPermissions.filter(
           (_, index: number) => selectedPermissions[index]
-        ) || [];
+        );
         
-        onApprove(message.request_id, finalInput, selectedPerms);
-        setIsProcessed(true);
+        // Add setMode permission if requested
+        const permissionsToSend = includeSetMode && setModePermission
+          ? [...selectedPerms, setModePermission]
+          : selectedPerms;
+        
+        setIsLoading(true);
+        setLoadingAction('approve');
+        setSendError(null);
+        
+        try {
+          await onApprove(message.request_id, finalInput, permissionsToSend);
+          setIsProcessed(true);
+          
+          // If setMode was included and we have a mode change handler, trigger it
+          if (includeSetMode && setModePermission && onModeChange) {
+            // Extract the mode from the permission (should be 'acceptEdits')
+            const mode = ((setModePermission as any).mode || 'acceptEdits') as PermissionMode;
+            onModeChange(mode);
+          }
+        } catch (error) {
+          setSendError(`Failed to send approval: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        } finally {
+          setIsLoading(false);
+          setLoadingAction(null);
+        }
       } catch {
         setInputError('Invalid JSON format');
       }
     }
   };
 
-  const handleDeny = () => {
+  const handleDeny = async () => {
     if (onDeny) {
-      onDeny(message.request_id);
-      setIsProcessed(true);
+      setIsLoading(true);
+      setLoadingAction('deny');
+      setSendError(null);
+      
+      try {
+        await onDeny(message.request_id);
+        setIsProcessed(true);
+      } catch (error) {
+        setSendError(`Failed to send denial: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        setIsLoading(false);
+        setLoadingAction(null);
+      }
     }
   };
 
@@ -228,11 +275,11 @@ export function ControlRequestMessage({ message, timestamp, onApprove, onDeny }:
           }
         })()}
         
-        {/* Permission suggestions with checkboxes */}
-        {message.request.permission_suggestions && message.request.permission_suggestions.length > 0 && (
+        {/* Permission suggestions with checkboxes (excluding setMode) */}
+        {regularPermissions.length > 0 && (
           <div className="permission-suggestions-inline">
             <h4>Permission Suggestions:</h4>
-            {message.request.permission_suggestions.map((suggestion: PermissionUpdate, index: number) => (
+            {regularPermissions.map((suggestion: PermissionUpdate, index: number) => (
               <div key={index} className="permission-checkbox-line">
                 <input
                   type="checkbox"
@@ -255,15 +302,45 @@ export function ControlRequestMessage({ message, timestamp, onApprove, onDeny }:
             <button 
               className="deny-button"
               onClick={handleDeny}
+              disabled={isLoading}
             >
-              Deny
+              {isLoading && loadingAction === 'deny' ? (
+                <span className="loading-spinner">⏳</span>
+              ) : (
+                'Deny'
+              )}
             </button>
             <button 
               className="approve-button"
-              onClick={handleApprove}
+              onClick={() => handleApprove(false)}
+              disabled={isLoading}
             >
-              Approve
+              {isLoading && loadingAction === 'approve' ? (
+                <span className="loading-spinner">⏳</span>
+              ) : (
+                'Approve'
+              )}
             </button>
+            {setModePermission && (
+              <button 
+                className="approve-session-button"
+                onClick={() => handleApprove(true)}
+                disabled={isLoading}
+                title="Approve and switch to Accept Edits mode for this session"
+              >
+                {isLoading && loadingAction === 'approve' ? (
+                  <span className="loading-spinner">⏳</span>
+                ) : (
+                  'Approve for Session'
+                )}
+              </button>
+            )}
+          </div>
+        )}
+        
+        {sendError && (
+          <div className="approval-error">
+            {sendError}
           </div>
         )}
         
