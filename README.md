@@ -2,6 +2,8 @@ Claude in your pocket. Got a brilliant coding idea while away from your laptop? 
 
 Chef De Vibe is flexible enough to run Claude instances however you prefer - directly on your system for simplicity, or in containers for security and isolation. Need to protect your server from potential AI mishaps? The included [claude-container](/claude-container) wrapper makes containerized execution effortless.
 
+https://github.com/user-attachments/assets/8b5b7509-54cc-4dab-905f-2806e684f740
+
 # Run
 
 ## From source
