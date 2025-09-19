@@ -31,7 +31,6 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
   const location = useLocation();
   const { sessionDetails, loading, error } = useSessionDetails(sessionId);
   const [debugMode, setDebugMode] = useState(false);
-  const [autoScrollPaused, setAutoScrollPaused] = useState(false);
   const [currentMode, setCurrentMode] = useState<PermissionMode>('default');
   const messageListRef = useRef<MessageListRef>(null);
   
@@ -171,13 +170,6 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
 
 
 
-  const handleAutoScrollStateChange = useCallback((_isAtBottom: boolean, autoScrollPaused: boolean) => {
-    setAutoScrollPaused(autoScrollPaused);
-  }, []);
-
-  const handleToggleAutoScroll = useCallback(() => {
-    messageListRef.current?.toggleAutoScroll();
-  }, []);
 
   const handleModeChange = useCallback((newMode: PermissionMode) => {
     setCurrentMode(newMode);
@@ -225,8 +217,6 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
               workingDirectory={ensureAbsolutePath(selectedDirectory)}
               debugMode={debugMode}
               onDebugModeChange={setDebugMode}
-              autoScrollPaused={autoScrollPaused}
-              onToggleAutoScroll={handleToggleAutoScroll}
               currentMode={currentMode}
               onModeChange={handleModeChange}
             />
@@ -302,8 +292,6 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
             workingDirectory={ensureAbsolutePath(sessionDetails.working_directory)}
             debugMode={debugMode}
             onDebugModeChange={setDebugMode}
-            autoScrollPaused={autoScrollPaused}
-            onToggleAutoScroll={handleToggleAutoScroll}
             currentMode={currentMode}
             onModeChange={handleModeChange}
           />
@@ -316,7 +304,6 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
           sessionMessages={sessionDetails.content} 
           webSocketMessages={[...webSocketMessages, ...approvalWs.approvalMessages]}
           debugMode={debugMode}
-          onAutoScrollStateChange={handleAutoScrollStateChange}
           onApprove={handleApprove}
           onDeny={handleDeny}
         />

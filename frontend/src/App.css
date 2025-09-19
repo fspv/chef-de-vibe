@@ -1449,6 +1449,8 @@ html, body {
   gap: 1rem;
   background-color: #fafafa;
   min-height: 0;
+  position: relative;
+  scroll-behavior: auto; /* Allow both smooth and instant scrolling */
 }
 
 .message-list-header {
@@ -1535,12 +1537,32 @@ html, body {
 }
 
 .scroll-to-bottom-btn {
+  position: fixed;
+  bottom: 80px;
+  right: 30px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
   background-color: #3498db;
   color: white;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  transition: all 0.2s ease;
 }
 
 .scroll-to-bottom-btn:hover {
   background-color: #2980b9;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.scroll-to-bottom-btn:active {
+  transform: translateY(0);
 }
 
 @media (max-width: 768px) {

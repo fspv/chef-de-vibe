@@ -12,8 +12,6 @@ interface SessionStatusIndicatorProps {
   workingDirectory: string;
   debugMode: boolean;
   onDebugModeChange: (value: boolean) => void;
-  autoScrollPaused: boolean;
-  onToggleAutoScroll: () => void;
   currentMode: PermissionMode;
   onModeChange: (mode: PermissionMode) => void;
 }
@@ -28,8 +26,6 @@ export function SessionStatusIndicator({
   workingDirectory,
   debugMode,
   onDebugModeChange,
-  autoScrollPaused,
-  onToggleAutoScroll,
   currentMode,
   onModeChange
 }: SessionStatusIndicatorProps) {
@@ -70,7 +66,7 @@ export function SessionStatusIndicator({
 
   return (
     <>
-      {/* Status indicator and auto-scroll control container */}
+      {/* Status indicator and mode switcher container */}
       <div className="status-controls-container">
         <button
           className={`session-status-indicator status-${statusColor}`}
@@ -78,14 +74,6 @@ export function SessionStatusIndicator({
           title={getStatusText()}
         >
           <span className="status-dot"></span>
-        </button>
-        
-        <button 
-          className={`auto-scroll-control-btn ${autoScrollPaused ? 'paused' : 'active'}`}
-          onClick={onToggleAutoScroll}
-          title={autoScrollPaused ? 'Resume auto-scroll' : 'Pause auto-scroll'}
-        >
-          {autoScrollPaused ? '⏵' : '⏸'}
         </button>
         
         <ModeSwitcher 
