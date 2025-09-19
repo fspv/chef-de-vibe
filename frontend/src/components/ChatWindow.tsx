@@ -64,6 +64,8 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
   const approvalWs = useApprovalWebSocket(approvalWebSocketUrl);
   const [pendingWebSocket, setPendingWebSocket] = useState<WebSocket | null>(null);
   const [pendingApprovalWebSocket, setPendingApprovalWebSocket] = useState<WebSocket | null>(null);
+  const [isResumingSession, setIsResumingSession] = useState(false);
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
 
   // Approval handlers
   const handleApprove = useCallback((requestId: string, input: ToolInputSchemas, permissionUpdates: PermissionUpdate[] = []) => {
@@ -145,7 +147,13 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
         setIsSessionLoading(false);
       }
     } else if (sessionDetails && !sessionDetails.websocket_url) {
-      // Inactive session - need to resume  
+      // Inactive session - need to resume
+      // Store the message in case we need to restore it on failure
+      const parsedMessage = JSON.parse(message);
+      const messageContent = parsedMessage.message?.content || '';
+      setPendingMessage(messageContent);
+      
+      setIsResumingSession(true);
       setIsSessionLoading(true);
       setLoadingOperation('resuming');
       setLoadingLogs([]);
@@ -155,52 +163,79 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
       if (!sessionDetails.working_directory) {
         addLog('Cannot resume session: working directory not available', 'error');
         setIsSessionLoading(false);
-        throw new Error('Cannot resume session: working directory not available');
+        setIsResumingSession(false);
+        setPendingMessage(null);
+        // Add error message to chat
+        addMessage({
+          type: 'system',
+          message: { content: 'Error: Cannot resume session - working directory not available' },
+          uuid: uuidv4(),
+          session_id: sessionId
+        });
+        return;
       }
       
-      const request: CreateSessionRequest = {
-        session_id: sessionId,
-        working_dir: sessionDetails.working_directory,
-        resume: true,
-        bootstrap_messages: [message]
-      };
-      
-      addLog(`Resuming with working directory: ${request.working_dir}`, 'info');
-      addLog('Sending resume session request to backend...', 'info');
+      try {
+        const request: CreateSessionRequest = {
+          session_id: sessionId,
+          working_dir: sessionDetails.working_directory,
+          resume: true,
+          bootstrap_messages: [message]
+        };
+        
+        addLog(`Resuming with working directory: ${request.working_dir}`, 'info');
+        addLog('Sending resume session request to backend...', 'info');
 
-      const response = await onCreateSession(request);
-      if (response) {
-        addLog(`Session resumed successfully with new ID: ${response.session_id}`, 'success');
-        
-        // Connect both WebSockets to new session before navigation
-        const wsUrl = api.buildWebSocketUrl(response.websocket_url);
-        const approvalWsUrl = api.buildWebSocketUrl(response.approval_websocket_url);
-        
-        addLog('Connecting to main WebSocket...', 'info');
-        const ws = new WebSocket(wsUrl);
-        
-        ws.onopen = () => addLog('Main WebSocket connected', 'success');
-        ws.onerror = () => addLog('Main WebSocket connection error', 'error');
-        
-        addLog('Connecting to approval WebSocket...', 'info');
-        const approvalWs = new WebSocket(approvalWsUrl);
-        
-        approvalWs.onopen = () => addLog('Approval WebSocket connected', 'success');
-        approvalWs.onerror = () => addLog('Approval WebSocket connection error', 'error');
-        
-        setPendingWebSocket(ws);
-        setPendingApprovalWebSocket(approvalWs);
-        
-        addLog('Waiting for session initialization...', 'info');
-        // Wait briefly to ensure backend has fully processed the session before navigation
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        addLog('Navigating to resumed session...', 'success');
-        // Navigate to new session (ID will be different from request)
-        navigate(`/session/${response.session_id}`);
-      } else {
+        const response = await onCreateSession(request);
+        if (response) {
+          addLog(`Session resumed successfully with new ID: ${response.session_id}`, 'success');
+          
+          // Connect both WebSockets to new session before navigation
+          const wsUrl = api.buildWebSocketUrl(response.websocket_url);
+          const approvalWsUrl = api.buildWebSocketUrl(response.approval_websocket_url);
+          
+          addLog('Connecting to main WebSocket...', 'info');
+          const ws = new WebSocket(wsUrl);
+          
+          ws.onopen = () => addLog('Main WebSocket connected', 'success');
+          ws.onerror = () => addLog('Main WebSocket connection error', 'error');
+          
+          addLog('Connecting to approval WebSocket...', 'info');
+          const approvalWs = new WebSocket(approvalWsUrl);
+          
+          approvalWs.onopen = () => addLog('Approval WebSocket connected', 'success');
+          approvalWs.onerror = () => addLog('Approval WebSocket connection error', 'error');
+          
+          setPendingWebSocket(ws);
+          setPendingApprovalWebSocket(approvalWs);
+          
+          addLog('Waiting for session initialization...', 'info');
+          // Wait briefly to ensure backend has fully processed the session before navigation
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          // Clear pending message on success before navigation
+          setPendingMessage(null);
+          setIsResumingSession(false);
+          
+          addLog('Navigating to resumed session...', 'success');
+          // Navigate to new session (ID will be different from request)
+          navigate(`/session/${response.session_id}`);
+        } else {
+          throw new Error('Failed to resume session - no response from backend');
+        }
+      } catch (error) {
         addLog('Failed to resume session', 'error');
         setIsSessionLoading(false);
+        setIsResumingSession(false);
+        // Don't clear pendingMessage here - we'll use it to restore the input
+        // Add error message to chat
+        const errorMessage = error instanceof Error ? error.message : 'Failed to resume session';
+        addMessage({
+          type: 'system',
+          message: { content: `Error: ${errorMessage}. Please check the backend logs for more details.` },
+          uuid: uuidv4(),
+          session_id: sessionId
+        });
       }
     } else {
       // Active session - send via WebSocket
@@ -216,6 +251,17 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
       sendMessage(message);
     }
   }, [sessionId, sessionDetails, onCreateSession, navigate, sendMessage, addMessage, debugMode, selectedDirectory, addLog]);
+
+  // Clear pendingMessage after it's been set to input
+  useEffect(() => {
+    if (pendingMessage && !isResumingSession) {
+      // Give the MessageInput component time to use the value
+      const timer = setTimeout(() => {
+        setPendingMessage(null);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [pendingMessage, isResumingSession]);
 
   // Clean up pending WebSockets on unmount
   useEffect(() => {
@@ -426,6 +472,8 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
           disabled={createLoading || (isActive && !isConnected)}
           debugMode={debugMode}
           isSessionActive={isActive}
+          isLoading={isResumingSession}
+          initialValue={pendingMessage || ''}
         />
       </div>
       

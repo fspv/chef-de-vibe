@@ -6,11 +6,20 @@ interface MessageInputProps {
   disabled: boolean;
   debugMode: boolean;
   isSessionActive?: boolean;
+  isLoading?: boolean;
+  initialValue?: string;
 }
 
-export function MessageInput({ onSendMessage, disabled, debugMode, isSessionActive = true }: MessageInputProps) {
-  const [input, setInput] = useState('');
+export function MessageInput({ onSendMessage, disabled, debugMode, isSessionActive = true, isLoading = false, initialValue = '' }: MessageInputProps) {
+  const [input, setInput] = useState(initialValue);
   const [isMobile, setIsMobile] = useState(false);
+  
+  // Update input when initialValue changes (for restoring on error)
+  useEffect(() => {
+    if (initialValue && !input) {
+      setInput(initialValue);
+    }
+  }, [initialValue, input]);
   
   useEffect(() => {
     const checkMobile = () => {
@@ -28,7 +37,7 @@ export function MessageInput({ onSendMessage, disabled, debugMode, isSessionActi
   };
 
   const submitMessage = () => {
-    if (input.trim() && !disabled) {
+    if (input.trim() && !disabled && !isLoading) {
       if (debugMode) {
         // Raw JSON mode
         try {
@@ -51,6 +60,7 @@ export function MessageInput({ onSendMessage, disabled, debugMode, isSessionActi
           session_id: '' // This will be filled by the backend
         };
         onSendMessage(JSON.stringify(message));
+        // Always clear input after sending
         setInput('');
       }
     }
@@ -73,21 +83,30 @@ export function MessageInput({ onSendMessage, disabled, debugMode, isSessionActi
           placeholder={
             disabled 
               ? "Connecting..." 
-              : debugMode
-                ? "Enter raw JSON message (e.g., {\"role\": \"user\", \"content\": \"Hello\"})"
-                : !isSessionActive
-                  ? isMobile
-                    ? "Type to fork this session..."
-                    : "Type to fork this session... (Ctrl/Cmd+Enter to send)"
-                  : isMobile
-                    ? "Type your message..."
-                    : "Type your message... (Ctrl/Cmd+Enter to send)"
+              : isLoading
+                ? "Resuming session..."
+                : debugMode
+                  ? "Enter raw JSON message (e.g., {\"role\": \"user\", \"content\": \"Hello\"})"
+                  : !isSessionActive
+                    ? isMobile
+                      ? "Type to fork this session..."
+                      : "Type to fork this session... (Ctrl/Cmd+Enter to send)"
+                    : isMobile
+                      ? "Type your message..."
+                      : "Type your message... (Ctrl/Cmd+Enter to send)"
           }
-          disabled={disabled}
+          disabled={disabled || isLoading}
           rows={3}
         />
-        <button type="submit" className="send-button" disabled={disabled || !input.trim()}>
-          {!isSessionActive ? (
+        <button type="submit" className="send-button" disabled={disabled || !input.trim() || isLoading}>
+          {isLoading ? (
+            // Loading spinner
+            <svg width="34" height="34" viewBox="0 0 24 24" className="spinner">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" fill="none" strokeDasharray="31.4" strokeDashoffset="0">
+                <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/>
+              </circle>
+            </svg>
+          ) : !isSessionActive ? (
             // Simple git fork icon for inactive sessions
             <svg width="34" height="34" viewBox="0 0 16 16" fill="currentColor">
               <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015.5 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z"/>
