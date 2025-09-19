@@ -108,7 +108,7 @@ export const MessageList = forwardRef<MessageListRef, MessageListProps>(({ sessi
     
     if (!hasInitiallyScrolled && totalMessages > 0 && messageListRef.current) {
       // Force a layout recalculation
-      messageListRef.current.offsetHeight;
+      void messageListRef.current.offsetHeight;
       
       // Try immediate scroll
       scrollToBottom(false);

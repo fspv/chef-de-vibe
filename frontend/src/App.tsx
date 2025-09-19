@@ -455,10 +455,14 @@ function SessionView() {
     // For different session, close sidebar immediately
     if (!sidebarCollapsed) {
       // Cancel any pending touch state updates
-      const pendingTimeouts = (window as any).__touchTimeouts;
+      interface ExtendedWindow extends Window {
+        __touchTimeouts?: number[];
+      }
+      const extWindow = window as ExtendedWindow;
+      const pendingTimeouts = extWindow.__touchTimeouts;
       if (pendingTimeouts) {
         pendingTimeouts.forEach((timeout: number) => clearTimeout(timeout));
-        (window as any).__touchTimeouts = [];
+        extWindow.__touchTimeouts = [];
       }
       
       // Close sidebar instantly without animation for smooth transition
