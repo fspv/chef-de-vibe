@@ -713,7 +713,6 @@ export function TestChatPage() {
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [debugMode, setDebugMode] = useState(false);
-  const [autoScrollPaused, setAutoScrollPaused] = useState(false);
   const [currentMode, setCurrentMode] = useState<PermissionMode>('default');
   const messageListRef = useRef<MessageListRef>(null);
   const [directoryPopup, setDirectoryPopup] = useState<string | null>(null);
@@ -840,8 +839,6 @@ export function TestChatPage() {
                 workingDirectory="/home/user/test-project"
                 debugMode={debugMode}
                 onDebugModeChange={setDebugMode}
-                autoScrollPaused={autoScrollPaused}
-                onToggleAutoScroll={() => setAutoScrollPaused(!autoScrollPaused)}
                 currentMode={currentMode}
                 onModeChange={setCurrentMode}
               />

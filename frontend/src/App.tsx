@@ -424,10 +424,30 @@ function SessionView() {
   }, [sidebarCollapsed]);
 
   const handleSessionSelect = (newSessionId: string) => {
-    // If clicking on the same session, just close the sidebar
+    // If clicking on the same session, close sidebar and ensure chat is visible
     if (sessionId === newSessionId) {
       if (!sidebarCollapsed) {
+        // Close sidebar with instant transition for smooth UX
+        const mainElement = document.querySelector('.app-main') as HTMLElement;
+        const overlay = mainElement?.querySelector('.sidebar-overlay') as HTMLElement;
+        
+        if (mainElement) {
+          mainElement.style.transition = 'none';
+          mainElement.style.transform = 'translateX(0)';
+        }
+        
+        if (overlay) {
+          overlay.style.display = 'none';
+        }
+        
         setSidebarCollapsed(true);
+        
+        // Re-enable transitions after a frame
+        requestAnimationFrame(() => {
+          if (mainElement) {
+            mainElement.style.transition = '';
+          }
+        });
       }
       return; // Don't navigate, we're already on this session
     }
