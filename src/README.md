@@ -83,10 +83,12 @@ Persistent state on disk:
 ```
 
 **Note**: The `summary`, `earliest_message_date`, and `latest_message_date` fields are optional and will only be present if:
-- `summary`: A summary entry with `"type":"summary"` exists in the session's journal file
+- `summary`: 
+  - For inactive sessions: A summary entry with `"type":"summary"` exists in the session's journal file
+  - For active sessions: Falls back to the first user message content from the session (since summaries are only created after sessions end)
 - `earliest_message_date`/`latest_message_date`: Message entries with timestamps exist in the session's journal file
 
-Sessions without summaries or timestamps will omit these fields from the response.
+Sessions without summaries or timestamps will omit these fields from the response. Active sessions will typically show the first user message instead of a summary.
 
 **Error Response:**
 ```json
@@ -311,16 +313,118 @@ Session files are stored in project-specific directories under `CLAUDE_PROJECTS_
 - Each line is a JSON object with session metadata and messages
 
 ### 5.2 Session Discovery Algorithm
-For listing all sessions:
-1. Recursively scan all subdirectories under `CLAUDE_PROJECTS_DIR`
-2. For each `.jsonl` file found:
-   - Extract session ID from filename
-   - Parse file line by line until both `sessionId` and `cwd` fields are found
-   - Validate that filename session ID matches the `sessionId` field in content
-   - If mismatch → skip and log error
-   - Add to session list with working directory
-3. Check in-memory session map to mark active sessions
-4. Return combined list
+
+#### Overview
+Claude stores conversation data in JSONL files within project directories. Finding session IDs and their associated summaries requires a two-step process: first locating summary entries, then tracing back to the original messages to extract session IDs.
+
+#### File Structure
+Claude project files are stored in:
+```
+~/.claude/projects/<project-name>/*.jsonl
+```
+
+Each `.jsonl` file contains line-separated JSON objects representing different types of data:
+- **Summary files**: Contain conversation summaries with references to message UUIDs
+- **Session files**: Contain the actual messages and session metadata
+
+#### The Two-Step Process
+
+##### Step 1: Find Summary Entries
+Scan all `.jsonl` files for entries with `type: "summary"`. These entries contain:
+- A human-readable summary of the conversation
+- A reference UUID (`leafUuid`) pointing to a specific message
+
+**Example summary entry:**
+```json
+{
+  "type": "summary",
+  "summary": "Minimalist System Message Design for Chat Interface",
+  "leafUuid": "fc82083e-2ab4-4cec-ad42-ea1582c4de38"
+}
+```
+Location: `~/.claude/projects/my-project/66b8558e-a546-4e4b-b5e7-9b5820ea7869.jsonl`
+
+##### Step 2: Match UUID to Find Session ID
+Using the `leafUuid` from the summary, search all `.jsonl` files for an entry where `uuid` matches this value. This message entry contains the `sessionId`.
+
+**Example message entry:**
+```json
+{
+  "uuid": "fc82083e-2ab4-4cec-ad42-ea1582c4de38",
+  "sessionId": "95157a33-cc50-4735-be3b-6962140b0d16",
+  "type": "assistant",
+  "message": {
+    "role": "assistant",
+    "content": [{"type": "text", "text": "Perfect! The changes have been successfully implemented..."}]
+  },
+  "timestamp": "2025-09-19T15:37:20.199Z"
+}
+```
+Location: `~/.claude/projects/my-project/95157a33-cc50-4735-be3b-6962140b0d16.jsonl`
+
+#### Complete Extraction Algorithm
+
+1. **Initialize**: Create an empty map to store results
+   ```
+   results = {}
+   ```
+
+2. **Scan for summaries**: 
+   - Open each `.jsonl` file in the project directory
+   - Parse each line as JSON
+   - If `type == "summary"`, store:
+     - Summary text
+     - leafUuid reference
+     - Source filename
+
+3. **Match UUIDs to sessions**:
+   - For each summary found, search all `.jsonl` files again
+   - Look for entries where `uuid == leafUuid`
+   - Extract the `sessionId` from the matching entry
+
+4. **Handle active sessions without summaries**:
+   - For sessions found without a summary (typically active sessions)
+   - Find the first message with `type == "user"` for that sessionId
+   - Use the user message content as a fallback summary
+
+5. **Build final mapping**:
+   ```
+   sessionId → summary text (or first user message for active sessions)
+   ```
+
+#### Example Output
+After processing, you'll have a mapping like:
+```
+Session ID: 95157a33-cc50-4735-be3b-6962140b0d16
+Summary: "Minimalist System Message Design for Chat Interface"
+```
+
+#### Important Notes
+
+- **File naming**: Files are named with UUIDs but not necessarily the session ID (e.g., `95157a33-cc50-4735-be3b-6962140b0d16.jsonl` could contain any session)
+- **Active sessions**: Active sessions won't have summaries since summaries are only created after a session ends. For active sessions, the backend extracts the first user message as a fallback "summary"
+- **Multiple summaries in a file**: A single file may contain summaries pointing to different sessions (the relationship between files and sessions is not 1:1)
+- **Orphaned summaries**: Some summaries might reference messages that no longer exist in the project files
+
+#### Minimal Working Example
+
+Given these two files:
+
+**File 1**: `summary-file.jsonl`
+```json
+{"type":"summary","summary":"Discussion about API design","leafUuid":"abc-123"}
+```
+
+**File 2**: `session-file.jsonl`
+```json
+{"uuid":"abc-123","sessionId":"session-789","type":"assistant","message":{...}}
+```
+
+The extraction would yield:
+- Session ID: `session-789`
+- Summary: `"Discussion about API design"`
+
+This two-step process ensures you can build a complete index of all Claude sessions with their human-readable summaries, making it easy to find and reference past conversations.
 
 ### 5.3 Finding Specific Session
 For GET /sessions/{session_id}:
@@ -348,10 +452,8 @@ For GET /sessions/{session_id}:
 
 1. **Client sends** GET request to `/api/v1/sessions`
 
-2. **Server scans** disk for sessions:
-   - Iterate through all subdirectories in `CLAUDE_PROJECTS_DIR`
-   - Find all `.jsonl` files
-   - Parse each file to extract session ID and working directory
+2. **Server scans** disk for sessions using two pass session resolution
+   described in the "5.2 Session Discovery Algorithm" section
 
 3. **Server checks** active sessions:
    - Compare found sessions with in-memory session map
@@ -398,7 +500,7 @@ For GET /sessions/{session_id}:
 4. **Background worker** executes:
    - Spawn Claude process with specified working directory and `--session-id <session id>` and `--output-format stream-json --input-format stream-json --verbose --print` flags
    - Send bootstrap_messages raw JSON to Claude stdin
-   - Wait for Claude's first response to confirm session is ready
+   - Wait for Claude's response to confirm session is ready
    - Update session status to `ready`
    - Store process reference in session map
 
@@ -433,7 +535,8 @@ For GET /sessions/{session_id}:
 
 4. **Worker sends bootstrap_messages** raw JSON to Claude stdin
 
-5. **Worker waits for Claude's first response** to get new session ID
+5. **Worker waits for Claude's response** containing the new session ID
+   - The session ID may come in the first message or a subsequent message (e.g., after a set mode control request)
 
 6. **Worker updates** session tracking:
    - Creates new session entry for new session ID

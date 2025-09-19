@@ -22,6 +22,7 @@ thiserror = "1.0"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 dashmap = "6.0"
 walkdir = "2.0"
+rayon = "1.10"
 futures = "0.3"
 tokio-stream = "0.1"
 async-trait = "0.1"

@@ -319,55 +319,131 @@ impl ClaudeProcess {
             }
         }
 
-        // Read the first line to get the actual session ID if resuming
+        // Read messages until we find the actual session ID if resuming
         let mut reader = BufReader::new(stdout);
         let actual_session_id = if resume {
-            debug!(session_id = %session_id, "Resume mode: reading first line to get actual session ID");
+            debug!(session_id = %session_id, "Resume mode: reading messages to get actual session ID");
 
             // Add timeout to prevent hanging indefinitely
             let timeout_duration = std::time::Duration::from_secs(30);
             debug!(
                 session_id = %session_id,
                 timeout_seconds = timeout_duration.as_secs(),
-                "Starting timed read of first line from Claude process"
+                "Starting timed read of messages from Claude process"
             );
 
-            let mut first_line = String::new();
-            let read_result =
-                tokio::time::timeout(timeout_duration, reader.read_line(&mut first_line)).await;
+            let mut new_session_id: Option<String> = None;
+            let mut messages_read = 0;
+            let max_messages = 10; // Reasonable limit to prevent infinite loop
+
+            // Read messages until we find one with session_id
+            let read_result = tokio::time::timeout(timeout_duration, async {
+                loop {
+                    let mut line = String::new();
+                    match reader.read_line(&mut line).await {
+                        Ok(bytes_read) => {
+                            if bytes_read == 0 {
+                                error!(
+                                    session_id = %session_id,
+                                    messages_read = messages_read,
+                                    "Claude process closed stdout without sending session ID"
+                                );
+                                return Err(OrchestratorError::ProcessCommunicationError(
+                                    "Claude process closed stdout without sending session ID".into(),
+                                ));
+                            }
+
+                            messages_read += 1;
+                            debug!(
+                                session_id = %session_id,
+                                message_number = messages_read,
+                                line = %line.trim(),
+                                "Read message from Claude process"
+                            );
+
+                            // Try to parse the message
+                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&line) {
+                                // Check if this message contains session_id
+                                if let Some(sid) = parsed.get("session_id").and_then(|v| v.as_str()) {
+                                    info!(
+                                        session_id = %session_id,
+                                        found_session_id = %sid,
+                                        message_number = messages_read,
+                                        "Found session_id in message"
+                                    );
+                                    new_session_id = Some(sid.to_string());
+                                    break;
+                                }
+                                debug!(
+                                    session_id = %session_id,
+                                    message_number = messages_read,
+                                    message_type = parsed.get("type").and_then(|v| v.as_str()).unwrap_or("unknown"),
+                                    "Message does not contain session_id, continuing to read"
+                                );
+                            } else {
+                                warn!(
+                                    session_id = %session_id,
+                                    message_number = messages_read,
+                                    line = %line.trim(),
+                                    "Failed to parse message as JSON, skipping"
+                                );
+                            }
+
+                            if messages_read >= max_messages {
+                                error!(
+                                    session_id = %session_id,
+                                    messages_read = messages_read,
+                                    max_messages = max_messages,
+                                    "Reached maximum message limit without finding session_id"
+                                );
+                                return Err(OrchestratorError::ProcessCommunicationError(format!(
+                                    "No session_id found after reading {max_messages} messages"
+                                )));
+                            }
+                        }
+                        Err(e) => {
+                            error!(
+                                session_id = %session_id,
+                                error = %e,
+                                messages_read = messages_read,
+                                "IO error while reading from Claude process"
+                            );
+                            return Err(OrchestratorError::ProcessCommunicationError(e.to_string()));
+                        }
+                    }
+                }
+                Ok(())
+            }).await;
 
             match read_result {
-                Ok(Ok(bytes_read)) => {
-                    debug!(
-                        session_id = %session_id,
-                        bytes_read = bytes_read,
-                        first_line = %first_line.trim(),
-                        "Successfully read first line from Claude process"
-                    );
-
-                    if bytes_read == 0 {
+                Ok(Ok(())) => {
+                    // Successfully found session_id
+                    if let Some(id) = new_session_id {
+                        info!(
+                            requested_session_id = %session_id,
+                            actual_session_id = %id,
+                            messages_read = messages_read,
+                            "Resume mode: received actual session ID from Claude"
+                        );
+                        id
+                    } else {
                         error!(
                             session_id = %session_id,
-                            "Claude process closed stdout without sending initial response"
+                            messages_read = messages_read,
+                            "Logic error: read_result succeeded but no session_id was set"
                         );
                         return Err(OrchestratorError::ProcessCommunicationError(
-                            "Claude process closed stdout without sending initial response".into(),
+                            "Internal error: session_id not found despite successful read".into(),
                         ));
                     }
                 }
-                Ok(Err(e)) => {
-                    error!(
-                        session_id = %session_id,
-                        error = %e,
-                        "IO error while reading first line from Claude process"
-                    );
-                    return Err(OrchestratorError::ProcessCommunicationError(e.to_string()));
-                }
+                Ok(Err(e)) => return Err(e),
                 Err(_) => {
                     error!(
                         session_id = %session_id,
                         timeout_seconds = timeout_duration.as_secs(),
-                        "Timeout while waiting for first line from Claude process"
+                        messages_read = messages_read,
+                        "Timeout while waiting for session_id from Claude process"
                     );
 
                     // Check if the process is still running
@@ -390,7 +466,7 @@ impl ClaudeProcess {
                             error!(
                                 session_id = %session_id,
                                 exit_status = ?exit_status,
-                                "Claude process exited before sending initial response"
+                                "Claude process exited before sending session_id"
                             );
                         }
                         Err(e) => {
@@ -403,56 +479,11 @@ impl ClaudeProcess {
                     }
 
                     return Err(OrchestratorError::ProcessCommunicationError(format!(
-                        "Timeout after {} seconds waiting for Claude process response",
+                        "Timeout after {} seconds waiting for session_id from Claude",
                         timeout_duration.as_secs()
                     )));
                 }
             }
-
-            // Parse the first line to extract the new session ID
-            // Expected format: {"sessionId": "new-session-id", ...}
-            let parsed: serde_json::Value = match serde_json::from_str(&first_line) {
-                Ok(value) => {
-                    debug!(
-                        session_id = %session_id,
-                        "Successfully parsed first line JSON from Claude"
-                    );
-                    value
-                }
-                Err(e) => {
-                    error!(
-                        session_id = %session_id,
-                        first_line = %first_line.trim(),
-                        error = %e,
-                        "Failed to parse first line JSON from Claude"
-                    );
-                    return Err(OrchestratorError::ProcessCommunicationError(format!(
-                        "Failed to parse first line from Claude: {e}"
-                    )));
-                }
-            };
-
-            let new_session_id = parsed["session_id"]
-                .as_str()
-                .ok_or_else(|| {
-                    error!(
-                        session_id = %session_id,
-                        first_line = %first_line.trim(),
-                        "No session_id field found in first line from Claude"
-                    );
-                    OrchestratorError::ProcessCommunicationError(
-                        "No session_id in first line from Claude".into(),
-                    )
-                })?
-                .to_string();
-
-            info!(
-                requested_session_id = %session_id,
-                actual_session_id = %new_session_id,
-                "Resume mode: received actual session ID from Claude"
-            );
-
-            new_session_id
         } else {
             debug!(session_id = %session_id, "New session mode: using provided session ID");
             session_id.to_string()

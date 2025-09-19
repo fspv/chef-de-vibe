@@ -271,29 +271,32 @@ async fn test_session_id_mismatch_in_file() {
     let server = TestServer::new().await;
     let client = Client::new();
 
-    // Create a session file where the filename doesn't match the sessionId in content
+    // Create a session file without a summary
     let project_dir = server.mock.projects_dir.join("mismatch");
     fs::create_dir_all(&project_dir).unwrap();
 
-    let session_file = project_dir.join("file-session-id.jsonl");
+    let session_file = project_dir.join("some-random-uuid.jsonl");
     let content_with_different_id = r#"{"sessionId": "different-session-id", "cwd": "/home/user/project", "type": "start"}
 {"type": "user", "message": {"role": "user", "content": "Hello"}}"#;
 
     fs::write(session_file, content_with_different_id).unwrap();
 
-    // List sessions should handle the mismatch gracefully by ignoring the file
+    // List sessions should NOT show sessions without summaries
     let response = client
         .get(format!("{}/api/v1/sessions", server.base_url))
         .send()
         .await
         .unwrap();
 
-    // Should return 200 and succeed, ignoring the mismatched file
     assert_eq!(response.status(), 200);
 
     let body: ListSessionsResponse = response.json().await.unwrap();
-    // The mismatched file should be ignored, so no sessions should be returned
-    assert!(body.sessions.is_empty());
+    // Session without summary should not be listed
+    assert_eq!(
+        body.sessions.len(),
+        0,
+        "Sessions without summaries should not be listed"
+    );
 }
 
 #[tokio::test]

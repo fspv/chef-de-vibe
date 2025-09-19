@@ -521,21 +521,40 @@ async fn test_list_sessions_working_directories() {
         .await
         .unwrap();
 
-    // Create inactive sessions on disk
-    create_test_session_file(
-        &server.mock.projects_dir,
-        "list_project1",
-        "inactive-list-1",
-        "/home/user/list1",
-    );
-    create_test_session_file(
-        &server.mock.projects_dir,
-        "list_project2",
-        "inactive-list-2",
-        "/home/user/list2",
-    );
+    // Create inactive sessions with summaries in separate files
+    // Create first session with summary
+    let project1_path = server.mock.projects_dir.join("list_project1");
+    fs::create_dir_all(&project1_path).unwrap();
 
-    debug!("Created active and inactive sessions for list test");
+    // Summary file pointing to a message in the session
+    let summary1_file = project1_path.join("summary1.jsonl");
+    let summary1_content =
+        r#"{"type":"summary","summary":"Session 1 Summary","leafUuid":"msg-uuid-1"}"#;
+    fs::write(summary1_file, summary1_content).unwrap();
+
+    // Session file with the referenced message
+    let session1_file = project1_path.join("inactive-list-1.jsonl");
+    let session1_content = r#"{"sessionId": "inactive-list-1", "cwd": "/home/user/list1", "type": "start"}
+{"sessionId": "inactive-list-1", "type": "user", "message": {"role": "user", "content": "First message"}}
+{"sessionId": "inactive-list-1", "uuid": "msg-uuid-1", "type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Response"}]}}"#.to_string();
+    fs::write(session1_file, session1_content).unwrap();
+
+    // Create second session with summary
+    let project2_path = server.mock.projects_dir.join("list_project2");
+    fs::create_dir_all(&project2_path).unwrap();
+
+    let summary2_file = project2_path.join("summary2.jsonl");
+    let summary2_content =
+        r#"{"type":"summary","summary":"Session 2 Summary","leafUuid":"msg-uuid-2"}"#;
+    fs::write(summary2_file, summary2_content).unwrap();
+
+    let session2_file = project2_path.join("inactive-list-2.jsonl");
+    let session2_content = r#"{"sessionId": "inactive-list-2", "cwd": "/home/user/list2", "type": "start"}
+{"sessionId": "inactive-list-2", "type": "user", "message": {"role": "user", "content": "Second message"}}
+{"sessionId": "inactive-list-2", "uuid": "msg-uuid-2", "type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Response"}]}}"#.to_string();
+    fs::write(session2_file, session2_content).unwrap();
+
+    debug!("Created active session and inactive sessions with summaries for list test");
 
     // List all sessions
     let list_response = client
@@ -547,6 +566,7 @@ async fn test_list_sessions_working_directories() {
     assert_eq!(list_response.status(), 200);
 
     let list_body: ListSessionsResponse = list_response.json().await.unwrap();
+    // Now all 3 sessions should be listed: 1 active + 2 inactive with summaries
     assert_eq!(list_body.sessions.len(), 3);
 
     // Verify each session has the correct working directory

@@ -160,7 +160,7 @@ async fn test_list_empty_sessions() {
 async fn test_list_sessions_with_disk_sessions() {
     let server = TestServer::new().await;
 
-    // Create test session files on disk
+    // Create test session files on disk WITHOUT summaries
     create_test_session_file(
         &server.mock.projects_dir,
         "project1",
@@ -185,16 +185,88 @@ async fn test_list_sessions_with_disk_sessions() {
     assert_eq!(response.status(), 200);
 
     let body: ListSessionsResponse = response.json().await.unwrap();
-    assert_eq!(body.sessions.len(), 2);
-
-    let session_ids: Vec<String> = body.sessions.iter().map(|s| s.session_id.clone()).collect();
-    assert!(session_ids.contains(&"session-123".to_string()));
-    assert!(session_ids.contains(&"session-456".to_string()));
+    // Sessions without summaries should NOT be listed
+    assert_eq!(
+        body.sessions.len(),
+        0,
+        "Sessions without summaries should not be listed"
+    );
 
     // All sessions should be inactive since no processes are running
     for session in &body.sessions {
         assert!(!session.active);
     }
+}
+
+#[tokio::test]
+#[serial]
+async fn test_list_sessions_with_summaries() {
+    let server = TestServer::new().await;
+
+    // Create a more complex scenario with summaries
+    let project_path = server.mock.projects_dir.join("project-with-summary");
+    fs::create_dir_all(&project_path).unwrap();
+
+    // File 1: Contains a summary pointing to a message in another file
+    let summary_file = project_path.join("summary-uuid.jsonl");
+    let summary_content =
+        r#"{"type":"summary","summary":"API Design Discussion","leafUuid":"msg-uuid-123"}"#;
+    fs::write(summary_file, summary_content).unwrap();
+
+    // File 2: Contains the actual session with messages
+    let session_file = project_path.join("session-789.jsonl");
+    let session_content = r#"{"sessionId": "session-789", "cwd": "/home/user/api-project", "type": "start"}
+{"sessionId": "session-789", "type": "user", "message": {"role": "user", "content": "Let's discuss API design"}, "timestamp": "2025-09-19T10:00:00Z"}
+{"sessionId": "session-789", "uuid": "msg-uuid-123", "type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Great! Let's talk about RESTful principles..."}]}, "timestamp": "2025-09-19T10:01:00Z"}"#;
+    fs::write(session_file, session_content).unwrap();
+
+    // Also add a session without summary (simulating one that hasn't ended yet)
+    let active_session_file = project_path.join("no-summary.jsonl");
+    let active_content = r#"{"sessionId": "active-session", "cwd": "/home/user/current", "type": "start"}
+{"sessionId": "active-session", "type": "user", "message": {"role": "user", "content": "First user message here"}, "timestamp": "2025-09-19T11:00:00Z"}"#;
+    fs::write(active_session_file, active_content).unwrap();
+
+    let client = Client::new();
+    let response = client
+        .get(format!("{}/api/v1/sessions", server.base_url))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 200);
+
+    let body: ListSessionsResponse = response.json().await.unwrap();
+
+    // Find the session with summary
+    let session_with_summary = body
+        .sessions
+        .iter()
+        .find(|s| s.session_id == "session-789")
+        .expect("Session 789 should be found");
+
+    assert_eq!(
+        session_with_summary.summary,
+        Some("API Design Discussion".to_string())
+    );
+    assert_eq!(
+        session_with_summary.earliest_message_date,
+        Some("2025-09-19T10:00:00Z".to_string())
+    );
+    assert_eq!(
+        session_with_summary.latest_message_date,
+        Some("2025-09-19T10:01:00Z".to_string())
+    );
+
+    // The session without summary should NOT be found (it's not active and has no summary)
+    let session_without_summary = body
+        .sessions
+        .iter()
+        .find(|s| s.session_id == "active-session");
+
+    assert!(
+        session_without_summary.is_none(),
+        "Session without summary should not be listed when not active"
+    );
 }
 
 #[tokio::test]
