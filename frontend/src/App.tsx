@@ -12,21 +12,39 @@ import type { PermissionMode } from '@anthropic-ai/claude-code/sdk';
 import './App.css';
 
 const SIDEBAR_COLLAPSED_KEY = 'chef-de-vibe-sidebar-collapsed';
+const SIDEBAR_WIDTH_KEY = 'chef-de-vibe-sidebar-width';
 
 function SessionView() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
   const { createSession, loading: createLoading } = useCreateSession();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(true); // Hidden by default
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true); // Hidden by default on mobile
+  const [sidebarWidth, setSidebarWidth] = useState(320); // Default width for desktop sidebar
+  const [isResizing, setIsResizing] = useState(false);
   const [showNewChatDialog, setShowNewChatDialog] = useState(false);
   const [directoryPopup, setDirectoryPopup] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
 
-  // Load sidebar collapsed state from localStorage on mount
+  // Load sidebar state from localStorage on mount
   useEffect(() => {
-    const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
-    if (stored !== null) {
-      setSidebarCollapsed(JSON.parse(stored));
+    // Check if desktop
+    const isDesktop = window.innerWidth > 768;
+    
+    if (isDesktop) {
+      // Desktop - always expanded
+      setSidebarCollapsed(false);
+      
+      // Load saved width
+      const savedWidth = localStorage.getItem(SIDEBAR_WIDTH_KEY);
+      if (savedWidth) {
+        setSidebarWidth(parseInt(savedWidth, 10));
+      }
+    } else {
+      // Mobile - load collapsed state
+      const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+      if (stored !== null) {
+        setSidebarCollapsed(JSON.parse(stored));
+      }
     }
   }, []);
 
@@ -35,6 +53,11 @@ function SessionView() {
   useEffect(() => {
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, JSON.stringify(sidebarCollapsed));
   }, [sidebarCollapsed]);
+  
+  // Save sidebar width to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth));
+  }, [sidebarWidth]);
 
   // Lock body scrolling when sidebar is open
   useEffect(() => {
@@ -425,9 +448,12 @@ function SessionView() {
   }, [sidebarCollapsed]);
 
   const handleSessionSelect = (newSessionId: string) => {
-    // If clicking on the same session, close sidebar and ensure chat is visible
+    const isMobile = window.innerWidth <= 768;
+    
+    // If clicking on the same session
     if (sessionId === newSessionId) {
-      if (!sidebarCollapsed) {
+      // Only close sidebar on mobile
+      if (isMobile && !sidebarCollapsed) {
         // Close sidebar with instant transition for smooth UX
         const mainElement = document.querySelector('.app-main') as HTMLElement;
         const overlay = mainElement?.querySelector('.sidebar-overlay') as HTMLElement;
@@ -453,8 +479,8 @@ function SessionView() {
       return; // Don't navigate, we're already on this session
     }
     
-    // For different session, close sidebar immediately
-    if (!sidebarCollapsed) {
+    // For different session, close sidebar only on mobile
+    if (isMobile && !sidebarCollapsed) {
       // Cancel any pending touch state updates
       interface ExtendedWindow extends Window {
         __touchTimeouts?: number[];
@@ -535,8 +561,10 @@ function SessionView() {
       // Only close dialog and navigate on success
       setShowNewChatDialog(false);
       
-      // Close sidebar immediately for smooth transition
-      if (!sidebarCollapsed) {
+      const isMobile = window.innerWidth <= 768;
+      
+      // Close sidebar only on mobile for smooth transition
+      if (isMobile && !sidebarCollapsed) {
         const mainElement = document.querySelector('.app-main') as HTMLElement;
         const overlay = mainElement?.querySelector('.sidebar-overlay') as HTMLElement;
         
@@ -571,9 +599,40 @@ function SessionView() {
     setShowNewChatDialog(false);
   };
 
-  const toggleSidebar = () => {
-    setSidebarCollapsed(!sidebarCollapsed);
+  // Handle sidebar resize
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
   };
+  
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      
+      const newWidth = e.clientX;
+      // Constrain width between 200px and 50% of viewport
+      const minWidth = 200;
+      const maxWidth = window.innerWidth * 0.5;
+      
+      if (newWidth >= minWidth && newWidth <= maxWidth) {
+        setSidebarWidth(newWidth);
+      }
+    };
+    
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+    
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isResizing]);
 
   const handleDirectoryPathClick = (directory: string | null) => {
     setDirectoryPopup(directory);
@@ -598,9 +657,14 @@ function SessionView() {
   };
 
 
+  const isDesktop = typeof window !== 'undefined' && window.innerWidth > 768;
+  
   return (
-    <div className={`app ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-      <div className={`app-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
+    <div className={`app ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${isResizing ? 'resizing' : ''}`}>
+      <div 
+        className={`app-sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}
+        style={isDesktop && !sidebarCollapsed ? { width: `${sidebarWidth}px` } : undefined}
+      >
         <SessionList
           selectedSessionId={sessionId || null}
           onSessionSelect={handleSessionSelect}
@@ -608,15 +672,21 @@ function SessionView() {
           directoryPopup={directoryPopup}
           onDirectoryPathClick={handleDirectoryPathClick}
         />
+        {isDesktop && !sidebarCollapsed && (
+          <div 
+            className="sidebar-resize-handle"
+            onMouseDown={handleMouseDown}
+          />
+        )}
       </div>
       
-      <button 
-        className={`sidebar-toggle ${sidebarCollapsed ? 'collapsed' : ''}`}
-        onClick={toggleSidebar}
-        title={sidebarCollapsed ? 'Show Sessions' : 'Hide Sessions'}
-      ></button>
-      
-      <div className="app-main">
+      <div 
+        className="app-main"
+        style={isDesktop && !sidebarCollapsed ? { 
+          marginLeft: `${sidebarWidth}px`,
+          width: `calc(100vw - ${sidebarWidth}px)`
+        } : undefined}
+      >
         {/* Overlay attached to main content so it moves with it */}
         <div 
           className="sidebar-overlay"

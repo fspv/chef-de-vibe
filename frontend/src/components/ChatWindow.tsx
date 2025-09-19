@@ -28,7 +28,7 @@ interface ChatWindowProps {
   onNewChat: () => void;
 }
 
-export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate, sidebarCollapsed, onNewChat }: ChatWindowProps) {
+export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate, sidebarCollapsed: _, onNewChat }: ChatWindowProps) {
   const location = useLocation();
   const { sessionDetails, loading, error } = useSessionDetails(sessionId);
   const [debugMode, setDebugMode] = useState(false);
@@ -406,23 +406,21 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
   if (!sessionId) {
     return (
       <div className="chat-window">
-        {sidebarCollapsed && (
-          <Suspense fallback={null}>
-            <SessionStatusIndicator
-              isActive={false}
-              isMainConnected={false}
-              isApprovalConnected={false}
-              hasApprovalRequests={false}
-              approvalRequestCount={0}
-              sessionId="New Chat"
-              workingDirectory={ensureAbsolutePath(selectedDirectory)}
-              debugMode={debugMode}
-              onDebugModeChange={setDebugMode}
-              currentMode={currentMode}
-              onModeChange={handleModeChange}
-            />
-          </Suspense>
-        )}
+        <Suspense fallback={null}>
+          <SessionStatusIndicator
+            isActive={false}
+            isMainConnected={false}
+            isApprovalConnected={false}
+            hasApprovalRequests={false}
+            approvalRequestCount={0}
+            sessionId="New Chat"
+            workingDirectory={ensureAbsolutePath(selectedDirectory)}
+            debugMode={debugMode}
+            onDebugModeChange={setDebugMode}
+            currentMode={currentMode}
+            onModeChange={handleModeChange}
+          />
+        </Suspense>
         
         <div className="chat-content centered">
           <button 
@@ -481,23 +479,21 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
 
   return (
     <div className="chat-window">
-      {sidebarCollapsed && (
-        <Suspense fallback={null}>
-          <SessionStatusIndicator
-            isActive={isActive}
-            isMainConnected={isConnected}
-            isApprovalConnected={approvalWs.isConnected}
-            hasApprovalRequests={approvalWs.pendingRequests.length > 0}
-            approvalRequestCount={approvalWs.pendingRequests.length}
-            sessionId={sessionDetails.session_id}
-            workingDirectory={ensureAbsolutePath(sessionDetails.working_directory)}
-            debugMode={debugMode}
-            onDebugModeChange={setDebugMode}
-            currentMode={currentMode}
-            onModeChange={handleModeChange}
-          />
-        </Suspense>
-      )}
+      <Suspense fallback={null}>
+        <SessionStatusIndicator
+          isActive={isActive}
+          isMainConnected={isConnected}
+          isApprovalConnected={approvalWs.isConnected}
+          hasApprovalRequests={approvalWs.pendingRequests.length > 0}
+          approvalRequestCount={approvalWs.pendingRequests.length}
+          sessionId={sessionDetails.session_id}
+          workingDirectory={ensureAbsolutePath(sessionDetails.working_directory)}
+          debugMode={debugMode}
+          onDebugModeChange={setDebugMode}
+          currentMode={currentMode}
+          onModeChange={handleModeChange}
+        />
+      </Suspense>
 
       <div className="chat-content">
         <MessageList 
