@@ -159,7 +159,7 @@ export function SessionList({ selectedSessionId, onSessionSelect, onNewChat, dir
     return (
       <div className="session-list">
         <div className="session-list-header">
-          <h2>Sessions</h2>
+          <h2>Vibes</h2>
           <button onClick={onNewChat}>New Chat</button>
         </div>
         <div className="loading">Loading sessions...</div>
@@ -171,7 +171,7 @@ export function SessionList({ selectedSessionId, onSessionSelect, onNewChat, dir
     return (
       <div className="session-list">
         <div className="session-list-header">
-          <h2>Sessions</h2>
+          <h2>Vibes</h2>
           <button onClick={onNewChat}>New Chat</button>
         </div>
         <div className="error">
@@ -205,7 +205,7 @@ export function SessionList({ selectedSessionId, onSessionSelect, onNewChat, dir
     <>
       <div className="session-list">
         <div className="session-list-header">
-          <h2>Sessions</h2>
+          <h2>Vibes</h2>
           <button onClick={onNewChat}>New Chat</button>
         </div>
         <div className="session-groups">

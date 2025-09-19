@@ -63,14 +63,20 @@ export const MessageList = forwardRef<MessageListRef, MessageListProps>(({ sessi
 
   useEffect(() => {
     if (!hasInitiallyLoaded && sessionMessages.length > 0) {
-      scrollToBottom();
-      setHasInitiallyLoaded(true);
+      // Use setTimeout to ensure DOM has been updated
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
+        setHasInitiallyLoaded(true);
+      }, 0);
     }
   }, [sessionMessages.length, hasInitiallyLoaded]);
 
   useEffect(() => {
     if (isAtBottom && !autoScrollPaused) {
-      scrollToBottom();
+      // Use requestAnimationFrame to ensure smooth scrolling after DOM updates
+      requestAnimationFrame(() => {
+        scrollToBottom();
+      });
     }
   }, [sessionMessages.length, webSocketMessages.length, isAtBottom, autoScrollPaused]);
 
@@ -120,8 +126,8 @@ export const MessageList = forwardRef<MessageListRef, MessageListProps>(({ sessi
           onClick={handleScrollToBottom}
           title="Scroll to bottom"
           style={{
-            position: 'fixed',
-            bottom: '100px',
+            position: 'absolute',
+            bottom: '20px',
             right: '20px',
             zIndex: 1000
           }}

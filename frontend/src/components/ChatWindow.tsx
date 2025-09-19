@@ -33,7 +33,6 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
   const [debugMode, setDebugMode] = useState(false);
   const [autoScrollPaused, setAutoScrollPaused] = useState(false);
   const [currentMode, setCurrentMode] = useState<PermissionMode>('default');
-  const [showStatusIndicator, setShowStatusIndicator] = useState(false);
   const messageListRef = useRef<MessageListRef>(null);
   
   // Helper function to ensure directory path starts with /
@@ -170,20 +169,6 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
     };
   }, [pendingWebSocket, pendingApprovalWebSocket]);
 
-  // Delay showing status indicator to prevent blocking animations
-  useEffect(() => {
-    if (sidebarCollapsed) {
-      // Show indicator after a short delay to allow animations to complete
-      const timer = setTimeout(() => {
-        setShowStatusIndicator(true);
-      }, 100);
-      return () => clearTimeout(timer);
-    } else {
-      // Hide immediately when sidebar opens
-      setShowStatusIndicator(false);
-    }
-  }, [sidebarCollapsed]);
-
 
 
   const handleAutoScrollStateChange = useCallback((_isAtBottom: boolean, autoScrollPaused: boolean) => {
@@ -228,7 +213,7 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
   if (!sessionId) {
     return (
       <div className="chat-window">
-        {showStatusIndicator && sidebarCollapsed && (
+        {sidebarCollapsed && (
           <Suspense fallback={null}>
             <SessionStatusIndicator
               isActive={false}
@@ -305,7 +290,7 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
 
   return (
     <div className="chat-window">
-      {showStatusIndicator && sidebarCollapsed && (
+      {sidebarCollapsed && (
         <Suspense fallback={null}>
           <SessionStatusIndicator
             isActive={isActive}

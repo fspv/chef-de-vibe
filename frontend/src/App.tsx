@@ -41,16 +41,15 @@ function SessionView() {
       // Save current scroll position
       const scrollY = window.scrollY;
       
-      // Sidebar is open - lock scrolling
+      // Sidebar is open - lock scrolling on body only
       document.body.style.overflow = 'hidden';
       document.body.style.position = 'fixed';
       document.body.style.width = '100%';
       document.body.style.top = `-${scrollY}px`;
-      document.body.style.touchAction = 'none';
+      // Don't set touchAction - let touch events decide
       
       // Also lock html element
       document.documentElement.style.overflow = 'hidden';
-      document.documentElement.style.touchAction = 'none';
     } else {
       // Get the saved scroll position
       const scrollY = document.body.style.top;
@@ -60,11 +59,9 @@ function SessionView() {
       document.body.style.position = '';
       document.body.style.width = '';
       document.body.style.top = '';
-      document.body.style.touchAction = '';
       
       // Restore html element
       document.documentElement.style.overflow = '';
-      document.documentElement.style.touchAction = '';
       
       // Restore scroll position
       if (scrollY) {
@@ -78,9 +75,7 @@ function SessionView() {
       document.body.style.position = '';
       document.body.style.width = '';
       document.body.style.top = '';
-      document.body.style.touchAction = '';
       document.documentElement.style.overflow = '';
-      document.documentElement.style.touchAction = '';
     };
   }, [sidebarCollapsed]);
 
@@ -117,6 +112,7 @@ function SessionView() {
     let isSwiping = false;
     let isSwipingFromEdge = false;
     let isSwipingOnChat = false;
+    let gestureDirection: 'horizontal' | 'vertical' | null = null;
     let mainElement: HTMLElement | null = null;
     let sidebarElement: HTMLElement | null = null;
     let animationFrameId: number | null = null;
@@ -152,19 +148,12 @@ function SessionView() {
       
       // Telegram-like behavior: drag the main content to reveal sidebar
       if (sidebarCollapsed) {
-        // Check if starting drag from edge or from main content
+        // Allow swiping from anywhere on the main content OR from edge
         if (touchStartX < 20 || mainElement?.contains(target)) {
           isSwipingFromEdge = true;
           isSwiping = true;
-          // Lock body scrolling during swipe
-          const scrollY = window.scrollY;
-          document.body.style.overflow = 'hidden';
-          document.body.style.position = 'fixed';
-          document.body.style.width = '100%';
-          document.body.style.top = `-${scrollY}px`;
-          document.body.style.touchAction = 'none';
-          document.documentElement.style.overflow = 'hidden';
-          document.documentElement.style.touchAction = 'none';
+          gestureDirection = null; // Will be determined by first move
+          // DON'T lock scrolling yet - wait to see if it's horizontal
           
           if (mainElement) {
             mainElement.style.transition = 'none';
@@ -172,22 +161,21 @@ function SessionView() {
           }
         }
       } else {
-        // Sidebar is open - allow swiping from anywhere (sidebar or main content)
-        isSwipingOnChat = true;
-        isSwiping = true;
-        // Lock body scrolling during swipe
-        const scrollY = window.scrollY;
-        document.body.style.overflow = 'hidden';
-        document.body.style.position = 'fixed';
-        document.body.style.width = '100%';
-        document.body.style.top = `-${scrollY}px`;
-        document.body.style.touchAction = 'none';
-        document.documentElement.style.overflow = 'hidden';
-        document.documentElement.style.touchAction = 'none';
+        // Sidebar is open - allow swiping to close from overlay or sidebar
+        const isOnOverlay = target.closest('.sidebar-overlay');
+        const isOnSidebar = sidebarElement?.contains(target);
         
-        if (mainElement) {
-          mainElement.style.willChange = 'transform';
-          mainElement.style.transition = 'none';
+        // Only enable swipe if touching the sidebar or overlay
+        if (isOnSidebar || isOnOverlay) {
+          isSwipingOnChat = true;
+          isSwiping = true;
+          gestureDirection = null; // Will be determined by first move
+          // DON'T lock scrolling yet - wait to see if it's horizontal
+          
+          if (mainElement) {
+            mainElement.style.willChange = 'transform';
+            mainElement.style.transition = 'none';
+          }
         }
       }
     };
@@ -235,29 +223,56 @@ function SessionView() {
       const deltaX = touchEndX - touchStartX;
       const deltaY = touchEndY - touchStartY;
       
-      // Prevent default scrolling when swiping
-      if (isSwipingFromEdge || isSwipingOnChat) {
+      // Determine gesture direction on first significant move (if not yet determined)
+      if (gestureDirection === null && (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5)) {
+        // Determine if horizontal or vertical based on initial movement
+        if (Math.abs(deltaX) > Math.abs(deltaY)) {
+          gestureDirection = 'horizontal';
+        } else {
+          gestureDirection = 'vertical';
+        }
+      }
+      
+      // If gesture is determined to be vertical, cancel swipe and allow scrolling
+      if (gestureDirection === 'vertical') {
+        // Cancel the swipe
+        isSwiping = false;
+        isSwipingFromEdge = false;
+        isSwipingOnChat = false;
+        
+        // Reset transform
+        if (mainElement) {
+          mainElement.style.transform = '';
+          mainElement.style.transition = '';
+          mainElement.style.willChange = '';
+        }
+        return;
+      }
+      
+      // If gesture is horizontal, handle the swipe
+      if (gestureDirection === 'horizontal' && (isSwipingFromEdge || isSwipingOnChat)) {
         e.preventDefault();
         e.stopPropagation();
         
-        // If vertical movement is too significant, still prevent but don't update position
-        if (Math.abs(deltaY) > Math.abs(deltaX) * 2 && Math.abs(deltaY) > 50) {
+        // Lock scrolling only when we're sure it's a horizontal swipe
+        if (document.body.style.overflow !== 'hidden') {
+          const scrollY = window.scrollY;
+          document.body.style.overflow = 'hidden';
+          document.body.style.position = 'fixed';
+          document.body.style.width = '100%';
+          document.body.style.top = `-${scrollY}px`;
+        }
+        
+        // Skip if we already have a pending update
+        if (animationFrameId !== null) {
           return;
         }
         
-        // Only update position if there's meaningful horizontal movement
-        if (Math.abs(deltaX) > 5) {
-          // Skip if we already have a pending update
-          if (animationFrameId !== null) {
-            return;
-          }
-          
-          // Use requestAnimationFrame for smooth updates
-          animationFrameId = requestAnimationFrame(() => {
-            updateSwipePosition(deltaX);
-            animationFrameId = null;
-          });
-        }
+        // Use requestAnimationFrame for smooth updates
+        animationFrameId = requestAnimationFrame(() => {
+          updateSwipePosition(deltaX);
+          animationFrameId = null;
+        });
       }
     };
 
@@ -275,8 +290,8 @@ function SessionView() {
         shouldOpen = deltaX > -threshold;
       }
       
-      // Update body scrolling based on final state
-      if (!shouldOpen) {
+      // Always restore scrolling after touch ends (unless sidebar will be open)
+      if (!shouldOpen && document.body.style.overflow === 'hidden') {
         // Get the saved scroll position
         const scrollY = document.body.style.top;
         
@@ -285,9 +300,7 @@ function SessionView() {
         document.body.style.position = '';
         document.body.style.width = '';
         document.body.style.top = '';
-        document.body.style.touchAction = '';
         document.documentElement.style.overflow = '';
-        document.documentElement.style.touchAction = '';
         
         // Restore scroll position
         if (scrollY) {
@@ -334,6 +347,7 @@ function SessionView() {
       isSwiping = false;
       isSwipingFromEdge = false;
       isSwipingOnChat = false;
+      gestureDirection = null;
       
       // Cancel any pending frames
       if (animationFrameId) {
@@ -346,6 +360,9 @@ function SessionView() {
       // Clean up on cancel
       if (isSwiping) {
         isSwiping = false;
+        isSwipingFromEdge = false;
+        isSwipingOnChat = false;
+        gestureDirection = null;
         
         // Restore body scrolling
         const scrollY = document.body.style.top;
