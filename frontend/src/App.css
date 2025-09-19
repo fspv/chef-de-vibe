@@ -1053,50 +1053,56 @@ html, body {
   background-color: #c82333;
 }
 
-/* Control Response Message Styles */
+/* Control Response Message Styles - Minimal */
 .control-response-message {
-  margin: 10px 0;
-  padding: 12px;
-  border-radius: 8px;
-  border-left: 4px solid;
+  margin: 2px 0;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border-left: 2px solid;
+  font-size: 11px;
+  color: #6c757d;
+  display: inline-block;
+  max-width: fit-content;
+  opacity: 0.7;
 }
 
 .control-response-message.success {
-  background-color: #f0f9f0;
+  background-color: #f8f9fa;
   border-left-color: #28a745;
 }
 
 .control-response-message.error {
-  background-color: #fdf2f2;
+  background-color: #fef5f5;
   border-left-color: #dc3545;
 }
 
 .control-response-content {
-  margin-top: 8px;
+  display: inline;
+  margin-left: 8px;
 }
 
 .control-response-details {
-  font-size: 14px;
+  display: inline;
+  font-size: 11px;
 }
 
 .response-id {
-  margin-bottom: 8px;
-  color: #666;
+  display: inline;
+  color: #999;
 }
 
 .response-id code {
-  background-color: #f8f9fa;
-  padding: 2px 4px;
-  border-radius: 3px;
+  background-color: transparent;
+  padding: 0 2px;
+  border-radius: 2px;
   font-family: monospace;
-  font-size: 12px;
+  font-size: 10px;
+  color: #999;
 }
 
 .response-data h4,
 .response-error h4 {
-  margin: 8px 0 4px 0;
-  font-size: 14px;
-  font-weight: 600;
+  display: none;
 }
 
 .response-error .error-message {

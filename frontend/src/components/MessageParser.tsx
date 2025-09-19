@@ -801,37 +801,26 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeC
     const response = message.response;
     const isSuccess = response.subtype === 'success';
     
+    // For success responses with mode changes, show minimal inline message
+    if (isSuccess && response.response && 'mode' in response.response) {
+      return (
+        <div className={`control-response-message success`}>
+          <span className="response-id">Mode: {(response.response as any).mode}</span>
+        </div>
+      );
+    }
+    
+    // For other responses, show minimal info
     return (
       <div className={`control-response-message ${isSuccess ? 'success' : 'error'}`}>
-        <div className="message-role">
-          {isSuccess ? '✅ Control Success' : '❌ Control Error'}
-          {timestamp && (
-            <span className="message-timestamp">
-              {new Date(timestamp).toLocaleTimeString()}
-            </span>
-          )}
-        </div>
-        <div className="control-response-content">
-          <div className="control-response-details">
-            <div className="response-id">Request ID: <code>{response.request_id}</code></div>
-            {isSuccess && response.response ? (
-              <div className="response-data">
-                <h4>Response:</h4>
-                <CollapsibleContent 
-                  content={JSON.stringify(response.response, null, 2)}
-                  className="response-content"
-                  maxLines={10}
-                  isCode={true}
-                />
-              </div>
-            ) : response.error ? (
-              <div className="response-error">
-                <h4>Error:</h4>
-                <div className="error-message">{response.error}</div>
-              </div>
-            ) : null}
-          </div>
-        </div>
+        <span className="response-id">
+          {isSuccess ? '✓' : '✗'}
+        </span>
+        {response.error && (
+          <span className="control-response-content">
+            <span className="control-response-details">{response.error}</span>
+          </span>
+        )}
       </div>
     );
   }
