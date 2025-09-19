@@ -384,13 +384,22 @@ impl<'a> SessionDiscovery<'a> {
             active_session_fallbacks.insert(session_id, first_msg);
         }
 
-        // Only return sessions that have summaries (not all sessions)
-        let sessions_with_summaries: Vec<SessionInfo> = sessions
-            .into_values()
-            .filter(|s| s.summary.is_some() && s.working_directory != PathBuf::new())
-            .collect();
+        // Return sessions that have summaries OR are active sessions
+        let mut sessions_to_return: Vec<SessionInfo> = Vec::new();
 
-        (sessions_with_summaries, active_session_fallbacks)
+        // First, add all sessions with summaries
+        for (session_id, session_info) in sessions {
+            if session_info.summary.is_some() && session_info.working_directory != PathBuf::new() {
+                sessions_to_return.push(session_info);
+            } else if active_session_ids.contains(&session_id)
+                && session_info.working_directory != PathBuf::new()
+            {
+                // Also include active sessions even without summaries
+                sessions_to_return.push(session_info);
+            }
+        }
+
+        (sessions_to_return, active_session_fallbacks)
     }
 
     fn find_session_on_disk(
@@ -838,6 +847,58 @@ mod tests {
         assert_eq!(
             sessions[0].summary,
             Some("Test Session Summary".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_active_sessions_included_without_summaries() {
+        let temp_dir = TempDir::new().unwrap();
+        let projects_dir = temp_dir.path().join("projects");
+        fs::create_dir_all(&projects_dir).unwrap();
+
+        let project_path = projects_dir.join("active-project");
+        fs::create_dir_all(&project_path).unwrap();
+
+        // Create a session file without a summary
+        let session_file = project_path.join("active-session.jsonl");
+        let content = r#"{"sessionId": "active-session", "cwd": "/home/user/active", "type": "start"}
+{"sessionId": "active-session", "type": "user", "message": {"role": "user", "content": "Active message"}}"#;
+        fs::write(session_file, content).unwrap();
+
+        let config = Config {
+            claude_binary_path: PathBuf::from("/usr/bin/claude"),
+            http_listen_address: "127.0.0.1:8080".to_string(),
+            claude_projects_dir: projects_dir,
+            shutdown_timeout: std::time::Duration::from_secs(30),
+        };
+
+        let manager = SessionManager::new(config.clone());
+        let discovery = SessionDiscovery::new(&config, &manager);
+
+        // Without marking as active, session should NOT be listed (no summary)
+        let sessions = discovery.list_all_sessions().await.unwrap();
+        assert_eq!(
+            sessions.len(),
+            0,
+            "Sessions without summaries should not be listed by default"
+        );
+
+        // Now simulate this being an active session
+        let active_ids = vec!["active-session".to_string()];
+        let (sessions_with_summaries, fallbacks) = discovery.scan_disk_for_sessions(&active_ids);
+
+        // Should find the session now because it's in the active list
+        assert_eq!(
+            sessions_with_summaries.len(),
+            1,
+            "Active sessions should be included even without summaries"
+        );
+        assert_eq!(sessions_with_summaries[0].session_id, "active-session");
+
+        // Should also have a fallback summary
+        assert_eq!(
+            fallbacks.get("active-session"),
+            Some(&"Active message".to_string())
         );
     }
 

@@ -271,6 +271,110 @@ async fn test_list_sessions_with_summaries() {
 
 #[tokio::test]
 #[serial]
+async fn test_active_sessions_always_listed() {
+    let server = TestServer::new().await;
+    let client = Client::new();
+
+    // Create an active session
+    let active_work_dir = server.mock.temp_dir.path().join("active_test");
+    fs::create_dir_all(&active_work_dir).unwrap();
+
+    // Create session file on disk (with or without summary)
+    let project_path = server.mock.projects_dir.join("active-project");
+    fs::create_dir_all(&project_path).unwrap();
+
+    // Prepare session content without a summary (simulating an active session)
+    let session_content = format!(
+        r#"{{"sessionId": "active-test-session", "cwd": "{}", "type": "start"}}
+{{"sessionId": "active-test-session", "type": "user", "message": {{"role": "user", "content": "Hello active"}}, "timestamp": "2025-09-19T12:00:00Z"}}
+{{"sessionId": "active-test-session", "uuid": "msg-active-123", "type": "assistant", "message": {{"role": "assistant", "content": [{{"type": "text", "text": "Response"}}]}}, "timestamp": "2025-09-19T12:01:00Z"}}"#,
+        active_work_dir.display()
+    );
+
+    // Start the active session
+    let session_file_path = project_path.join("active-test-session.jsonl");
+    let write_command = serde_json::json!({
+        "control": "write_file",
+        "path": session_file_path.to_string_lossy(),
+        "content": session_content
+    })
+    .to_string();
+
+    let create_request = CreateSessionRequest {
+        session_id: "active-test-session".to_string(),
+        working_dir: active_work_dir.clone(),
+        resume: false,
+        bootstrap_messages: vec![write_command],
+    };
+
+    let response = client
+        .post(format!("{}/api/v1/sessions", server.base_url))
+        .json(&create_request)
+        .send()
+        .await
+        .unwrap();
+
+    // Should be 200 since session already exists on disk
+    assert_eq!(response.status(), 200);
+
+    // Now list sessions - the active session should be included
+    let list_response = client
+        .get(format!("{}/api/v1/sessions", server.base_url))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(list_response.status(), 200);
+
+    let body: ListSessionsResponse = list_response.json().await.unwrap();
+
+    // Find the active session
+    let active_session = body
+        .sessions
+        .iter()
+        .find(|s| s.session_id == "active-test-session")
+        .expect("Active session should be listed");
+
+    assert!(active_session.active, "Session should be marked as active");
+    assert_eq!(active_session.working_directory, active_work_dir);
+
+    // The session might have the first user message as fallback summary
+    if let Some(summary) = &active_session.summary {
+        assert_eq!(summary, "Hello active");
+    }
+
+    // Also test with a session that has a summary
+    let summary_file = project_path.join("summary-active.jsonl");
+    let summary_content =
+        r#"{"type":"summary","summary":"Active Session with Summary","leafUuid":"msg-active-123"}"#;
+    fs::write(summary_file, summary_content).unwrap();
+
+    // List again - should still show the active session
+    let list_response2 = client
+        .get(format!("{}/api/v1/sessions", server.base_url))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(list_response2.status(), 200);
+
+    let body2: ListSessionsResponse = list_response2.json().await.unwrap();
+
+    let active_session_with_summary = body2
+        .sessions
+        .iter()
+        .find(|s| s.session_id == "active-test-session")
+        .expect("Active session should still be listed");
+
+    assert!(active_session_with_summary.active);
+    assert_eq!(
+        active_session_with_summary.summary,
+        Some("Active Session with Summary".to_string())
+    );
+}
+
+#[tokio::test]
+#[serial]
 async fn test_create_new_session() {
     let server = TestServer::new().await;
     let client = Client::new();
