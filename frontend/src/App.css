@@ -405,6 +405,15 @@ html, body {
   overflow-x: hidden;
 }
 
+/* When sidebar is open or being swiped, prevent all scrolling */
+.app:not(.sidebar-collapsed) {
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  touch-action: none;
+}
+
 .app-sidebar {
   width: 100vw;
   min-width: 100vw;
@@ -426,6 +435,9 @@ html, body {
   will-change: auto;
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
+  /* Prevent scrolling when touching the sidebar */
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: auto;
 }
 
 .app-sidebar.no-animation {
@@ -460,6 +472,8 @@ html, body {
   z-index: 99; /* Below sidebar but above content */
   transition: opacity 60ms linear;
   will-change: opacity;
+  /* Prevent any touch interactions except taps */
+  touch-action: none;
 }
 
 /* Hide overlay on desktop */

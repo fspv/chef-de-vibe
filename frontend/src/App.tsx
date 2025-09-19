@@ -35,6 +35,55 @@ function SessionView() {
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, JSON.stringify(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
+  // Lock body scrolling when sidebar is open
+  useEffect(() => {
+    if (!sidebarCollapsed) {
+      // Save current scroll position
+      const scrollY = window.scrollY;
+      
+      // Sidebar is open - lock scrolling
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.touchAction = 'none';
+      
+      // Also lock html element
+      document.documentElement.style.overflow = 'hidden';
+      document.documentElement.style.touchAction = 'none';
+    } else {
+      // Get the saved scroll position
+      const scrollY = document.body.style.top;
+      
+      // Sidebar is closed - restore scrolling
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.top = '';
+      document.body.style.touchAction = '';
+      
+      // Restore html element
+      document.documentElement.style.overflow = '';
+      document.documentElement.style.touchAction = '';
+      
+      // Restore scroll position
+      if (scrollY) {
+        window.scrollTo(0, parseInt(scrollY.replace('-', '').replace('px', ''), 10));
+      }
+    }
+
+    // Cleanup on unmount
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.top = '';
+      document.body.style.touchAction = '';
+      document.documentElement.style.overflow = '';
+      document.documentElement.style.touchAction = '';
+    };
+  }, [sidebarCollapsed]);
+
   // Handle escape key to close popup or sidebar
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -94,6 +143,15 @@ function SessionView() {
       if (touchStartX < 20 && sidebarCollapsed) {
         isSwipingFromEdge = true;
         isSwiping = true;
+        // Save scroll position and lock body scrolling during swipe
+        const scrollY = window.scrollY;
+        document.body.style.overflow = 'hidden';
+        document.body.style.position = 'fixed';
+        document.body.style.width = '100%';
+        document.body.style.top = `-${scrollY}px`;
+        document.body.style.touchAction = 'none';
+        document.documentElement.style.overflow = 'hidden';
+        document.documentElement.style.touchAction = 'none';
         // Get sidebar if not cached
         if (!sidebarElement) {
           sidebarElement = document.querySelector('.app-sidebar');
@@ -113,6 +171,15 @@ function SessionView() {
         if (sidebarElement?.contains(target)) {
           isSwipingOnSidebar = true;
           isSwiping = true;
+          // Save scroll position and lock body scrolling during swipe
+          const scrollY = window.scrollY;
+          document.body.style.overflow = 'hidden';
+          document.body.style.position = 'fixed';
+          document.body.style.width = '100%';
+          document.body.style.top = `-${scrollY}px`;
+          document.body.style.touchAction = 'none';
+          document.documentElement.style.overflow = 'hidden';
+          document.documentElement.style.touchAction = 'none';
           sidebarElement.style.willChange = 'transform';
           sidebarElement.style.transition = 'none';
         }
@@ -148,25 +215,29 @@ function SessionView() {
       const deltaX = touchEndX - touchStartX;
       const deltaY = touchEndY - touchStartY;
       
-      // If vertical movement is significant, it's likely scrolling, not swiping
-      if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 20) {
-        return;
-      }
-      
-      // Prevent page scrolling while swiping
-      if ((isSwipingFromEdge || isSwipingOnSidebar) && Math.abs(deltaX) > 10) {
+      // Always prevent default scrolling when swiping the sidebar
+      if (isSwipingFromEdge || isSwipingOnSidebar) {
         e.preventDefault();
+        e.stopPropagation();
         
-        // Skip if we already have a pending update
-        if (animationFrameId !== null) {
+        // If vertical movement is too significant compared to horizontal, still prevent but don't update position
+        if (Math.abs(deltaY) > Math.abs(deltaX) * 2 && Math.abs(deltaY) > 50) {
           return;
         }
         
-        // Use requestAnimationFrame for smooth updates
-        animationFrameId = requestAnimationFrame(() => {
-          updateSwipePosition(deltaX);
-          animationFrameId = null;
-        });
+        // Only update position if there's meaningful horizontal movement
+        if (Math.abs(deltaX) > 5) {
+          // Skip if we already have a pending update
+          if (animationFrameId !== null) {
+            return;
+          }
+          
+          // Use requestAnimationFrame for smooth updates
+          animationFrameId = requestAnimationFrame(() => {
+            updateSwipePosition(deltaX);
+            animationFrameId = null;
+          });
+        }
       }
     };
 
@@ -183,6 +254,27 @@ function SessionView() {
       } else if (isSwipingOnSidebar) {
         shouldOpen = deltaX > -threshold;
       }
+      
+      // Update body scrolling based on final state
+      if (!shouldOpen) {
+        // Get the saved scroll position
+        const scrollY = document.body.style.top;
+        
+        // Sidebar will be closed - restore scrolling
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.width = '';
+        document.body.style.top = '';
+        document.body.style.touchAction = '';
+        document.documentElement.style.overflow = '';
+        document.documentElement.style.touchAction = '';
+        
+        // Restore scroll position
+        if (scrollY) {
+          window.scrollTo(0, parseInt(scrollY.replace('-', '').replace('px', ''), 10));
+        }
+      }
+      // If shouldOpen is true, keep scrolling locked (will be handled by the useEffect)
       
       // Immediately set final transform position
       if (sidebarElement) {
@@ -240,6 +332,23 @@ function SessionView() {
       // Clean up on cancel (e.g., when another app takes focus)
       if (isSwiping) {
         isSwiping = false;
+        
+        // Restore body scrolling if sidebar is collapsed
+        if (sidebarCollapsed) {
+          const scrollY = document.body.style.top;
+          document.body.style.overflow = '';
+          document.body.style.position = '';
+          document.body.style.width = '';
+          document.body.style.top = '';
+          document.body.style.touchAction = '';
+          document.documentElement.style.overflow = '';
+          document.documentElement.style.touchAction = '';
+          
+          // Restore scroll position
+          if (scrollY) {
+            window.scrollTo(0, parseInt(scrollY.replace('-', '').replace('px', ''), 10));
+          }
+        }
         
         // Reset sidebar
         if (sidebarElement) {
