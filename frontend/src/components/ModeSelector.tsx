@@ -49,6 +49,7 @@ export function ModeSelector({ value, onChange }: ModeSelectorProps) {
         {modes.map((mode) => (
           <button
             key={mode.value}
+            type="button"
             className={`mode-selector-segment ${selectedMode === mode.value ? 'active' : ''}`}
             onClick={() => handleModeChange(mode.value)}
             style={{

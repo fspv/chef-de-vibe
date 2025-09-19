@@ -116,10 +116,7 @@ function SessionView() {
         else if (showNewChatDialog) {
           // Do nothing, let NewChatDialog handle it
         }
-        // Otherwise, close the sidebar if it's open
-        else if (!sidebarCollapsed) {
-          setSidebarCollapsed(true);
-        }
+        // Don't close the sidebar on Escape
       }
     };
 
@@ -542,9 +539,7 @@ function SessionView() {
     const bootstrapMessages: string[] = [];
     
     // Only add control message if mode is not default
-    if (mode !== 'default') {
-      bootstrapMessages.push(JSON.stringify(controlMessage));
-    }
+    bootstrapMessages.push(JSON.stringify(controlMessage));
     
     // Add the user's first message
     bootstrapMessages.push(firstMessage);

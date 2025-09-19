@@ -67,6 +67,11 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
   const [isResumingSession, setIsResumingSession] = useState(false);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
 
+  // Reset mode to default when sessionId changes
+  useEffect(() => {
+    setCurrentMode('default');
+  }, [sessionId]);
+
   // Approval handlers
   const handleApprove = useCallback(async (requestId: string, input: ToolInputSchemas, permissionUpdates: PermissionUpdate[] = []): Promise<void> => {
     // Send approval response through the approval websocket
