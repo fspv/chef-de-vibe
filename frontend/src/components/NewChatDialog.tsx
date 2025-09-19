@@ -3,17 +3,22 @@ import { v4 as uuidv4 } from 'uuid';
 import { DirectoryPicker } from './DirectoryPicker';
 
 interface NewChatDialogProps {
-  onStartChat: (directory: string, firstMessage: string) => void;
+  onStartChat: (directory: string, firstMessage: string) => Promise<void>;
   onCancel: () => void;
 }
 
 export function NewChatDialog({ onStartChat, onCancel }: NewChatDialogProps) {
   const [selectedDirectory, setSelectedDirectory] = useState('');
   const [firstMessage, setFirstMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedDirectory.trim() && firstMessage.trim()) {
+      setIsLoading(true);
+      setError(null);
+      
       // Format the first message exactly like MessageInput does
       const message = {
         type: 'user',
@@ -25,7 +30,13 @@ export function NewChatDialog({ onStartChat, onCancel }: NewChatDialogProps) {
         uuid: uuidv4(),
         session_id: '' // This will be filled by the backend
       };
-      onStartChat(selectedDirectory.trim(), JSON.stringify(message));
+      
+      try {
+        await onStartChat(selectedDirectory.trim(), JSON.stringify(message));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to create session');
+        setIsLoading(false);
+      }
     }
   };
 
@@ -56,6 +67,11 @@ export function NewChatDialog({ onStartChat, onCancel }: NewChatDialogProps) {
         <form onSubmit={handleSubmit} className="new-chat-content">
           <div className="new-chat-description">
             <p>Choose the working directory and your first message to start a new chat session with Claude.</p>
+            {error && (
+              <div className="error-message" style={{ color: 'red', marginTop: '10px', padding: '10px', backgroundColor: '#fee', borderRadius: '4px' }}>
+                {error}
+              </div>
+            )}
           </div>
           
           <div className="directory-input-container">
@@ -86,15 +102,16 @@ export function NewChatDialog({ onStartChat, onCancel }: NewChatDialogProps) {
               type="button" 
               className="cancel-button"
               onClick={onCancel}
+              disabled={isLoading}
             >
               Cancel
             </button>
             <button 
               type="submit" 
               className="confirm-button"
-              disabled={!selectedDirectory.trim() || !firstMessage.trim()}
+              disabled={!selectedDirectory.trim() || !firstMessage.trim() || isLoading}
             >
-              Start Chat
+              {isLoading ? 'Starting...' : 'Start Chat'}
             </button>
           </div>
         </form>

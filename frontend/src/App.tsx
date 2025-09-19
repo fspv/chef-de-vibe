@@ -499,32 +499,6 @@ function SessionView() {
   };
 
   const handleStartChat = async (directory: string, firstMessage: string) => {
-    setShowNewChatDialog(false);
-    
-    // Close sidebar immediately for smooth transition
-    if (!sidebarCollapsed) {
-      const mainElement = document.querySelector('.app-main') as HTMLElement;
-      const overlay = mainElement?.querySelector('.sidebar-overlay') as HTMLElement;
-      
-      if (mainElement) {
-        mainElement.style.transition = 'none';
-        mainElement.style.transform = 'translateX(0)';
-      }
-      
-      if (overlay) {
-        overlay.style.display = 'none';
-      }
-      
-      setSidebarCollapsed(true);
-      
-      // Re-enable transitions after a frame
-      requestAnimationFrame(() => {
-        if (mainElement) {
-          mainElement.style.transition = '';
-        }
-      });
-    }
-    
     // Create the session immediately with the first message
     const newSessionId = uuidv4();
     const request: CreateSessionRequest = {
@@ -536,11 +510,38 @@ function SessionView() {
 
     const response = await createSession(request);
     if (response) {
+      // Only close dialog and navigate on success
+      setShowNewChatDialog(false);
+      
+      // Close sidebar immediately for smooth transition
+      if (!sidebarCollapsed) {
+        const mainElement = document.querySelector('.app-main') as HTMLElement;
+        const overlay = mainElement?.querySelector('.sidebar-overlay') as HTMLElement;
+        
+        if (mainElement) {
+          mainElement.style.transition = 'none';
+          mainElement.style.transform = 'translateX(0)';
+        }
+        
+        if (overlay) {
+          overlay.style.display = 'none';
+        }
+        
+        setSidebarCollapsed(true);
+        
+        // Re-enable transitions after a frame
+        requestAnimationFrame(() => {
+          if (mainElement) {
+            mainElement.style.transition = '';
+          }
+        });
+      }
+      
       // Navigate to the new session
       navigate(`/session/${response.session_id}`);
     } else {
-      // Show error alert with suggestion to check backend logs
-      alert('Failed to create new chat session. Please check the backend logs for more details. You may need to restart the backend service or check your working directory permissions.');
+      // Throw error to be caught by NewChatDialog
+      throw new Error('Failed to create new chat session. Please check the backend logs for more details. You may need to restart the backend service or check your working directory permissions.');
     }
   };
 
