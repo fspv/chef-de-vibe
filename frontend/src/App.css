@@ -1400,8 +1400,8 @@ html, body {
 }
 
 .chat-input {
-  border-top: 1px solid #ecf0f1;
-  background-color: #f8f9fa;
+  border-top: 1px solid #e5e5e5;
+  background-color: white;
 }
 
 .empty-chat, .loading-chat, .error-chat {
@@ -1899,7 +1899,8 @@ html, body {
 
 /* Message Input Styles */
 .message-input {
-  padding: 1rem;
+  padding: 0;
+  background-color: white;
 }
 
 .input-controls {
@@ -1917,48 +1918,104 @@ html, body {
 
 .input-area {
   display: flex;
-  gap: 0.5rem;
+  align-items: center;
+  position: relative;
+  background-color: transparent;
+  padding: 0;
 }
 
 .input-area textarea {
   flex: 1;
-  padding: 0.75rem;
-  border: 1px solid #ced4da;
-  border-radius: 4px;
+  padding: 1rem 5rem 1rem 1rem;
+  border: none;
+  border-radius: 0;
   font-family: inherit;
-  font-size: 0.9rem;
-  resize: vertical;
-  min-height: 60px;
+  font-size: 0.95rem;
+  resize: none;
+  min-height: 64px;
+  max-height: 120px;
+  background: white;
+  outline: none;
 }
 
 .input-area textarea:focus {
   outline: none;
-  border-color: #3498db;
 }
 
 .input-area textarea:disabled {
-  background-color: #f8f9fa;
+  background-color: transparent;
   color: #6c757d;
 }
 
-.input-area button {
-  background-color: #3498db;
+.input-area .send-button {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 4px;
+  padding: 1rem;
+  border-radius: 50%;
   cursor: pointer;
-  font-size: 0.9rem;
-  align-self: flex-end;
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
 }
 
-.input-area button:hover:not(:disabled) {
-  background-color: #2980b9;
+.input-area .send-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+  transform: translateY(-50%) scale(1.05);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
 }
 
-.input-area button:disabled {
-  background-color: #6c757d;
+.input-area .send-button:disabled {
+  background: linear-gradient(135deg, #cbd3da 0%, #a8b5c1 100%);
   cursor: not-allowed;
+  opacity: 0.6;
+  box-shadow: none;
+}
+
+/* Session Finished Notice */
+.session-finished-notice {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin: 1rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.session-finished-notice .notice-icon {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.session-finished-notice .notice-content h4 {
+  margin: 0 0 0.5rem 0;
+  color: #495057;
+  font-size: 1.1rem;
+}
+
+.session-finished-notice .notice-content p {
+  margin: 0;
+  color: #6c757d;
+  font-size: 0.95rem;
+  line-height: 1.5;
 }
 
 /* Resume Button Styles */
