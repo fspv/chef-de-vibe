@@ -14,6 +14,7 @@ interface SessionStatusIndicatorProps {
   onDebugModeChange: (value: boolean) => void;
   currentMode: PermissionMode;
   onModeChange: (mode: PermissionMode) => void;
+  onInterrupt?: () => void;
 }
 
 export function SessionStatusIndicator({
@@ -27,7 +28,8 @@ export function SessionStatusIndicator({
   debugMode,
   onDebugModeChange,
   currentMode,
-  onModeChange
+  onModeChange,
+  onInterrupt
 }: SessionStatusIndicatorProps) {
   const [showDetails, setShowDetails] = useState(false);
 
@@ -145,6 +147,18 @@ export function SessionStatusIndicator({
                   <span>Debug Mode</span>
                 </label>
               </div>
+
+              {onInterrupt && isMainConnected && (
+                <div className="interrupt-section">
+                  <button 
+                    className="interrupt-button"
+                    onClick={onInterrupt}
+                    title="Interrupt current operation"
+                  >
+                    Terminate
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

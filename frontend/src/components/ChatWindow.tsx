@@ -357,6 +357,20 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
     }
   }, [sessionDetails, isConnected, sendMessage]);
 
+  const handleInterrupt = useCallback(() => {
+    // Send interrupt control request
+    if (sessionDetails?.websocket_url && isConnected) {
+      const interruptRequest = {
+        request_id: Math.random().toString(36).substring(2, 15),
+        type: "control_request",
+        request: {
+          subtype: "interrupt"
+        }
+      };
+      sendMessage(JSON.stringify(interruptRequest));
+    }
+  }, [sessionDetails, isConnected, sendMessage]);
+
   // Listen for control response messages to update the mode
   useEffect(() => {
     if (webSocketMessages.length > 0) {
@@ -424,6 +438,7 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
             onDebugModeChange={setDebugMode}
             currentMode={currentMode}
             onModeChange={handleModeChange}
+            onInterrupt={undefined}
           />
         </Suspense>
         
@@ -497,6 +512,7 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
           onDebugModeChange={setDebugMode}
           currentMode={currentMode}
           onModeChange={handleModeChange}
+          onInterrupt={handleInterrupt}
         />
       </Suspense>
 
