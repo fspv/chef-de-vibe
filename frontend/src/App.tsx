@@ -78,6 +78,13 @@ function SessionView() {
 
     const handleTouchStart = (e: TouchEvent) => {
       if (!e.touches || e.touches.length === 0) return;
+      
+      // Don't handle touch if it's on a clickable session item
+      const target = e.target as HTMLElement;
+      if (target.closest('.session-item')) {
+        return; // Let the click handler handle this
+      }
+      
       touchStartX = e.touches[0].clientX;
       touchStartY = e.touches[0].clientY;
       touchEndX = touchStartX;
@@ -100,7 +107,6 @@ function SessionView() {
         }
       } else if (!sidebarCollapsed) {
         // Check if swipe started on sidebar
-        const target = e.target as HTMLElement;
         if (!sidebarElement) {
           sidebarElement = document.querySelector('.app-sidebar');
         }
@@ -211,7 +217,12 @@ function SessionView() {
       }
       
       // Update React state much later
-      setTimeout(() => setSidebarCollapsed(!shouldOpen), 150);
+      const timeoutId = setTimeout(() => setSidebarCollapsed(!shouldOpen), 150);
+      // Track timeout for potential cancellation
+      if (!(window as any).__touchTimeouts) {
+        (window as any).__touchTimeouts = [];
+      }
+      (window as any).__touchTimeouts.push(timeoutId);
       
       // Reset all flags
       isSwiping = false;
@@ -285,8 +296,20 @@ function SessionView() {
   }, [sidebarCollapsed]);
 
   const handleSessionSelect = (sessionId: string) => {
-    // Close sidebar on mobile when a chat is selected
-    setSidebarCollapsed(true);
+    // Set sidebar state FIRST to avoid race conditions
+    // This ensures the state is updated before navigation causes re-renders
+    if (!sidebarCollapsed) {
+      // Cancel any pending touch state updates
+      const pendingTimeouts = (window as any).__touchTimeouts;
+      if (pendingTimeouts) {
+        pendingTimeouts.forEach((timeout: number) => clearTimeout(timeout));
+        (window as any).__touchTimeouts = [];
+      }
+      
+      setSidebarCollapsed(true);
+    }
+    
+    // Navigate after state is set
     navigate(`/session/${sessionId}`);
   };
 

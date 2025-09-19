@@ -428,12 +428,25 @@ html, body {
   backface-visibility: hidden;
 }
 
+.app-sidebar.no-animation {
+  transition: none !important;
+}
+
 .app-sidebar.collapsed {
+  transform: translate3d(-100%, 0, 0);
+}
+
+.app-sidebar.no-animation.collapsed {
+  transition: none !important;
   transform: translate3d(-100%, 0, 0);
 }
 
 .app.sidebar-collapsed .app-sidebar {
   transform: translate3d(-100%, 0, 0);
+}
+
+.app.sidebar-collapsed .app-sidebar.no-animation {
+  transition: none !important;
 }
 
 /* Sidebar overlay for mobile */
