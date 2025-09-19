@@ -805,7 +805,7 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeC
     if (isSuccess && response.response && 'mode' in response.response) {
       return (
         <div className={`control-response-message success`}>
-          <span className="response-id">Mode: {(response.response as any).mode}</span>
+          <span className="response-id">Mode: {(response.response as { mode?: string }).mode}</span>
         </div>
       );
     }

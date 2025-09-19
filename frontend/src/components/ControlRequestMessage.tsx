@@ -98,18 +98,18 @@ interface ControlRequestMessageProps {
   timestamp?: number;
   onApprove?: (requestId: string, input: ToolInputSchemas, permissionUpdates: PermissionUpdate[]) => Promise<void> | void;
   onDeny?: (requestId: string) => Promise<void> | void;
-  onModeChange?: (mode: PermissionMode) => void;
+  onModeChange?: (mode: PermissionMode) => void; // Still passed but not used for "Approve for Session"
 }
 
-export function ControlRequestMessage({ message, timestamp, onApprove, onDeny, onModeChange }: ControlRequestMessageProps) {
+export function ControlRequestMessage({ message, timestamp, onApprove, onDeny }: ControlRequestMessageProps) {
   // Check for setMode permission and extract it
   const setModePermission = message.request.permission_suggestions?.find(
-    (perm: any) => perm.type === 'setMode' && perm.destination === 'session'
+    (perm: PermissionUpdate) => (perm as { type?: string; destination?: string }).type === 'setMode' && (perm as { type?: string; destination?: string }).destination === 'session'
   );
   
   // Filter out setMode permission from regular permissions
   const regularPermissions = message.request.permission_suggestions?.filter(
-    (perm: any) => !(perm.type === 'setMode' && perm.destination === 'session')
+    (perm: PermissionUpdate) => !((perm as { type?: string; destination?: string }).type === 'setMode' && (perm as { type?: string; destination?: string }).destination === 'session')
   ) || [];
   
   const [selectedPermissions, setSelectedPermissions] = useState<boolean[]>(
@@ -182,12 +182,8 @@ export function ControlRequestMessage({ message, timestamp, onApprove, onDeny, o
           await onApprove(message.request_id, finalInput, permissionsToSend);
           setIsProcessed(true);
           
-          // If setMode was included and we have a mode change handler, trigger it
-          if (includeSetMode && setModePermission && onModeChange) {
-            // Extract the mode from the permission (should be 'acceptEdits')
-            const mode = ((setModePermission as any).mode || 'acceptEdits') as PermissionMode;
-            onModeChange(mode);
-          }
+          // Don't trigger onModeChange here - the mode change will happen
+          // on the backend when it processes the setMode permission
         } catch (error) {
           setSendError(`Failed to send approval: ${error instanceof Error ? error.message : 'Unknown error'}`);
         } finally {

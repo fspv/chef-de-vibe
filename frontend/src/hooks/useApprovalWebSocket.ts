@@ -143,6 +143,9 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
       wsRef.current = null;
     }
     setIsConnected(false);
+    // Clear session-specific data on disconnect
+    setPendingRequests([]);
+    setApprovalMessages([]);
   }, []);
 
   const sendApprovalResponse = useCallback((response: ApprovalResponseMessage): Promise<void> => {
@@ -181,6 +184,9 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
 
   useEffect(() => {
     if (url) {
+      // Clear previous session's data when URL changes
+      setPendingRequests([]);
+      setApprovalMessages([]);
       connect();
     } else {
       disconnect();

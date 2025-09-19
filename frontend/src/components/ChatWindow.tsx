@@ -28,7 +28,7 @@ interface ChatWindowProps {
   onNewChat: () => void;
 }
 
-export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate, sidebarCollapsed: _, onNewChat }: ChatWindowProps) {
+export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate, onNewChat }: ChatWindowProps) {
   const location = useLocation();
   const { sessionDetails, loading, error } = useSessionDetails(sessionId);
   const [debugMode, setDebugMode] = useState(false);
