@@ -32,7 +32,11 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
   const location = useLocation();
   const { sessionDetails, loading, error } = useSessionDetails(sessionId);
   const [debugMode, setDebugMode] = useState(false);
-  const [currentMode, setCurrentMode] = useState<PermissionMode>('default');
+  
+  // Get initial mode from navigation state (when coming from new chat dialog)
+  const initialModeFromNav = (location.state as any)?.initialMode as PermissionMode | undefined;
+  const [currentMode, setCurrentMode] = useState<PermissionMode>(initialModeFromNav || 'default');
+  const [hasSetInitialMode, setHasSetInitialMode] = useState(false);
   const messageListRef = useRef<MessageListRef>(null);
   const [loadingLogs, setLoadingLogs] = useState<LogEntry[]>([]);
   const [loadingOperation, setLoadingOperation] = useState<'creating' | 'resuming' | 'loading'>('loading');
@@ -67,10 +71,18 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
   const [isResumingSession, setIsResumingSession] = useState(false);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
 
-  // Reset mode to default when sessionId changes
+  // Handle mode initialization when sessionId or navigation state changes
   useEffect(() => {
-    setCurrentMode('default');
-  }, [sessionId]);
+    if (initialModeFromNav && !hasSetInitialMode) {
+      // We have an initial mode from navigation state (new chat was just created)
+      setCurrentMode(initialModeFromNav);
+      setHasSetInitialMode(true);
+    } else if (!initialModeFromNav && sessionId) {
+      // No initial mode from nav, reset to default for existing sessions
+      setCurrentMode('default');
+      setHasSetInitialMode(false);
+    }
+  }, [sessionId, initialModeFromNav, hasSetInitialMode]);
 
   // Approval handlers
   const handleApprove = useCallback(async (requestId: string, input: ToolInputSchemas, permissionUpdates: PermissionUpdate[] = []): Promise<void> => {
@@ -162,8 +174,8 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
         await new Promise(resolve => setTimeout(resolve, 2000));
         
         addLog('Navigating to session...', 'success');
-        // Navigate to new session
-        navigate(`/session/${response.session_id}`);
+        // Navigate to new session with current mode
+        navigate(`/session/${response.session_id}`, { state: { initialMode: currentMode } });
       } else {
         addLog('Failed to create session', 'error');
         setIsSessionLoading(false);
@@ -278,15 +290,7 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
       }
     } else {
       // Active session - send via WebSocket
-      // Add the sent message to the display immediately
-      if (debugMode) {
-        // In debug mode, add raw JSON
-        addMessage(JSON.parse(message));
-      } else {
-        // In normal mode, parse the formatted message
-        const parsedMessage = JSON.parse(message);
-        addMessage(parsedMessage);
-      }
+      // Server will echo the message back, so we don't add it locally
       sendMessage(message);
     }
   }, [sessionId, sessionDetails, onCreateSession, navigate, sendMessage, addMessage, debugMode, selectedDirectory, addLog, currentMode]);

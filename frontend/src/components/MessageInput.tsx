@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type { PermissionMode } from '@anthropic-ai/claude-code/sdk';
 
@@ -25,6 +25,10 @@ export function MessageInput({
 }: MessageInputProps) {
   const [input, setInput] = useState(initialValue);
   const [isMobile, setIsMobile] = useState(false);
+  const [textareaHeight, setTextareaHeight] = useState(120); // Default height in pixels
+  const [isResizing, setIsResizing] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const resizeHandleRef = useRef<HTMLDivElement>(null);
   
   // Update input when initialValue changes (for restoring on error)
   useEffect(() => {
@@ -42,6 +46,44 @@ export function MessageInput({
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // Handle resize drag
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing || !textareaRef.current) return;
+      
+      const containerRect = textareaRef.current.parentElement?.getBoundingClientRect();
+      if (!containerRect) return;
+      
+      const newHeight = containerRect.bottom - e.clientY;
+      // Constrain between min and max heights
+      const constrainedHeight = Math.max(60, Math.min(400, newHeight));
+      setTextareaHeight(constrainedHeight);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+
+    if (isResizing) {
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'ns-resize';
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,8 +147,15 @@ export function MessageInput({
 
   return (
     <form onSubmit={handleSubmit} className="message-input">
-      <div className="input-area">
+      <div className="resize-handle" 
+           ref={resizeHandleRef}
+           onMouseDown={handleResizeStart}
+           title="Drag to resize">
+        <div className="resize-handle-bar"></div>
+      </div>
+      <div className="input-area" style={{ height: `${textareaHeight}px` }}>
         <textarea
+          ref={textareaRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -126,7 +175,7 @@ export function MessageInput({
                       : "Type your message... (Ctrl/Cmd+Enter to send)"
           }
           disabled={disabled || isLoading}
-          rows={3}
+          style={{ height: '100%' }}
         />
         <button type="submit" className="send-button" disabled={disabled || !input.trim() || isLoading}>
           {isLoading ? (

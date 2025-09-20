@@ -582,8 +582,8 @@ function SessionView() {
         });
       }
       
-      // Navigate to the new session
-      navigate(`/session/${response.session_id}`);
+      // Navigate to the new session with the initial mode in state
+      navigate(`/session/${response.session_id}`, { state: { initialMode: mode } });
     } else {
       // Throw error to be caught by NewChatDialog
       throw new Error('Failed to create new chat session. Please check the backend logs for more details. You may need to restart the backend service or check your working directory permissions.');

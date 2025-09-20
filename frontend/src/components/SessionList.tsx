@@ -233,12 +233,10 @@ export function SessionList({ selectedSessionId, onSessionSelect, onNewChat, dir
                   >
                     <div className="group-directory" title="Click path to copy, click elsewhere to toggle">
                       <span className="collapse-icon">{isCollapsed ? '▶' : '▼'}</span>
-                      <span className="directory-icon">📁</span>
                       <span className="directory-path" title="Click to copy path">
-                        {group.directory}
+                        📁&nbsp;{group.directory}&nbsp;({group.sessions.length})
                       </span>
                     </div>
-                    <div className="group-count">{group.sessions.length}</div>
                   </div>
                   {!isCollapsed && (
                     <div className="group-sessions">
