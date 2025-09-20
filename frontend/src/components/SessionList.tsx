@@ -201,6 +201,11 @@ export function SessionList({ selectedSessionId, onSessionSelect, onNewChat, dir
     }
   };
 
+  const truncateSummary = (text: string, maxLength: number = 60): string => {
+    if (!text || text.length <= maxLength) return text;
+    return text.slice(0, maxLength) + '...';
+  };
+
   return (
     <>
       <div className="session-list">
@@ -248,8 +253,8 @@ export function SessionList({ selectedSessionId, onSessionSelect, onNewChat, dir
                           }}
                         >
                           <div className="session-info">
-                            <div className="session-summary">
-                              {session.summary || `Session ${session.session_id.slice(0, 8)}...`}
+                            <div className="session-summary" title={session.summary || `Session ${session.session_id.slice(0, 8)}...`}>
+                              {truncateSummary(session.summary || `Session ${session.session_id.slice(0, 8)}...`)}
                             </div>
                             <div className="session-meta">
                               <span className="session-date">

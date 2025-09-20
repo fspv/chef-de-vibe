@@ -2100,44 +2100,6 @@ html, body {
   box-shadow: none;
 }
 
-/* Session Finished Notice */
-.session-finished-notice {
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
-  padding: 1.5rem;
-  margin: 1rem;
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  flex-shrink: 0;
-}
-
-.session-finished-notice .notice-icon {
-  flex-shrink: 0;
-  width: 48px;
-  height: 48px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-}
-
-.session-finished-notice .notice-content h4 {
-  margin: 0 0 0.5rem 0;
-  color: #495057;
-  font-size: 1.1rem;
-}
-
-.session-finished-notice .notice-content p {
-  margin: 0;
-  color: #6c757d;
-  font-size: 0.95rem;
-  line-height: 1.5;
-}
 
 /* Resume Button Styles */
 .resume-section {
