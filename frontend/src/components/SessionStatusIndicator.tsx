@@ -35,14 +35,14 @@ export function SessionStatusIndicator({
 
   const getStatusColor = () => {
     if (!isActive) return 'red';
-    if (!isMainConnected || !isApprovalConnected || hasApprovalRequests) return 'yellow';
+    if (!isMainConnected || !isApprovalConnected) return 'yellow';
     return 'green';
   };
 
   const getStatusText = () => {
     if (!isActive) return 'Inactive';
     if (!isMainConnected || !isApprovalConnected) return 'Connecting...';
-    if (hasApprovalRequests) return `${approvalRequestCount} pending`;
+    if (hasApprovalRequests) return `Active (${approvalRequestCount} pending)`;
     return 'Active';
   };
 
