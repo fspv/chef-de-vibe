@@ -47,40 +47,63 @@ export function MessageInput({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Handle resize drag
+  // Handle resize drag (mouse and touch)
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
+    const handleMove = (clientY: number) => {
       if (!isResizing || !textareaRef.current) return;
       
       const containerRect = textareaRef.current.parentElement?.getBoundingClientRect();
       if (!containerRect) return;
       
-      const newHeight = containerRect.bottom - e.clientY;
+      const newHeight = containerRect.bottom - clientY;
       // Constrain between min and max heights
       const constrainedHeight = Math.max(60, Math.min(400, newHeight));
       setTextareaHeight(constrainedHeight);
     };
 
-    const handleMouseUp = () => {
+    const handleMouseMove = (e: MouseEvent) => {
+      handleMove(e.clientY);
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        e.preventDefault(); // Prevent scrolling while resizing
+        handleMove(e.touches[0].clientY);
+      }
+    };
+
+    const handleEnd = () => {
       setIsResizing(false);
       document.body.style.userSelect = '';
       document.body.style.cursor = '';
+      document.body.style.touchAction = ''; // Reset touch-action
     };
 
     if (isResizing) {
       document.body.style.userSelect = 'none';
       document.body.style.cursor = 'ns-resize';
+      document.body.style.touchAction = 'none'; // Prevent scrolling on touch
+      
+      // Mouse events
       document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('mouseup', handleEnd);
+      
+      // Touch events
+      document.addEventListener('touchmove', handleTouchMove, { passive: false });
+      document.addEventListener('touchend', handleEnd);
+      document.addEventListener('touchcancel', handleEnd);
     }
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mouseup', handleEnd);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleEnd);
+      document.removeEventListener('touchcancel', handleEnd);
     };
   }, [isResizing]);
 
-  const handleResizeStart = (e: React.MouseEvent) => {
+  const handleResizeStart = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
     setIsResizing(true);
   };
@@ -150,6 +173,7 @@ export function MessageInput({
       <div className="resize-handle" 
            ref={resizeHandleRef}
            onMouseDown={handleResizeStart}
+           onTouchStart={handleResizeStart}
            title="Drag to resize">
         <div className="resize-handle-bar"></div>
       </div>
