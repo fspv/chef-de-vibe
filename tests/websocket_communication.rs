@@ -366,35 +366,42 @@ async fn test_websocket_message_broadcasting() {
         .await
         .unwrap();
 
-    // Client 2 should receive the echoed input (but not client 1)
-    let response_result = timeout(Duration::from_secs(2), ws2.next()).await;
+    // Both clients should receive the echoed input
+    let client1_response = timeout(Duration::from_secs(2), ws1.next()).await;
+    let client2_response = timeout(Duration::from_secs(2), ws2.next()).await;
 
-    match response_result {
+    match client1_response {
         Ok(Some(Ok(Message::Text(text)))) => {
-            // Should receive the echoed input from client 1
-            assert!(text.contains("Hello from client 1") || text.contains("echo"));
+            // Client 1 should receive its own echoed input
+            assert!(text.contains("Hello from client 1"), "Client 1 should receive its own input");
+        }
+        _ => {
+            panic!("Client 1 should have received its own input message");
+        }
+    }
+
+    match client2_response {
+        Ok(Some(Ok(Message::Text(text)))) => {
+            // Client 2 should also receive client 1's input
+            assert!(text.contains("Hello from client 1"), "Client 2 should receive client 1's input");
         }
         _ => {
             panic!("Client 2 should have received client 1's input message");
         }
     }
 
-    // Both clients should receive Claude's response (if any)
-    let claude_response_result = timeout(Duration::from_secs(2), ws1.next()).await;
-    if let Ok(Some(Ok(Message::Text(text)))) = claude_response_result {
-        println!("Client 1 received: {text}");
-        // Could be the echoed input (which shouldn't happen per README) or Claude's response
-        // Accept any response for now to test basic WebSocket functionality
+    // Both clients should also receive Claude's response (if any)
+    let claude_response1 = timeout(Duration::from_secs(2), ws1.next()).await;
+    let claude_response2 = timeout(Duration::from_secs(2), ws2.next()).await;
+    
+    if let Ok(Some(Ok(Message::Text(text)))) = claude_response1 {
+        println!("Client 1 received Claude response: {text}");
         assert!(!text.is_empty());
-
-        // Client 2 should also receive some response
-        let client2_response = timeout(Duration::from_secs(2), ws2.next()).await;
-        if let Ok(Some(Ok(Message::Text(text2)))) = client2_response {
-            println!("Client 2 received: {text2}");
-            assert!(!text2.is_empty());
-        }
-    } else {
-        panic!("Client 1 should have received client 1's input message");
+    }
+    
+    if let Ok(Some(Ok(Message::Text(text)))) = claude_response2 {
+        println!("Client 2 received Claude response: {text}");
+        assert!(!text.is_empty());
     }
 
     // Clean up
@@ -627,8 +634,8 @@ async fn test_websocket_client_input_echoing_to_other_clients() {
         .await
         .unwrap();
 
-    // Clients 2 and 3 should receive the echoed input (but not client 1)
-    // NOTE: This test verifies that client input is broadcast to OTHER clients, not the sender
+    // ALL clients (including client 1) should receive the echoed input
+    // NOTE: This test verifies that client input is broadcast to ALL clients, including the sender
 
     // Try to receive on client 2
     let client2_result = timeout(Duration::from_secs(2), ws2.next()).await;
@@ -661,17 +668,18 @@ async fn test_websocket_client_input_echoing_to_other_clients() {
         }
     }
 
-    // Client 1 should NOT receive its own message back (per README specification)
-    let client1_result = timeout(Duration::from_millis(500), ws1.next()).await;
-    if let Ok(Some(Ok(Message::Text(text)))) = client1_result {
-        // If client 1 receives any message, it should be from Claude, not an echo of its own input
-        assert!(
-            !text.contains("Hello from client 1") || text.contains("Mock Claude received"),
-            "Client 1 should NOT receive an echo of its own input message"
-        );
-        // Claude response (containing "Mock Claude received") is acceptable
-    } else {
-        // Timeout or other outcomes are expected - client 1 should not receive echo of its own message
+    // Client 1 SHOULD also receive its own message back (per updated specification)
+    let client1_result = timeout(Duration::from_secs(2), ws1.next()).await;
+    match client1_result {
+        Ok(Some(Ok(Message::Text(text)))) => {
+            assert!(
+                text.contains("Hello from client 1") || text.contains("Mock Claude received"),
+                "Client 1 should also receive its own input message. Received: {text}"
+            );
+        }
+        _ => {
+            panic!("Client 1 should have received its own input message");
+        }
     }
 
     // Clean up
@@ -981,10 +989,15 @@ async fn test_multiple_client_message_broadcasting_sequence() {
     let msg1 = r#"{"role": "user", "content": "Message from client 1"}"#;
     ws1.send(Message::Text(msg1.to_string())).await.unwrap();
 
-    // Clients 2 and 3 should receive client 1's message
+    // ALL clients (including client 1) should receive client 1's message
+    let c1_receives_c1 = timeout(Duration::from_secs(2), ws1.next()).await;
     let c2_receives_c1 = timeout(Duration::from_secs(2), ws2.next()).await;
     let c3_receives_c1 = timeout(Duration::from_secs(2), ws3.next()).await;
 
+    assert!(
+        matches!(c1_receives_c1, Ok(Some(Ok(Message::Text(_))))),
+        "Client 1 should receive its own message"
+    );
     assert!(
         matches!(c2_receives_c1, Ok(Some(Ok(Message::Text(_))))),
         "Client 2 should receive client 1's message"
@@ -1004,9 +1017,10 @@ async fn test_multiple_client_message_broadcasting_sequence() {
     // Brief delay after sending to allow broadcast processing
     tokio::time::sleep(Duration::from_millis(200)).await;
 
-    // Clients 1 and 3 should receive client 2's message (but not client 2 itself)
+    // ALL clients should receive client 2's message (including client 2 itself)
     // Collect multiple messages to handle race conditions with Claude responses
     let mut c1_messages = Vec::new();
+    let mut c2_messages = Vec::new();
     let mut c3_messages = Vec::new();
 
     // Collect messages for longer duration to account for potential delays
@@ -1018,15 +1032,23 @@ async fn test_multiple_client_message_broadcasting_sequence() {
             c1_messages.push(text);
         }
         if let Ok(Some(Ok(Message::Text(text)))) =
+            timeout(Duration::from_millis(200), ws2.next()).await
+        {
+            c2_messages.push(text);
+        }
+        if let Ok(Some(Ok(Message::Text(text)))) =
             timeout(Duration::from_millis(200), ws3.next()).await
         {
             c3_messages.push(text);
         }
 
-        // Break early if both clients have received client 2's message
+        // Break early if all clients have received client 2's message
         if c1_messages
             .iter()
             .any(|msg| msg.contains("Message from client 2"))
+            && c2_messages
+                .iter()
+                .any(|msg| msg.contains("Message from client 2"))
             && c3_messages
                 .iter()
                 .any(|msg| msg.contains("Message from client 2"))
@@ -1041,6 +1063,14 @@ async fn test_multiple_client_message_broadcasting_sequence() {
             .iter()
             .any(|msg| msg.contains("Message from client 2")),
         "Client 1 should receive client 2's message. Received: {c1_messages:?}"
+    );
+
+    // Client 2 should have received its own message
+    assert!(
+        c2_messages
+            .iter()
+            .any(|msg| msg.contains("Message from client 2")),
+        "Client 2 should receive its own message. Received: {c2_messages:?}"
     );
 
     // Client 3 should have received client 2's message

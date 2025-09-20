@@ -129,22 +129,14 @@ fn spawn_broadcast_handler(
                     content,
                     sender_client_id,
                 } => {
-                    // Only send to clients that are NOT the sender
-                    if sender_client_id == &client_id {
-                        debug!(
-                            client_id = %client_id,
-                            "Skipping client input broadcast (from this client)"
-                        );
-                        None
-                    } else {
-                        debug!(
-                            client_id = %client_id,
-                            sender_client_id = %sender_client_id,
-                            content_length = content.len(),
-                            "Received client input to broadcast (not from this client)"
-                        );
-                        Some(content.clone())
-                    }
+                    // Send to ALL clients (including the sender)
+                    debug!(
+                        client_id = %client_id,
+                        sender_client_id = %sender_client_id,
+                        content_length = content.len(),
+                        "Received client input to broadcast to all clients"
+                    );
+                    Some(content.clone())
                 }
                 BroadcastMessage::Disconnect => {
                     info!(
@@ -253,16 +245,15 @@ async fn handle_text_message(
         "Message successfully enqueued for Claude"
     );
 
-    // Broadcast to all OTHER clients (not the sender) using session broadcast
+    // Broadcast to ALL clients (including the sender) using session broadcast
     let clients = session.get_clients().await;
-    let other_clients_count = clients.iter().filter(|c| c.id != client_id).count();
+    let other_clients_count = clients.len();
 
     debug!(
         client_id = %client_id,
         session_id = %session_id,
         total_clients = clients.len(),
-        other_clients = other_clients_count,
-        "Broadcasting client input to other clients"
+        "Broadcasting client input to all clients"
     );
 
     if other_clients_count > 0 {
@@ -282,14 +273,14 @@ async fn handle_text_message(
             debug!(
                 client_id = %client_id,
                 session_id = %session_id,
-                "Successfully broadcast client input to other clients"
+                "Successfully broadcast client input to all clients"
             );
         }
     } else {
         debug!(
             client_id = %client_id,
             session_id = %session_id,
-            "No other clients to broadcast to"
+            "No clients to broadcast to"
         );
     }
 }

@@ -590,7 +590,7 @@ For GET /sessions/{session_id}:
 3. **Client A** sends message
    - Server adds to write queue
    - Writes to Claude stdin
-   - Broadcasts to Client B only (not back to Client A)
+   - Broadcasts to ALL clients (including Client A)
 
 4. **Claude responds**
    - Server broadcasts response to both Client A and Client B
@@ -817,7 +817,7 @@ Each session maintains a FIFO write queue containing:
 ### 7.3 Broadcast Logic
 When client sends a message:
 - Add to session's write queue
-- Broadcast to all OTHER connected clients (not sender)
+- Broadcast to ALL connected clients (including sender)
 - Write to Claude stdin when queue position reached
 - Claude's response is broadcast to ALL clients
 
@@ -831,7 +831,7 @@ WebSocket Server receives
     ↓
 Add to session write queue
     ↓
-Broadcast to Clients B, C, D (not A)
+Broadcast to ALL Clients (A, B, C, D)
     ↓
 Write to Claude stdin (when queue position reached)
 ```
@@ -954,7 +954,7 @@ WebSocket client object should contain:
 1. Each session_id maps to at most one Claude process
 2. Session IDs are globally unique across all projects
 3. Write queue processes messages in FIFO order
-4. Clients don't receive their own input echoed back
+4. All clients receive all messages (including their own input)
 5. All clients receive Claude output
 6. Background workers complete even if client disconnects
 7. No buffering when no clients connected
