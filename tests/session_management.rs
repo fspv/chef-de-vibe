@@ -31,10 +31,10 @@ fn create_test_session_file(
     let session_file = project_path.join(format!("{session_id}.jsonl"));
     let content = format!(
         r#"{{"sessionId": "{session_id}", "cwd": "{cwd}", "type": "start"}}
-{{"type": "user", "message": {{"role": "user", "content": "Hello Claude"}}}}
-{{"type": "assistant", "message": {{"role": "assistant", "content": [{{"type": "text", "text": "Hello! How can I help you today?"}}]}}}}
-{{"type": "user", "message": {{"role": "user", "content": "What's 2+2?"}}}}
-{{"type": "assistant", "message": {{"role": "assistant", "content": [{{"type": "text", "text": "2 + 2 equals 4."}}]}}}}
+{{"sessionId": "{session_id}", "type": "user", "message": {{"role": "user", "content": "Hello Claude"}}}}
+{{"sessionId": "{session_id}", "type": "assistant", "message": {{"role": "assistant", "content": [{{"type": "text", "text": "Hello! How can I help you today?"}}]}}}}
+{{"sessionId": "{session_id}", "type": "user", "message": {{"role": "user", "content": "What's 2+2?"}}}}
+{{"sessionId": "{session_id}", "type": "assistant", "message": {{"role": "assistant", "content": [{{"type": "text", "text": "2 + 2 equals 4."}}]}}}}
 "#
     );
 
@@ -185,16 +185,22 @@ async fn test_list_sessions_with_disk_sessions() {
     assert_eq!(response.status(), 200);
 
     let body: ListSessionsResponse = response.json().await.unwrap();
-    // Sessions without summaries should NOT be listed
+    // Sessions without summaries should now be listed with fallback summaries
     assert_eq!(
         body.sessions.len(),
-        0,
-        "Sessions without summaries should not be listed"
+        2,
+        "Sessions without summaries should be listed with fallback summaries"
     );
 
     // All sessions should be inactive since no processes are running
     for session in &body.sessions {
         assert!(!session.active);
+        // Should have fallback summary from first user message
+        assert_eq!(
+            session.summary,
+            Some("Hello Claude".to_string()),
+            "Session should have fallback summary from first user message"
+        );
     }
 }
 
@@ -257,15 +263,17 @@ async fn test_list_sessions_with_summaries() {
         Some("2025-09-19T10:01:00Z".to_string())
     );
 
-    // The session without summary should NOT be found (it's not active and has no summary)
+    // The session without summary should now be found with fallback summary
     let session_without_summary = body
         .sessions
         .iter()
-        .find(|s| s.session_id == "active-session");
+        .find(|s| s.session_id == "active-session")
+        .expect("Session without summary should now be listed with fallback");
 
-    assert!(
-        session_without_summary.is_none(),
-        "Session without summary should not be listed when not active"
+    assert_eq!(
+        session_without_summary.summary,
+        Some("First user message here".to_string()),
+        "Session should have fallback summary from first user message"
     );
 }
 
@@ -636,12 +644,12 @@ async fn test_ping_pong_active_session_first_user_message_as_summary() {
     fs::create_dir_all(&work_dir).unwrap();
 
     let session_id = "ping-pong-session-test";
-    
+
     // Calculate the project folder path that Claude will use
     let project_folder = format!("-{}", work_dir.display().to_string().replace('/', "-"));
     let project_path = server.mock.projects_dir.join(&project_folder);
     fs::create_dir_all(&project_path).unwrap();
-    
+
     // Path where the session file should be written
     let session_file_path = project_path.join(format!("{session_id}.jsonl"));
 
@@ -659,7 +667,7 @@ async fn test_ping_pong_active_session_first_user_message_as_summary() {
     // 1. First respond with the session ID to complete the handshake
     // 2. Then use write_file control command to create the journal file
     let session_id_response = format!(r#"{{"sessionId": "{session_id}"}}"#);
-    
+
     let write_command = serde_json::json!({
         "control": "write_file",
         "path": session_file_path.to_string_lossy(),
@@ -673,8 +681,8 @@ async fn test_ping_pong_active_session_first_user_message_as_summary() {
         working_dir: work_dir.clone(),
         resume: false,
         bootstrap_messages: vec![
-            session_id_response,      // First, respond with session ID for handshake
-            write_command,           // Then, write the journal file
+            session_id_response, // First, respond with session ID for handshake
+            write_command,       // Then, write the journal file
         ],
     };
 
@@ -710,7 +718,10 @@ async fn test_ping_pong_active_session_first_user_message_as_summary() {
         .expect("Ping-pong session should be in the list");
 
     // Verify the session is active
-    assert!(ping_pong_session.active, "Session should be marked as active");
+    assert!(
+        ping_pong_session.active,
+        "Session should be marked as active"
+    );
 
     // Verify the first user message "ping" appears as the summary
     assert_eq!(
@@ -727,5 +738,405 @@ async fn test_ping_pong_active_session_first_user_message_as_summary() {
     assert_eq!(
         ping_pong_session.latest_message_date,
         Some("2025-09-20T09:39:10.179Z".to_string())
+    );
+}
+
+// ============== Edge Case Tests ==============
+
+#[tokio::test]
+#[serial]
+async fn test_list_sessions_multiple_user_messages_chronological_order() {
+    let server = TestServer::new().await;
+
+    // Create session with multiple user messages with different timestamps
+    let project_path = server.mock.projects_dir.join("project-multi-msg");
+    fs::create_dir_all(&project_path).unwrap();
+
+    let session_file = project_path.join("multi-msg-session.jsonl");
+    let content = r#"{"sessionId": "multi-msg", "cwd": "/home/user/project", "type": "start"}
+{"sessionId": "multi-msg", "type": "user", "message": {"role": "user", "content": "Third message"}, "timestamp": "2025-09-19T12:00:00Z"}
+{"sessionId": "multi-msg", "type": "user", "message": {"role": "user", "content": "First message"}, "timestamp": "2025-09-19T10:00:00Z"}
+{"sessionId": "multi-msg", "type": "user", "message": {"role": "user", "content": "Second message"}, "timestamp": "2025-09-19T11:00:00Z"}"#;
+    fs::write(session_file, content).unwrap();
+
+    let client = Client::new();
+    let response = client
+        .get(format!("{}/api/v1/sessions", server.base_url))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 200);
+    let body: ListSessionsResponse = response.json().await.unwrap();
+
+    let session = body
+        .sessions
+        .iter()
+        .find(|s| s.session_id == "multi-msg")
+        .expect("Session should be found");
+
+    // Fallback summary should use the chronologically FIRST user message
+    assert_eq!(
+        session.summary,
+        Some("First message".to_string()),
+        "Should use chronologically first user message as fallback"
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn test_list_sessions_duplicate_session_ids_across_projects() {
+    let server = TestServer::new().await;
+
+    // Create same session ID in different projects
+    create_test_session_file(
+        &server.mock.projects_dir,
+        "project1",
+        "duplicate-session",
+        "/home/user/project1",
+    );
+
+    // Create another file with same session ID but different project
+    let project2_path = server.mock.projects_dir.join("project2");
+    fs::create_dir_all(&project2_path).unwrap();
+    let session_file2 = project2_path.join("duplicate-session.jsonl");
+    let content2 = r#"{"sessionId": "duplicate-session", "cwd": "/home/user/project2", "type": "start"}
+{"sessionId": "duplicate-session", "type": "user", "message": {"role": "user", "content": "Different message"}, "timestamp": "2025-09-19T14:00:00Z"}"#;
+    fs::write(session_file2, content2).unwrap();
+
+    // Also add a summary in project2
+    let summary_file = project2_path.join("summary.jsonl");
+    let summary_content = r#"{"type":"summary","summary":"Duplicate Session Summary","leafUuid":"dup-uuid"}
+{"sessionId": "duplicate-session", "uuid": "dup-uuid", "type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Response"}]}}"#;
+    fs::write(summary_file, summary_content).unwrap();
+
+    let client = Client::new();
+    let response = client
+        .get(format!("{}/api/v1/sessions", server.base_url))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 200);
+    let body: ListSessionsResponse = response.json().await.unwrap();
+
+    // Should only have one session with merged data
+    let duplicate_sessions: Vec<_> = body
+        .sessions
+        .iter()
+        .filter(|s| s.session_id == "duplicate-session")
+        .collect();
+
+    assert_eq!(
+        duplicate_sessions.len(),
+        1,
+        "Duplicate session IDs should be merged into one"
+    );
+
+    let merged_session = duplicate_sessions[0];
+    // Should have the summary from project2
+    assert_eq!(
+        merged_session.summary,
+        Some("Duplicate Session Summary".to_string())
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn test_list_sessions_orphaned_summaries() {
+    let server = TestServer::new().await;
+
+    let project_path = server.mock.projects_dir.join("project-orphaned");
+    fs::create_dir_all(&project_path).unwrap();
+
+    // Create orphaned summary (points to non-existent UUID)
+    let orphan_file = project_path.join("orphan.jsonl");
+    let orphan_content =
+        r#"{"type":"summary","summary":"Orphaned Summary","leafUuid":"non-existent-uuid"}"#;
+    fs::write(orphan_file, orphan_content).unwrap();
+
+    // Create a valid session
+    create_test_session_file(
+        &server.mock.projects_dir,
+        "project-orphaned",
+        "valid-session",
+        "/home/user/valid",
+    );
+
+    let client = Client::new();
+    let response = client
+        .get(format!("{}/api/v1/sessions", server.base_url))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 200);
+    let body: ListSessionsResponse = response.json().await.unwrap();
+
+    // Should only find the valid session, not crash on orphaned summary
+    assert_eq!(body.sessions.len(), 1);
+    assert_eq!(body.sessions[0].session_id, "valid-session");
+}
+
+#[tokio::test]
+#[serial]
+async fn test_list_sessions_mixed_valid_invalid_json() {
+    let server = TestServer::new().await;
+
+    let project_path = server.mock.projects_dir.join("project-mixed");
+    fs::create_dir_all(&project_path).unwrap();
+
+    let mixed_file = project_path.join("mixed-json.jsonl");
+    let mixed_content = r#"{"sessionId": "mixed-session", "cwd": "/home/user/mixed", "type": "start"}
+INVALID JSON LINE HERE
+{"sessionId": "mixed-session", "type": "user", "message": {"role": "user", "content": "Valid message"}}
+{broken json
+{"sessionId": "mixed-session", "type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Response"}]}}"#;
+    fs::write(mixed_file, mixed_content).unwrap();
+
+    let client = Client::new();
+    let response = client
+        .get(format!("{}/api/v1/sessions", server.base_url))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 200);
+    let body: ListSessionsResponse = response.json().await.unwrap();
+
+    // Should process valid lines and skip invalid ones
+    let session = body
+        .sessions
+        .iter()
+        .find(|s| s.session_id == "mixed-session")
+        .expect("Should process valid lines despite invalid ones");
+
+    assert_eq!(
+        session.summary,
+        Some("Valid message".to_string()),
+        "Should extract valid user message despite invalid lines"
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn test_list_sessions_empty_user_messages() {
+    let server = TestServer::new().await;
+
+    let project_path = server.mock.projects_dir.join("project-empty");
+    fs::create_dir_all(&project_path).unwrap();
+
+    // Session with empty user message
+    let empty_msg_file = project_path.join("empty-msg.jsonl");
+    let empty_content = r#"{"sessionId": "empty-msg", "cwd": "/home/user/empty", "type": "start"}
+{"sessionId": "empty-msg", "type": "user", "message": {"role": "user", "content": ""}}"#;
+    fs::write(empty_msg_file, empty_content).unwrap();
+
+    // Session with missing content field
+    let missing_content_file = project_path.join("missing-content.jsonl");
+    let missing_content = r#"{"sessionId": "missing-content", "cwd": "/home/user/missing", "type": "start"}
+{"sessionId": "missing-content", "type": "user", "message": {"role": "user"}}"#;
+    fs::write(missing_content_file, missing_content).unwrap();
+
+    let client = Client::new();
+    let response = client
+        .get(format!("{}/api/v1/sessions", server.base_url))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 200);
+    let body: ListSessionsResponse = response.json().await.unwrap();
+
+    // Find sessions with empty/missing content
+    let empty_msg_session = body
+        .sessions
+        .iter()
+        .find(|s| s.session_id == "empty-msg")
+        .expect("Should find empty message session");
+
+    assert_eq!(
+        empty_msg_session.summary,
+        Some(String::new()),
+        "Empty message should result in empty summary"
+    );
+
+    let missing_content_session = body
+        .sessions
+        .iter()
+        .find(|s| s.session_id == "missing-content")
+        .expect("Should find missing content session");
+
+    assert_eq!(
+        missing_content_session.summary,
+        Some("No content".to_string()),
+        "Missing content should fallback to 'No content'"
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn test_list_sessions_special_characters() {
+    let server = TestServer::new().await;
+
+    let project_path = server.mock.projects_dir.join("project-special");
+    fs::create_dir_all(&project_path).unwrap();
+
+    // Session with special characters in various fields
+    let special_file = project_path.join("special-chars.jsonl");
+    let special_content = r#"{"sessionId": "session-with-émojis-🎉", "cwd": "/home/user/path with spaces/项目", "type": "start"}
+{"sessionId": "session-with-émojis-🎉", "type": "user", "message": {"role": "user", "content": "Hello 世界! 🌍 How's the weather?"}}
+{"type":"summary","summary":"Unicode Summary: 测试 🔥","leafUuid":"special-uuid"}
+{"sessionId": "session-with-émojis-🎉", "uuid": "special-uuid", "type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Response with émojis 🎨"}]}}"#;
+    fs::write(special_file, special_content).unwrap();
+
+    let client = Client::new();
+    let response = client
+        .get(format!("{}/api/v1/sessions", server.base_url))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 200);
+    let body: ListSessionsResponse = response.json().await.unwrap();
+
+    let special_session = body
+        .sessions
+        .iter()
+        .find(|s| s.session_id == "session-with-émojis-🎉")
+        .expect("Should handle special characters in session ID");
+
+    assert_eq!(
+        special_session.summary,
+        Some("Unicode Summary: 测试 🔥".to_string()),
+        "Should handle Unicode and emojis in summary"
+    );
+
+    assert_eq!(
+        special_session.working_directory.to_string_lossy(),
+        "/home/user/path with spaces/项目",
+        "Should handle spaces and Unicode in paths"
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn test_list_sessions_missing_timestamps() {
+    let server = TestServer::new().await;
+
+    let project_path = server.mock.projects_dir.join("project-no-timestamps");
+    fs::create_dir_all(&project_path).unwrap();
+
+    // Session without any timestamps
+    let no_timestamp_file = project_path.join("no-timestamps.jsonl");
+    let no_timestamp_content = r#"{"sessionId": "no-timestamps", "cwd": "/home/user/project", "type": "start"}
+{"sessionId": "no-timestamps", "type": "user", "message": {"role": "user", "content": "Message without timestamp"}}
+{"sessionId": "no-timestamps", "type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Response"}]}}"#;
+    fs::write(no_timestamp_file, no_timestamp_content).unwrap();
+
+    let client = Client::new();
+    let response = client
+        .get(format!("{}/api/v1/sessions", server.base_url))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 200);
+    let body: ListSessionsResponse = response.json().await.unwrap();
+
+    let no_timestamp_session = body
+        .sessions
+        .iter()
+        .find(|s| s.session_id == "no-timestamps")
+        .expect("Should handle sessions without timestamps");
+
+    // Should still have the fallback summary from first user message
+    assert_eq!(
+        no_timestamp_session.summary,
+        Some("Message without timestamp".to_string())
+    );
+
+    // Timestamp fields should be None
+    assert_eq!(no_timestamp_session.earliest_message_date, None);
+    assert_eq!(no_timestamp_session.latest_message_date, None);
+}
+
+#[tokio::test]
+#[serial]
+async fn test_list_sessions_large_scale() {
+    let server = TestServer::new().await;
+
+    // Create 50+ sessions across multiple projects
+    for i in 0..55 {
+        let project_name = format!("project-{}", i % 10); // Distribute across 10 projects
+        let session_id = format!("session-{i:03}");
+        let cwd = format!("/home/user/project{i}");
+
+        if i % 3 == 0 {
+            // Every third session gets a summary
+            let project_path = server.mock.projects_dir.join(&project_name);
+            fs::create_dir_all(&project_path).unwrap();
+
+            let summary_file = project_path.join(format!("summary-{i}.jsonl"));
+            let summary_content = format!(
+                r#"{{"type":"summary","summary":"Summary for session {i}","leafUuid":"uuid-{i}"}}"#
+            );
+            fs::write(summary_file, summary_content).unwrap();
+
+            let session_file = project_path.join(format!("{session_id}.jsonl"));
+            let session_content = format!(
+                r#"{{"sessionId": "{session_id}", "cwd": "{cwd}", "type": "start"}}
+{{"sessionId": "{session_id}", "type": "user", "message": {{"role": "user", "content": "Message {i}"}}}}
+{{"sessionId": "{session_id}", "uuid": "uuid-{i}", "type": "assistant", "message": {{"role": "assistant", "content": [{{"type": "text", "text": "Response"}}]}}}}"#
+            );
+            fs::write(session_file, session_content).unwrap();
+        } else {
+            // Others don't have summaries
+            create_test_session_file(&server.mock.projects_dir, &project_name, &session_id, &cwd);
+        }
+    }
+
+    let client = Client::new();
+    let start = std::time::Instant::now();
+
+    let response = client
+        .get(format!("{}/api/v1/sessions", server.base_url))
+        .send()
+        .await
+        .unwrap();
+
+    let duration = start.elapsed();
+
+    assert_eq!(response.status(), 200);
+    let body: ListSessionsResponse = response.json().await.unwrap();
+
+    assert_eq!(body.sessions.len(), 55, "Should handle all 55 sessions");
+
+    // Verify mix of sessions with and without explicit summaries
+    let with_summaries = body
+        .sessions
+        .iter()
+        .filter(|s| {
+            s.summary
+                .as_ref()
+                .is_some_and(|sum| sum.starts_with("Summary"))
+        })
+        .count();
+    let with_fallback = body
+        .sessions
+        .iter()
+        .filter(|s| s.summary == Some("Hello Claude".to_string()))
+        .count();
+
+    assert!(with_summaries > 0, "Should have sessions with summaries");
+    assert!(
+        with_fallback > 0,
+        "Should have sessions with fallback summaries"
+    );
+
+    // Performance check - should complete in reasonable time
+    assert!(
+        duration.as_secs() < 5,
+        "Large scale list should complete within 5 seconds, took {duration:?}"
     );
 }

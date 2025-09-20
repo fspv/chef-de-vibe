@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tracing::{debug, error, instrument, warn};
+use tracing::{error, instrument, warn};
 use walkdir::WalkDir;
 
 pub struct SessionDiscovery<'a> {
@@ -44,27 +44,21 @@ impl<'a> SessionDiscovery<'a> {
             active_session_ids.push(session.get_id().await);
         }
 
-        // Scan disk for sessions WITH SUMMARIES (now in parallel)
-        let (disk_sessions_with_summaries, active_session_fallbacks) =
-            self.scan_disk_for_sessions(&active_session_ids);
+        // Scan disk for all sessions and prepare fallback summaries
+        let (disk_sessions, session_fallbacks) = self.scan_disk_for_sessions();
 
-        // Add all sessions that have summaries (these are complete/inactive sessions)
-        for mut session in disk_sessions_with_summaries {
+        // Add all sessions found on disk (both with and without summaries)
+        for mut session in disk_sessions {
             // Mark as active if it's in the active list
             session.active = active_session_ids.contains(&session.session_id);
-            
-            // If active and no summary, try to use fallback
-            if session.active && session.summary.is_none() {
-                if let Some(fallback) = active_session_fallbacks.get(&session.session_id) {
+
+            // If no summary, try to use fallback
+            if session.summary.is_none() {
+                if let Some(fallback) = session_fallbacks.get(&session.session_id) {
                     session.summary = Some(fallback.clone());
-                    debug!(
-                        session_id = %session.session_id,
-                        fallback_summary = %fallback,
-                        "Applied fallback summary to active session"
-                    );
                 }
             }
-            
+
             sessions.push(session);
         }
 
@@ -73,14 +67,7 @@ impl<'a> SessionDiscovery<'a> {
             let session_id = active_session.get_id().await;
             if !sessions.iter().any(|s| s.session_id == session_id) {
                 // Try to get the first user message as fallback from our scan
-                let fallback_summary = active_session_fallbacks.get(&session_id).cloned();
-
-                debug!(
-                    session_id = %session_id,
-                    has_fallback = %fallback_summary.is_some(),
-                    fallback_count = %active_session_fallbacks.len(),
-                    "Processing active session not found with summaries"
-                );
+                let fallback_summary = session_fallbacks.get(&session_id).cloned();
 
                 if fallback_summary.is_none() {
                     warn!(
@@ -148,10 +135,7 @@ impl<'a> SessionDiscovery<'a> {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn scan_disk_for_sessions(
-        &self,
-        active_session_ids: &[String],
-    ) -> (Vec<SessionInfo>, HashMap<String, String>) {
+    fn scan_disk_for_sessions(&self) -> (Vec<SessionInfo>, HashMap<String, String>) {
         struct FileData {
             summaries: Vec<(String, String)>, // leafUuid -> summary text
             lines: Vec<serde_json::Value>,
@@ -267,26 +251,25 @@ impl<'a> SessionDiscovery<'a> {
                                     .and_then(|c| c.as_str())
                                     .map_or_else(|| "No content".to_string(), String::from);
 
-                                debug!(
-                                    session_id = %session_id,
-                                    message = %message_content,
-                                    "Found user message for session"
-                                );
-
                                 local_first_messages
                                     .entry(session_id.to_string())
                                     .and_modify(|(existing_msg, existing_ts)| {
+                                        // Only update if we have timestamps to compare
                                         if let (Some(new_ts), Some(old_ts)) =
                                             (&timestamp, existing_ts.as_ref())
                                         {
+                                            // Replace if new timestamp is earlier
                                             if new_ts < old_ts {
                                                 existing_msg.clone_from(&message_content);
                                                 existing_ts.clone_from(&timestamp);
                                             }
-                                        } else if existing_ts.is_none() {
+                                        } else if existing_ts.is_none() && timestamp.is_some() {
+                                            // Replace if we didn't have a timestamp but now we do
                                             existing_msg.clone_from(&message_content);
                                             existing_ts.clone_from(&timestamp);
                                         }
+                                        // If both are None or existing has timestamp but new doesn't,
+                                        // keep the existing (first encountered) message
                                     })
                                     .or_insert((message_content, timestamp));
                             }
@@ -386,47 +369,41 @@ impl<'a> SessionDiscovery<'a> {
                 first_user_messages
                     .entry(session_id)
                     .and_modify(|(existing_msg, existing_ts)| {
-                        // Keep the earliest message
+                        // Keep the earliest message based on timestamps
                         if let (Some(new_ts), Some(old_ts)) = (&timestamp, existing_ts.as_ref()) {
                             if new_ts < old_ts {
                                 existing_msg.clone_from(&msg);
                                 existing_ts.clone_from(&timestamp);
                             }
-                        } else if existing_ts.is_none() {
+                        } else if existing_ts.is_none() && timestamp.is_some() {
+                            // Replace if we didn't have a timestamp but now we do
                             existing_msg.clone_from(&msg);
                             existing_ts.clone_from(&timestamp);
                         }
+                        // If both are None or existing has timestamp but new doesn't,
+                        // keep the existing (first encountered) message
                     })
                     .or_insert((msg, timestamp));
             }
         }
 
-        // Prepare fallback summaries for all sessions (not just active ones)
-        let mut active_session_fallbacks: HashMap<String, String> = HashMap::new();
+        // Prepare fallback summaries for all sessions
+        let mut session_fallbacks: HashMap<String, String> = HashMap::new();
         for (session_id, (first_msg, _)) in first_user_messages {
-            active_session_fallbacks.insert(session_id.clone(), first_msg);
-            debug!(
-                session_id = %session_id,
-                "Added fallback summary for session"
-            );
+            session_fallbacks.insert(session_id.clone(), first_msg);
         }
 
-        // Return sessions that have summaries OR are active sessions
+        // Return all sessions found on disk (with valid working directories)
         let mut sessions_to_return: Vec<SessionInfo> = Vec::new();
 
-        // First, add all sessions with summaries
-        for (session_id, session_info) in sessions {
-            if session_info.summary.is_some() && session_info.working_directory != PathBuf::new() {
-                sessions_to_return.push(session_info);
-            } else if active_session_ids.contains(&session_id)
-                && session_info.working_directory != PathBuf::new()
-            {
-                // Also include active sessions even without summaries
+        // Add all sessions with valid working directories
+        for (_session_id, session_info) in sessions {
+            if session_info.working_directory != PathBuf::new() {
                 sessions_to_return.push(session_info);
             }
         }
 
-        (sessions_to_return, active_session_fallbacks)
+        (sessions_to_return, session_fallbacks)
     }
 
     fn find_session_on_disk(
@@ -730,8 +707,8 @@ mod tests {
 
         let content = format!(
             r#"{{"sessionId": "{session_id}", "cwd": "{working_dir}", "type": "start"}}
-{{"type": "user", "message": {{"role": "user", "content": "Hello"}}}}
-{{"type": "assistant", "message": {{"role": "assistant", "content": [{{"type": "text", "text": "Hi there!"}}]}}}}
+{{"sessionId": "{session_id}", "type": "user", "message": {{"role": "user", "content": "Hello"}}}}
+{{"sessionId": "{session_id}", "type": "assistant", "message": {{"role": "assistant", "content": [{{"type": "text", "text": "Hi there!"}}]}}}}
 "#
         );
 
@@ -768,13 +745,28 @@ mod tests {
         let manager = SessionManager::new(config.clone());
         let discovery = SessionDiscovery::new(&config, &manager);
 
-        // Sessions without summaries should NOT be returned
+        // Sessions without summaries should now be returned with fallback summaries
         let sessions = discovery.list_all_sessions().await.unwrap();
         assert_eq!(
             sessions.len(),
-            0,
-            "Sessions without summaries should not be listed"
+            2,
+            "Sessions without summaries should be listed with fallback summaries"
         );
+
+        // Verify that fallback summaries are applied (from first user message)
+        for session in &sessions {
+            assert!(
+                session.summary.is_some(),
+                "Session {} should have a fallback summary from first user message",
+                session.session_id
+            );
+            // The fallback summary should be "Hello" from the first user message
+            assert_eq!(
+                session.summary.as_ref().unwrap(),
+                "Hello",
+                "Fallback summary should be the first user message"
+            );
+        }
     }
 
     #[tokio::test]
@@ -902,25 +894,30 @@ mod tests {
         let manager = SessionManager::new(config.clone());
         let discovery = SessionDiscovery::new(&config, &manager);
 
-        // Without marking as active, session should NOT be listed (no summary)
+        // Sessions without summaries should now be listed with fallback summaries
         let sessions = discovery.list_all_sessions().await.unwrap();
         assert_eq!(
             sessions.len(),
-            0,
-            "Sessions without summaries should not be listed by default"
-        );
-
-        // Now simulate this being an active session
-        let active_ids = vec!["active-session".to_string()];
-        let (sessions_with_summaries, fallbacks) = discovery.scan_disk_for_sessions(&active_ids);
-
-        // Should find the session now because it's in the active list
-        assert_eq!(
-            sessions_with_summaries.len(),
             1,
-            "Active sessions should be included even without summaries"
+            "Sessions without summaries should be listed with fallback summaries"
         );
-        assert_eq!(sessions_with_summaries[0].session_id, "active-session");
+        assert_eq!(sessions[0].session_id, "active-session");
+        assert_eq!(
+            sessions[0].summary,
+            Some("Active message".to_string()),
+            "Session should have fallback summary from first user message"
+        );
+
+        // Test scan_disk_for_sessions directly
+        let (sessions_found, fallbacks) = discovery.scan_disk_for_sessions();
+
+        // Should find the session
+        assert_eq!(
+            sessions_found.len(),
+            1,
+            "Sessions should be found even without summaries"
+        );
+        assert_eq!(sessions_found[0].session_id, "active-session");
 
         // Should also have a fallback summary
         assert_eq!(

@@ -361,10 +361,7 @@ mod tests {
 
         let config = Config::from_env().unwrap();
         // The path from find_claude_in_path should match our test binary
-        assert_eq!(
-            config.claude_binary_path.canonicalize().unwrap(),
-            binary_path.canonicalize().unwrap()
-        );
+        assert_eq!(config.claude_binary_path, binary_path);
 
         // Clean up env vars
         env::remove_var("HTTP_LISTEN_ADDRESS");

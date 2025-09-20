@@ -382,14 +382,14 @@ Location: `~/.claude/projects/my-project/95157a33-cc50-4735-be3b-6962140b0d16.js
    - Look for entries where `uuid == leafUuid`
    - Extract the `sessionId` from the matching entry
 
-4. **Handle active sessions without summaries**:
-   - For sessions found without a summary (typically active sessions)
+4. **Handle sessions without summaries**:
+   - For any session found without a summary (including both active sessions and completed sessions without summaries)
    - Find the first message with `type == "user"` for that sessionId
    - Use the user message content as a fallback summary
 
 5. **Build final mapping**:
    ```
-   sessionId → summary text (or first user message for active sessions)
+   sessionId → summary text (or first user message as fallback for sessions without summaries)
    ```
 
 #### Example Output
@@ -402,7 +402,7 @@ Summary: "Minimalist System Message Design for Chat Interface"
 #### Important Notes
 
 - **File naming**: Files are named with UUIDs but not necessarily the session ID (e.g., `95157a33-cc50-4735-be3b-6962140b0d16.jsonl` could contain any session)
-- **Active sessions**: Active sessions won't have summaries since summaries are only created after a session ends. For active sessions, the backend extracts the first user message as a fallback "summary"
+- **Sessions without summaries**: Both active sessions and some completed sessions may not have summaries. For all such sessions, the backend extracts the first user message as a fallback "summary"
 - **Multiple summaries in a file**: A single file may contain summaries pointing to different sessions (the relationship between files and sessions is not 1:1)
 - **Orphaned summaries**: Some summaries might reference messages that no longer exist in the project files
 

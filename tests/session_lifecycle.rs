@@ -277,11 +277,11 @@ async fn test_session_id_mismatch_in_file() {
 
     let session_file = project_dir.join("some-random-uuid.jsonl");
     let content_with_different_id = r#"{"sessionId": "different-session-id", "cwd": "/home/user/project", "type": "start"}
-{"type": "user", "message": {"role": "user", "content": "Hello"}}"#;
+{"sessionId": "different-session-id", "type": "user", "message": {"role": "user", "content": "Hello"}}"#;
 
     fs::write(session_file, content_with_different_id).unwrap();
 
-    // List sessions should NOT show sessions without summaries
+    // List sessions should now show sessions without summaries (with fallback)
     let response = client
         .get(format!("{}/api/v1/sessions", server.base_url))
         .send()
@@ -291,12 +291,16 @@ async fn test_session_id_mismatch_in_file() {
     assert_eq!(response.status(), 200);
 
     let body: ListSessionsResponse = response.json().await.unwrap();
-    // Session without summary should not be listed
+    // Session without summary should now be listed with fallback summary
     assert_eq!(
         body.sessions.len(),
-        0,
-        "Sessions without summaries should not be listed"
+        1,
+        "Sessions without summaries should be listed with fallback"
     );
+
+    // Verify the session has the correct ID and fallback summary
+    assert_eq!(body.sessions[0].session_id, "different-session-id");
+    assert_eq!(body.sessions[0].summary, Some("Hello".to_string()));
 }
 
 #[tokio::test]

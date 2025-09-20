@@ -116,6 +116,7 @@ let bootstrap_messages = vec![
 
 5. **Cleanup**: The test framework automatically cleans up temporary directories after tests complete.
 
-## Debugging Tips
+## General tips
 
 - Use `RUST_LOG=debug` when running tests to see detailed logs of what the mock Claude binary is doing
+- Never run the entire test suite. It takes too long to run and you will time out. Instead run specifict test suites, for example `RUST_LOG=debug cargo test --test approval_system` or even individual tests.
