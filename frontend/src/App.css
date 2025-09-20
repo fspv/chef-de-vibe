@@ -3345,6 +3345,12 @@ pre,
   .approve-session-button {
     order: 1; /* Approve for Session in middle */
   }
+  
+  /* Fix raw JSON message container height on mobile */
+  .message-item.raw-json {
+    max-height: none !important;
+    overflow: visible !important;
+  }
 }
 
 .loading-spinner {
