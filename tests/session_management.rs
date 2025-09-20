@@ -624,3 +624,108 @@ async fn test_get_session_not_found() {
 
     assert_eq!(response.status(), 404);
 }
+
+#[tokio::test]
+#[serial]
+async fn test_ping_pong_active_session_first_user_message_as_summary() {
+    let server = TestServer::new().await;
+    let client = Client::new();
+
+    // Create a temporary work directory
+    let work_dir = server.mock.temp_dir.path().join("ping_pong_test");
+    fs::create_dir_all(&work_dir).unwrap();
+
+    let session_id = "ping-pong-session-test";
+    
+    // Calculate the project folder path that Claude will use
+    let project_folder = format!("-{}", work_dir.display().to_string().replace('/', "-"));
+    let project_path = server.mock.projects_dir.join(&project_folder);
+    fs::create_dir_all(&project_path).unwrap();
+    
+    // Path where the session file should be written
+    let session_file_path = project_path.join(format!("{session_id}.jsonl"));
+
+    // Create the session content that simulates the ping-pong conversation
+    let session_content = format!(
+        r#"{{"parentUuid":null,"isSidechain":false,"userType":"external","cwd":"{}","sessionId":"{}","version":"1.0.108","gitBranch":"master","type":"user","message":{{"role":"user","content":"ping"}},"uuid":"0136315c-067d-410c-abdd-95aeadcf7e82","timestamp":"2025-09-20T09:39:07.234Z"}}
+{{"parentUuid":"0136315c-067d-410c-abdd-95aeadcf7e82","isSidechain":false,"userType":"external","cwd":"{}","sessionId":"{}","version":"1.0.108","gitBranch":"master","message":{{"id":"msg_01N1Xnc57sfsbeiXaf4aGdXK","type":"message","role":"assistant","model":"claude-opus-4-1-20250805","content":[{{"type":"text","text":"pong"}}],"stop_reason":null,"stop_sequence":null,"usage":{{"input_tokens":4,"cache_creation_input_tokens":19557,"cache_read_input_tokens":0,"cache_creation":{{"ephemeral_5m_input_tokens":19557,"ephemeral_1h_input_tokens":0}},"output_tokens":5,"service_tier":"standard"}}}},"requestId":"req_011CTKRuD4pxvgMZSghPgRxH","type":"assistant","uuid":"8d68843d-4578-471c-aeaa-83a47083329b","timestamp":"2025-09-20T09:39:10.179Z"}}"#,
+        work_dir.display(),
+        session_id,
+        work_dir.display(),
+        session_id
+    );
+
+    // Create bootstrap messages that will:
+    // 1. First respond with the session ID to complete the handshake
+    // 2. Then use write_file control command to create the journal file
+    let session_id_response = format!(r#"{{"sessionId": "{session_id}"}}"#);
+    
+    let write_command = serde_json::json!({
+        "control": "write_file",
+        "path": session_file_path.to_string_lossy(),
+        "content": session_content
+    })
+    .to_string();
+
+    // Create the active session via the API
+    let create_request = CreateSessionRequest {
+        session_id: session_id.to_string(),
+        working_dir: work_dir.clone(),
+        resume: false,
+        bootstrap_messages: vec![
+            session_id_response,      // First, respond with session ID for handshake
+            write_command,           // Then, write the journal file
+        ],
+    };
+
+    let response = client
+        .post(format!("{}/api/v1/sessions", server.base_url))
+        .json(&create_request)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 200);
+    let create_response: CreateSessionResponse = response.json().await.unwrap();
+    assert!(create_response.websocket_url.contains(session_id));
+
+    // Give a moment for the file to be written
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    // Now list sessions - the active session should appear with "ping" as summary
+    let response = client
+        .get(format!("{}/api/v1/sessions", server.base_url))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 200);
+    let list_response: ListSessionsResponse = response.json().await.unwrap();
+
+    // Find our ping-pong session
+    let ping_pong_session = list_response
+        .sessions
+        .iter()
+        .find(|s| s.session_id == session_id)
+        .expect("Ping-pong session should be in the list");
+
+    // Verify the session is active
+    assert!(ping_pong_session.active, "Session should be marked as active");
+
+    // Verify the first user message "ping" appears as the summary
+    assert_eq!(
+        ping_pong_session.summary,
+        Some("ping".to_string()),
+        "Active session should show first user message 'ping' as summary"
+    );
+
+    // Verify timestamps are present
+    assert_eq!(
+        ping_pong_session.earliest_message_date,
+        Some("2025-09-20T09:39:07.234Z".to_string())
+    );
+    assert_eq!(
+        ping_pong_session.latest_message_date,
+        Some("2025-09-20T09:39:10.179Z".to_string())
+    );
+}

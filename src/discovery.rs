@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tracing::{error, instrument, warn};
+use tracing::{debug, error, instrument, warn};
 use walkdir::WalkDir;
 
 pub struct SessionDiscovery<'a> {
@@ -52,6 +52,19 @@ impl<'a> SessionDiscovery<'a> {
         for mut session in disk_sessions_with_summaries {
             // Mark as active if it's in the active list
             session.active = active_session_ids.contains(&session.session_id);
+            
+            // If active and no summary, try to use fallback
+            if session.active && session.summary.is_none() {
+                if let Some(fallback) = active_session_fallbacks.get(&session.session_id) {
+                    session.summary = Some(fallback.clone());
+                    debug!(
+                        session_id = %session.session_id,
+                        fallback_summary = %fallback,
+                        "Applied fallback summary to active session"
+                    );
+                }
+            }
+            
             sessions.push(session);
         }
 
@@ -61,6 +74,13 @@ impl<'a> SessionDiscovery<'a> {
             if !sessions.iter().any(|s| s.session_id == session_id) {
                 // Try to get the first user message as fallback from our scan
                 let fallback_summary = active_session_fallbacks.get(&session_id).cloned();
+
+                debug!(
+                    session_id = %session_id,
+                    has_fallback = %fallback_summary.is_some(),
+                    fallback_count = %active_session_fallbacks.len(),
+                    "Processing active session not found with summaries"
+                );
 
                 if fallback_summary.is_none() {
                     warn!(
@@ -183,7 +203,6 @@ impl<'a> SessionDiscovery<'a> {
 
         // Phase 3: Process all lines in parallel to build session information
         let summaries = Arc::new(all_summaries);
-        let active_ids = Arc::new(active_session_ids.to_vec());
 
         // Process each file's data in parallel
         let processed_data: Vec<_> = file_data
@@ -230,42 +249,46 @@ impl<'a> SessionDiscovery<'a> {
                         }
                     }
 
-                    // Collect first user message for active sessions (as fallback for active sessions)
+                    // Collect first user message for all sessions (as fallback for active sessions without summaries)
                     if let Some(entry_type) = line.get("type").and_then(|v| v.as_str()) {
                         if entry_type == "user" {
                             if let Some(session_id) = line.get("sessionId").and_then(|v| v.as_str())
                             {
-                                // Only collect for active sessions
-                                if active_ids.contains(&session_id.to_string()) {
-                                    let timestamp = line
-                                        .get("timestamp")
-                                        .and_then(|v| v.as_str())
-                                        .map(String::from);
+                                // Always collect first user messages for all sessions
+                                let timestamp = line
+                                    .get("timestamp")
+                                    .and_then(|v| v.as_str())
+                                    .map(String::from);
 
-                                    // Extract user message content
-                                    let message_content = line
-                                        .get("message")
-                                        .and_then(|m| m.get("content"))
-                                        .and_then(|c| c.as_str())
-                                        .map_or_else(|| "No content".to_string(), String::from);
+                                // Extract user message content
+                                let message_content = line
+                                    .get("message")
+                                    .and_then(|m| m.get("content"))
+                                    .and_then(|c| c.as_str())
+                                    .map_or_else(|| "No content".to_string(), String::from);
 
-                                    local_first_messages
-                                        .entry(session_id.to_string())
-                                        .and_modify(|(existing_msg, existing_ts)| {
-                                            if let (Some(new_ts), Some(old_ts)) =
-                                                (&timestamp, existing_ts.as_ref())
-                                            {
-                                                if new_ts < old_ts {
-                                                    existing_msg.clone_from(&message_content);
-                                                    existing_ts.clone_from(&timestamp);
-                                                }
-                                            } else if existing_ts.is_none() {
+                                debug!(
+                                    session_id = %session_id,
+                                    message = %message_content,
+                                    "Found user message for session"
+                                );
+
+                                local_first_messages
+                                    .entry(session_id.to_string())
+                                    .and_modify(|(existing_msg, existing_ts)| {
+                                        if let (Some(new_ts), Some(old_ts)) =
+                                            (&timestamp, existing_ts.as_ref())
+                                        {
+                                            if new_ts < old_ts {
                                                 existing_msg.clone_from(&message_content);
                                                 existing_ts.clone_from(&timestamp);
                                             }
-                                        })
-                                        .or_insert((message_content, timestamp));
-                                }
+                                        } else if existing_ts.is_none() {
+                                            existing_msg.clone_from(&message_content);
+                                            existing_ts.clone_from(&timestamp);
+                                        }
+                                    })
+                                    .or_insert((message_content, timestamp));
                             }
                         }
                     }
@@ -378,10 +401,14 @@ impl<'a> SessionDiscovery<'a> {
             }
         }
 
-        // Prepare fallback summaries for active sessions only
+        // Prepare fallback summaries for all sessions (not just active ones)
         let mut active_session_fallbacks: HashMap<String, String> = HashMap::new();
         for (session_id, (first_msg, _)) in first_user_messages {
-            active_session_fallbacks.insert(session_id, first_msg);
+            active_session_fallbacks.insert(session_id.clone(), first_msg);
+            debug!(
+                session_id = %session_id,
+                "Added fallback summary for session"
+            );
         }
 
         // Return sessions that have summaries OR are active sessions
