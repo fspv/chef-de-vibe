@@ -3,7 +3,7 @@ import { useState } from 'react';
 interface MessageInfoButtonProps {
   timestamp?: number;
   messageType?: string;
-  additionalInfo?: Record<string, any>;
+  additionalInfo?: Record<string, unknown>;
 }
 
 export function MessageInfoButton({ timestamp, messageType, additionalInfo }: MessageInfoButtonProps) {

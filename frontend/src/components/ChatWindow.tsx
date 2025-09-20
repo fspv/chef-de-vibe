@@ -34,7 +34,7 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
   const [debugMode, setDebugMode] = useState(false);
   
   // Get initial mode from navigation state (when coming from new chat dialog)
-  const initialModeFromNav = (location.state as any)?.initialMode as PermissionMode | undefined;
+  const initialModeFromNav = (location.state as { initialMode?: PermissionMode })?.initialMode;
   const [currentMode, setCurrentMode] = useState<PermissionMode>(initialModeFromNav || 'default');
   const [hasSetInitialMode, setHasSetInitialMode] = useState(false);
   const messageListRef = useRef<MessageListRef>(null);
@@ -293,7 +293,7 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
       // Server will echo the message back, so we don't add it locally
       sendMessage(message);
     }
-  }, [sessionId, sessionDetails, onCreateSession, navigate, sendMessage, addMessage, debugMode, selectedDirectory, addLog, currentMode]);
+  }, [sessionId, sessionDetails, onCreateSession, navigate, sendMessage, addMessage, selectedDirectory, addLog, currentMode]);
 
   // Handle sending multiple messages (for control + user message)
   const handleSendMessages = useCallback(async (messages: string[]) => {
