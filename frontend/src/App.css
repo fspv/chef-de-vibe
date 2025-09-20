@@ -789,7 +789,7 @@ html, body {
 }
 
 .session-active-indicator {
-  color: #2ecc71;
+  color: #10a37f;
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -945,7 +945,7 @@ html, body {
 }
 
 .error button {
-  background-color: #e74c3c;
+  background-color: #dc2626;
   color: white;
   border: none;
   padding: 0.5rem 1rem;
@@ -1013,19 +1013,61 @@ html, body {
 }
 
 .session-status-indicator.status-green .status-dot {
-  background-color: #2ecc71;
-  box-shadow: 0 0 10px rgba(46, 204, 113, 0.5);
+  background-color: #10a37f;
+  box-shadow: 0 0 10px rgba(16, 163, 127, 0.5);
+  border: 2px solid #0d7d61;
+  position: relative;
+}
+
+.session-status-indicator.status-green .status-dot::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
+  line-height: 1;
 }
 
 .session-status-indicator.status-yellow .status-dot {
-  background-color: #f39c12;
-  box-shadow: 0 0 10px rgba(243, 156, 18, 0.5);
+  background-color: #fbbf24;
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+  border: 2px solid #d97706;
   animation: pulse 2s infinite;
+  position: relative;
+}
+
+.session-status-indicator.status-yellow .status-dot::after {
+  content: '!';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #7c2d12;
+  font-size: 16px;
+  font-weight: bold;
+  line-height: 1;
 }
 
 .session-status-indicator.status-red .status-dot {
-  background-color: #e74c3c;
-  box-shadow: 0 0 10px rgba(231, 76, 60, 0.5);
+  background-color: #dc2626;
+  box-shadow: 0 0 10px rgba(220, 38, 38, 0.5);
+  border: 2px solid #991b1b;
+  position: relative;
+}
+
+.session-status-indicator.status-red .status-dot::after {
+  content: '×';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 16px;
+  font-weight: bold;
+  line-height: 1;
 }
 
 @keyframes pulse {
@@ -1332,13 +1374,40 @@ html, body {
 }
 
 .connection-item.connected .connection-dot {
-  background-color: #2ecc71;
-  box-shadow: 0 0 6px rgba(46, 204, 113, 0.5);
+  background-color: #10a37f;
+  box-shadow: 0 0 6px rgba(16, 163, 127, 0.5);
+  border: 1px solid #0d7d61;
+  position: relative;
+}
+
+.connection-item.connected .connection-dot::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 4px;
+  height: 4px;
+  background-color: white;
+  border-radius: 50%;
 }
 
 .connection-item.disconnected .connection-dot {
-  background-color: #e74c3c;
-  box-shadow: 0 0 6px rgba(231, 76, 60, 0.5);
+  background-color: #dc2626;
+  box-shadow: 0 0 6px rgba(220, 38, 38, 0.5);
+  border: 1px solid #991b1b;
+  position: relative;
+}
+
+.connection-item.disconnected .connection-dot::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 1px;
+  background-color: white;
+  transform: translate(-50%, -50%);
 }
 
 .debug-mode-section {
@@ -1668,7 +1737,7 @@ html, body {
 }
 
 .message-item.raw-json {
-  border-left: 4px solid #e74c3c;
+  border-left: 4px solid #dc2626;
 }
 
 .message-header {
