@@ -373,7 +373,10 @@ async fn test_websocket_message_broadcasting() {
     match client1_response {
         Ok(Some(Ok(Message::Text(text)))) => {
             // Client 1 should receive its own echoed input
-            assert!(text.contains("Hello from client 1"), "Client 1 should receive its own input");
+            assert!(
+                text.contains("Hello from client 1"),
+                "Client 1 should receive its own input"
+            );
         }
         _ => {
             panic!("Client 1 should have received its own input message");
@@ -383,7 +386,10 @@ async fn test_websocket_message_broadcasting() {
     match client2_response {
         Ok(Some(Ok(Message::Text(text)))) => {
             // Client 2 should also receive client 1's input
-            assert!(text.contains("Hello from client 1"), "Client 2 should receive client 1's input");
+            assert!(
+                text.contains("Hello from client 1"),
+                "Client 2 should receive client 1's input"
+            );
         }
         _ => {
             panic!("Client 2 should have received client 1's input message");
@@ -393,12 +399,12 @@ async fn test_websocket_message_broadcasting() {
     // Both clients should also receive Claude's response (if any)
     let claude_response1 = timeout(Duration::from_secs(2), ws1.next()).await;
     let claude_response2 = timeout(Duration::from_secs(2), ws2.next()).await;
-    
+
     if let Ok(Some(Ok(Message::Text(text)))) = claude_response1 {
         println!("Client 1 received Claude response: {text}");
         assert!(!text.is_empty());
     }
-    
+
     if let Ok(Some(Ok(Message::Text(text)))) = claude_response2 {
         println!("Client 2 received Claude response: {text}");
         assert!(!text.is_empty());
