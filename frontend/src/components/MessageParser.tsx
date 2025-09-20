@@ -17,6 +17,7 @@ import { CollapsibleContent } from './CollapsibleContent';
 import { TodoList } from './TodoList';
 import { EditDiff } from './DiffViewer';
 import { ControlRequestMessage } from './ControlRequestMessage';
+import { MessageInfoButton } from './MessageInfoButton';
 import type { 
   ToolInputSchemas, 
   FileWriteInput, 
@@ -431,11 +432,7 @@ export function MessageParser({ data, timestamp, showRawJson, onApprove, onDeny,
       <div className="message-item raw-json">
         <div className="message-header">
           <span className="message-type">Raw JSON</span>
-          {timestamp && (
-            <span className="message-timestamp">
-              {new Date(timestamp).toLocaleTimeString()}
-            </span>
-          )}
+          <MessageInfoButton timestamp={timestamp} messageType="Raw JSON" />
         </div>
         <CollapsibleContent 
           content={JSON.stringify(data, null, 2)}
@@ -456,11 +453,7 @@ export function MessageParser({ data, timestamp, showRawJson, onApprove, onDeny,
         <div className="message-error fallback">
           <div className="message-header">
             <span className="message-type">❌ Parse Error - {parsed.messageType}</span>
-            {timestamp && (
-              <span className="message-timestamp">
-                {new Date(timestamp).toLocaleTimeString()}
-              </span>
-            )}
+            <MessageInfoButton timestamp={timestamp} messageType={parsed.messageType} />
           </div>
           <div className="error-details">
             <div className="error-message">
@@ -482,11 +475,7 @@ export function MessageParser({ data, timestamp, showRawJson, onApprove, onDeny,
     <div className="generic-message">
       <div className="message-header">
         <span className="message-type">{parsed.messageType}</span>
-        {timestamp && (
-          <span className="message-timestamp">
-            {new Date(timestamp).toLocaleTimeString()}
-          </span>
-        )}
+        <MessageInfoButton timestamp={timestamp} messageType={parsed.messageType} />
       </div>
       <CollapsibleContent 
         content={JSON.stringify(parsed.rawData, null, 2)}
@@ -510,11 +499,7 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeC
       <div className="user-message">
         <div className="message-role">
           👤 User
-          {timestamp && (
-            <span className="message-timestamp">
-              {new Date(timestamp).toLocaleTimeString()}
-            </span>
-          )}
+          <MessageInfoButton timestamp={timestamp} messageType="User Message" />
         </div>
         <div className="message-content-blocks">
           {Array.isArray(message.message.content) ? (
@@ -613,11 +598,7 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeC
       <div className="assistant-message">
         <div className="message-role">
           🤖 Assistant
-          {timestamp && (
-            <span className="message-timestamp">
-              {new Date(timestamp).toLocaleTimeString()}
-            </span>
-          )}
+          <MessageInfoButton timestamp={timestamp} messageType="Assistant Message" />
         </div>
         <div className="message-content-blocks">
           {message.message.content.map((block: Record<string, unknown>, index: number) => (

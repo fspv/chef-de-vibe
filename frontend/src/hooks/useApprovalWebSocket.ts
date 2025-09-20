@@ -12,7 +12,7 @@ export interface ApprovalWebSocketHookReturn {
   reconnect: () => void;
 }
 
-export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookReturn {
+export function useApprovalWebSocket(url: string | null, sessionId?: string | null): ApprovalWebSocketHookReturn {
   const [isConnected, setIsConnected] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<ApprovalRequest[]>([]);
   const [approvalMessages, setApprovalMessages] = useState<Array<{data: unknown; timestamp: number}>>([]);
@@ -21,10 +21,12 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
   const reconnectTimeoutRef = useRef<number | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const currentUrlRef = useRef<string | null>(null);
+  const sessionBoundWsRef = useRef<Map<string, WebSocket>>(new Map());
+  const currentSessionIdRef = useRef<string | null>(null);
 
   const handleMessage = useCallback((event: MessageEvent) => {
-    // Ignore messages if the WebSocket URL has changed
-    if (!wsRef.current || wsRef.current !== event.target) {
+    // Ignore messages if the WebSocket URL has changed or doesn't match current URL/session
+    if (!wsRef.current || wsRef.current !== event.target || currentUrlRef.current !== url || currentSessionIdRef.current !== sessionId) {
       return;
     }
     
@@ -67,7 +69,7 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
     } catch (err) {
       console.error('Failed to parse approval WebSocket message:', err);
     }
-  }, []);
+  }, [url, sessionId]);
 
   const scheduleReconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) return;
@@ -82,6 +84,8 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
         try {
           const ws = new WebSocket(url);
           wsRef.current = ws;
+          // Store WebSocket associated with this URL
+          sessionBoundWsRef.current.set(url, ws);
 
           ws.onopen = () => {
             setIsConnected(true);
@@ -93,6 +97,8 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
 
           ws.onclose = () => {
             setIsConnected(false);
+            // Remove from session-bound map
+            sessionBoundWsRef.current.delete(url);
             scheduleReconnect();
           };
 
@@ -114,6 +120,8 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
     try {
       const ws = new WebSocket(url);
       wsRef.current = ws;
+      // Store WebSocket associated with this URL
+      sessionBoundWsRef.current.set(url, ws);
 
       ws.onopen = () => {
         setIsConnected(true);
@@ -125,6 +133,10 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
 
       ws.onclose = () => {
         setIsConnected(false);
+        // Remove from session-bound map
+        if (url) {
+          sessionBoundWsRef.current.delete(url);
+        }
         scheduleReconnect();
       };
 
@@ -153,6 +165,14 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
       wsRef.current.close();
       wsRef.current = null;
     }
+    // Clear all session-bound WebSockets for this URL
+    if (currentUrlRef.current) {
+      const boundWs = sessionBoundWsRef.current.get(currentUrlRef.current);
+      if (boundWs) {
+        boundWs.close();
+        sessionBoundWsRef.current.delete(currentUrlRef.current);
+      }
+    }
     setIsConnected(false);
     // Clear session-specific data on disconnect
     setPendingRequests([]);
@@ -162,9 +182,13 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
 
   const sendApprovalResponse = useCallback((response: ApprovalResponseMessage): Promise<void> => {
     return new Promise((resolve, reject) => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
+      // Use the WebSocket bound to the current URL/session
+      const sessionWs = currentUrlRef.current ? sessionBoundWsRef.current.get(currentUrlRef.current) : null;
+      
+      // Double-check that we're using the correct WebSocket
+      if (sessionWs && sessionWs === wsRef.current && sessionWs.readyState === WebSocket.OPEN) {
         try {
-          wsRef.current.send(JSON.stringify(response));
+          sessionWs.send(JSON.stringify(response));
           
           // Remove from pending requests
           setPendingRequests(prev => 
@@ -183,7 +207,7 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
           reject(error);
         }
       } else {
-        reject(new Error('WebSocket is not connected'));
+        reject(new Error('WebSocket is not connected or session mismatch'));
       }
     });
   }, []);
@@ -195,15 +219,28 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
   }, [disconnect, connect]);
 
   useEffect(() => {
-    // Always clear data immediately when URL changes (including null)
+    // Always clear data immediately when URL or session changes
     setPendingRequests([]);
     setApprovalMessages([]);
     setError(null);
     
-    // Update the current URL reference
-    currentUrlRef.current = url;
+    // Clean up any existing WebSocket for old URL/session before updating
+    if ((currentUrlRef.current && currentUrlRef.current !== url) || 
+        (currentSessionIdRef.current && currentSessionIdRef.current !== sessionId)) {
+      const oldWs = currentUrlRef.current ? sessionBoundWsRef.current.get(currentUrlRef.current) : null;
+      if (oldWs) {
+        oldWs.close();
+        if (currentUrlRef.current) {
+          sessionBoundWsRef.current.delete(currentUrlRef.current);
+        }
+      }
+    }
     
-    if (url) {
+    // Update the current URL and session references
+    currentUrlRef.current = url;
+    currentSessionIdRef.current = sessionId || null;
+    
+    if (url && sessionId) {
       connect();
     } else {
       disconnect();
@@ -212,7 +249,7 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
     return () => {
       disconnect();
     };
-  }, [url, connect, disconnect]);
+  }, [url, sessionId, connect, disconnect]);
 
   return {
     isConnected,

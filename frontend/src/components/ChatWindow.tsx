@@ -61,7 +61,7 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
     : null;
   
   const { isConnected, messages: webSocketMessages, sendMessage, addMessage } = useWebSocket(webSocketUrl);
-  const approvalWs = useApprovalWebSocket(approvalWebSocketUrl);
+  const approvalWs = useApprovalWebSocket(approvalWebSocketUrl, sessionId);
   const [pendingWebSocket, setPendingWebSocket] = useState<WebSocket | null>(null);
   const [pendingApprovalWebSocket, setPendingApprovalWebSocket] = useState<WebSocket | null>(null);
   const [isResumingSession, setIsResumingSession] = useState(false);
