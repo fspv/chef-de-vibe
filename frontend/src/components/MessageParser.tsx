@@ -18,6 +18,7 @@ import { TodoList } from './TodoList';
 import { EditDiff } from './DiffViewer';
 import { ControlRequestMessage } from './ControlRequestMessage';
 import { MessageInfoButton } from './MessageInfoButton';
+import { MarkdownContent } from './MarkdownContent';
 import type { 
   ToolInputSchemas, 
   FileWriteInput, 
@@ -506,10 +507,9 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeC
             message.message.content.map((block: Record<string, unknown>, index: number) => (
               <div key={index} className={`content-block ${block.type || 'unknown'}`}>
                 {block.type === 'text' && (
-                  <CollapsibleContent 
+                  <MarkdownContent 
                     content={String(block.text)} 
                     className="text-content"
-                    maxLines={10}
                   />
                 )}
                 {block.type === 'tool_result' && (
@@ -521,7 +521,24 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeC
                       ) : null}
                     </div>
                     <CollapsibleContent 
-                      content={typeof block.content === 'string' ? block.content : JSON.stringify(block.content, null, 2)}
+                      content={(() => {
+                        // Handle different content structures
+                        if (typeof block.content === 'string') {
+                          return block.content;
+                        }
+                        // Handle array of content blocks
+                        if (Array.isArray(block.content)) {
+                          const textContent = block.content
+                            .filter((item: unknown) => typeof item === 'object' && item !== null && 'type' in item && (item as {type: string}).type === 'text')
+                            .map((item: unknown) => (item as {text: string}).text)
+                            .join('\n');
+                          if (textContent) {
+                            return textContent;
+                          }
+                        }
+                        // Fallback to JSON stringification
+                        return JSON.stringify(block.content, null, 2);
+                      })()}
                       className="tool-result-text"
                       maxLines={15}
                       isCode={true}
@@ -604,10 +621,9 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeC
           {message.message.content.map((block: Record<string, unknown>, index: number) => (
             <div key={index} className={`content-block ${block.type}`}>
               {block.type === 'text' && (
-                <CollapsibleContent 
+                <MarkdownContent 
                   content={String(block.text)} 
                   className="text-content"
-                  maxLines={10}
                 />
               )}
               {block.type === 'tool_use' && (

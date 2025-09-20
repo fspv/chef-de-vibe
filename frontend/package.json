@@ -12,13 +12,18 @@
   "dependencies": {
     "@anthropic-ai/claude-code": "^1.0.110",
     "@types/react-router-dom": "^5.3.3",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "@types/uuid": "^10.0.0",
+    "github-markdown-css": "^5.8.1",
     "prism-color-variables": "^1.0.1",
     "react": "^19.1.1",
     "react-diff-view": "^3.3.2",
     "react-dom": "^19.1.1",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^7.8.2",
+    "react-syntax-highlighter": "^15.6.6",
     "refractor": "^5.0.0",
+    "remark-gfm": "^4.0.1",
     "uuid": "^13.0.0",
     "zod": "^4.1.8"
   },
