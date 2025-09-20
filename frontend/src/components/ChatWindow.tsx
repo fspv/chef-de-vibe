@@ -400,7 +400,7 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
       
       // Check if we already have this message to avoid duplicates
       const hasCompletedMessage = webSocketMessages.some(msg => 
-        (msg.data as any)?.uuid === sessionCompletedMessage.uuid
+        (msg.data as { uuid?: string })?.uuid === sessionCompletedMessage.uuid
       );
       
       if (!hasCompletedMessage) {

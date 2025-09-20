@@ -20,8 +20,14 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const reconnectAttemptsRef = useRef(0);
+  const currentUrlRef = useRef<string | null>(null);
 
   const handleMessage = useCallback((event: MessageEvent) => {
+    // Ignore messages if the WebSocket URL has changed
+    if (!wsRef.current || wsRef.current !== event.target) {
+      return;
+    }
+    
     try {
       const rawData = JSON.parse(event.data);
       const parsedMessage = ApprovalRequestMessageSchema.parse(rawData);
@@ -139,6 +145,11 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
       reconnectTimeoutRef.current = null;
     }
     if (wsRef.current) {
+      // Remove event handlers before closing to prevent any race conditions
+      wsRef.current.onmessage = null;
+      wsRef.current.onclose = null;
+      wsRef.current.onerror = null;
+      wsRef.current.onopen = null;
       wsRef.current.close();
       wsRef.current = null;
     }
@@ -146,6 +157,7 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
     // Clear session-specific data on disconnect
     setPendingRequests([]);
     setApprovalMessages([]);
+    setError(null);
   }, []);
 
   const sendApprovalResponse = useCallback((response: ApprovalResponseMessage): Promise<void> => {
@@ -183,10 +195,15 @@ export function useApprovalWebSocket(url: string | null): ApprovalWebSocketHookR
   }, [disconnect, connect]);
 
   useEffect(() => {
+    // Always clear data immediately when URL changes (including null)
+    setPendingRequests([]);
+    setApprovalMessages([]);
+    setError(null);
+    
+    // Update the current URL reference
+    currentUrlRef.current = url;
+    
     if (url) {
-      // Clear previous session's data when URL changes
-      setPendingRequests([]);
-      setApprovalMessages([]);
       connect();
     } else {
       disconnect();
