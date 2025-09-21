@@ -11,8 +11,7 @@ import {
   isSDKSummaryMessage,
   isLikelyClaudeCodeMessage,
   type ExtendedSDKMessage,
-  type AnyTodoItem,
-  type SDKSummaryMessage
+  type AnyTodoItem
 } from '../types/claude-messages';
 import type { PermissionUpdate, PermissionMode } from '@anthropic-ai/claude-code/sdk';
 import { CollapsibleContent } from './CollapsibleContent';
@@ -121,10 +120,9 @@ export function ExitPlanModeToolDisplay({ input }: { input: ExitPlanModeInput })
       <div className="exit-plan-mode-header">
         <h4>📋 Plan Review</h4>
       </div>
-      <CollapsibleContent 
+      <MarkdownContent 
         content={input.plan}
         className="plan-content"
-        maxLines={20}
       />
     </div>
   );
@@ -591,6 +589,14 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeC
                           isCode={true}
                         />
                       </div>
+                    ) : String(block.name) === "ExitPlanMode" ? (
+                      <div className="tool-exitplanmode-simple">
+                        <div className="plan-label-inline">📋 Plan:</div>
+                        <MarkdownContent 
+                          content={(block.input as ExitPlanModeInput).plan}
+                          className="plan-content-simple"
+                        />
+                      </div>
                     ) : (
                       <CollapsibleContent 
                         content={JSON.stringify(block.input, null, 2)}
@@ -727,6 +733,14 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeC
                     <div className="web-url-inline">🌐 {(block.input as WebFetchInput).url}</div>
                   ) : String(block.name) === "WebSearch" ? (
                     <div className="search-query-inline">🔍 Query: {(block.input as WebSearchInput).query}</div>
+                  ) : String(block.name) === "ExitPlanMode" ? (
+                    <div className="tool-exitplanmode-simple">
+                      <div className="plan-label-inline">📋 Plan:</div>
+                      <MarkdownContent 
+                        content={(block.input as ExitPlanModeInput).plan}
+                        className="plan-content-simple"
+                      />
+                    </div>
                   ) : (
                     <CollapsibleContent 
                       content={JSON.stringify(block.input, null, 2)}

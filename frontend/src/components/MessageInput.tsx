@@ -12,6 +12,8 @@ interface MessageInputProps {
   currentMode?: PermissionMode;
   onSendMessages?: (messages: string[]) => void;
   onHeightChange?: (height: number) => void;
+  onMessageSent?: (uuid: string) => void;
+  isWaitingForEcho?: boolean;
 }
 
 export function MessageInput({ 
@@ -23,12 +25,16 @@ export function MessageInput({
   initialValue = '',
   currentMode = 'default',
   onSendMessages,
-  onHeightChange
+  onHeightChange,
+  onMessageSent,
+  isWaitingForEcho = false
 }: MessageInputProps) {
   const [input, setInput] = useState(initialValue);
   const [isMobile, setIsMobile] = useState(false);
   const [textareaHeight, setTextareaHeight] = useState(120); // Default height in pixels
   const [isResizing, setIsResizing] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const sendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const resizeHandleRef = useRef<HTMLDivElement>(null);
   
@@ -38,6 +44,28 @@ export function MessageInput({
       setInput(initialValue);
     }
   }, [initialValue, input]);
+  
+  // Handle echo received
+  useEffect(() => {
+    if (!isWaitingForEcho && isSending) {
+      // Echo received, clear the input and reset state
+      setInput('');
+      setIsSending(false);
+      if (sendTimeoutRef.current) {
+        clearTimeout(sendTimeoutRef.current);
+        sendTimeoutRef.current = null;
+      }
+    }
+  }, [isWaitingForEcho, isSending]);
+  
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (sendTimeoutRef.current) {
+        clearTimeout(sendTimeoutRef.current);
+      }
+    };
+  }, []);
   
   useEffect(() => {
     const checkMobile = () => {
@@ -125,15 +153,30 @@ export function MessageInput({
   };
 
   const submitMessage = () => {
-    if (input.trim() && !disabled && !isLoading) {
+    if (input.trim() && !disabled && !isLoading && !isSending) {
+      const messageUuid = uuidv4();
+      setIsSending(true);
+      
+      // Set a timeout to unlock after 5 seconds if no echo
+      sendTimeoutRef.current = setTimeout(() => {
+        setIsSending(false);
+        setInput(''); // Clear input on timeout
+      }, 5000);
+      
       if (debugMode) {
         // Raw JSON mode
         try {
           JSON.parse(input);
           onSendMessage(input);
-          setInput('');
+          onMessageSent?.(messageUuid);
+          // Don't clear input here - wait for echo
         } catch {
           alert('Invalid JSON format. Please check your input.');
+          setIsSending(false);
+          if (sendTimeoutRef.current) {
+            clearTimeout(sendTimeoutRef.current);
+            sendTimeoutRef.current = null;
+          }
         }
       } else {
         // Normal text mode - format as minimal Claude message
@@ -144,7 +187,7 @@ export function MessageInput({
             content: input.trim()
           },
           parent_tool_use_id: null,
-          uuid: uuidv4(),
+          uuid: messageUuid,
           session_id: '' // This will be filled by the backend
         };
         
@@ -166,8 +209,9 @@ export function MessageInput({
           onSendMessage(JSON.stringify(userMessage));
         }
         
-        // Always clear input after sending
-        setInput('');
+        // Notify parent of sent message UUID
+        onMessageSent?.(messageUuid);
+        // Don't clear input here - wait for echo
       }
     }
   };
@@ -209,11 +253,11 @@ export function MessageInput({
                       ? "Type your message..."
                       : "Type your message... (Ctrl/Cmd+Enter to send)"
           }
-          disabled={disabled || isLoading}
+          disabled={disabled || isLoading || isSending}
           style={{ height: '100%' }}
         />
-        <button type="submit" className="send-button" disabled={disabled || !input.trim() || isLoading}>
-          {isLoading ? (
+        <button type="submit" className="send-button" disabled={disabled || !input.trim() || isLoading || isSending}>
+          {(isLoading || isSending) ? (
             // Loading spinner
             <svg width="34" height="34" viewBox="0 0 24 24" className="spinner">
               <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" fill="none" strokeDasharray="31.4" strokeDashoffset="0">

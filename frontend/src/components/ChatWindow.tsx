@@ -71,6 +71,7 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
   const [pendingApprovalWebSocket, setPendingApprovalWebSocket] = useState<WebSocket | null>(null);
   const [isResumingSession, setIsResumingSession] = useState(false);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
+  const [pendingMessageUuid, setPendingMessageUuid] = useState<string | null>(null);
 
   // Handle mode initialization when sessionId or navigation state changes
   useEffect(() => {
@@ -293,6 +294,9 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
       // Active session - send via WebSocket
       // Server will echo the message back, so we don't add it locally
       sendMessage(message);
+      
+      // Reset mode to default after sending
+      setCurrentMode('default');
     }
   }, [sessionId, sessionDetails, onCreateSession, navigate, sendMessage, addMessage, selectedDirectory, addLog, currentMode]);
 
@@ -302,6 +306,9 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
     const sessionIsActive = sessionDetails && !!sessionDetails.websocket_url;
     if (sessionIsActive && isConnected) {
       messages.forEach(msg => sendMessage(msg));
+      
+      // Reset mode to default after sending
+      setCurrentMode('default');
     } else {
       // For inactive/new sessions, use the first user message for bootstrap
       const userMessage = messages.find(msg => {
@@ -375,6 +382,11 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
       sendMessage(JSON.stringify(interruptRequest));
     }
   }, [sessionDetails, isConnected, sendMessage]);
+  
+  // Handle when a message is sent from MessageInput
+  const handleMessageSent = useCallback((uuid: string) => {
+    setPendingMessageUuid(uuid);
+  }, []);
 
   // Listen for control response messages to update the mode
   useEffect(() => {
@@ -389,6 +401,21 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
       }
     }
   }, [webSocketMessages]);
+  
+  // Monitor for message echo - detect when our sent message is echoed back
+  useEffect(() => {
+    if (pendingMessageUuid && webSocketMessages.length > 0) {
+      const latestMessage = webSocketMessages[webSocketMessages.length - 1];
+      const messageData = latestMessage.data as { uuid?: string; type?: string };
+      
+      // Check if this is our echoed message (by UUID or by type)
+      if (messageData?.uuid === pendingMessageUuid || 
+          (messageData?.type === 'user' && pendingMessageUuid)) {
+        // Echo received, clear pending state
+        setPendingMessageUuid(null);
+      }
+    }
+  }, [webSocketMessages, pendingMessageUuid]);
   
   // Add session completed message when session becomes inactive
   useEffect(() => {
@@ -576,6 +603,8 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
           initialValue={pendingMessage || ''}
           currentMode={currentMode}
           onHeightChange={setInputHeight}
+          onMessageSent={handleMessageSent}
+          isWaitingForEcho={!!pendingMessageUuid}
         />
       </div>
       

@@ -178,10 +178,20 @@ export function ControlRequestMessage({ message, timestamp, onApprove, onDeny }:
           (_, index: number) => selectedPermissions[index]
         );
         
-        // Add setMode permission if requested
-        const permissionsToSend = includeSetMode && setModePermission
-          ? [...selectedPerms, setModePermission]
-          : selectedPerms;
+        // For ExitPlanMode, always include switching to default mode
+        let permissionsToSend = selectedPerms;
+        if (tool_name === 'ExitPlanMode') {
+          // Add mode switch to default when approving ExitPlanMode
+          const modeChangePermission: PermissionUpdate = {
+            type: 'setMode',
+            destination: 'session',
+            mode: 'default'
+          } as PermissionUpdate;
+          permissionsToSend = [...selectedPerms, modeChangePermission];
+        } else if (includeSetMode && setModePermission) {
+          // Add setMode permission if requested for other tools
+          permissionsToSend = [...selectedPerms, setModePermission];
+        }
         
         setIsLoading(true);
         setLoadingAction('approve');

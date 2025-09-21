@@ -20,8 +20,7 @@ export type {
   SDKResultMessage,
   SDKSystemMessage,
   SDKPartialAssistantMessage,
-  SDKCompactBoundaryMessage,
-  SDKSummaryMessage
+  SDKCompactBoundaryMessage
 };
 
 // Extended SDKMessage type to include control requests, responses, and summaries
