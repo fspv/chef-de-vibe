@@ -1,0 +1,54 @@
+name: Update Homebrew Formula
+
+on:
+  # Trigger when a release is published
+  release:
+    types: [published]
+  
+  # Allow manual triggering from Actions tab
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to update (e.g., v1.0.0)'
+        required: false
+        type: string
+
+jobs:
+  trigger-homebrew-update:
+    runs-on: ubuntu-latest
+    name: Trigger Homebrew Formula Update
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Trigger formula update in homebrew-apps
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.HOMEBREW_GITHUB_TOKEN }}
+          repository: fspv/homebrew-apps
+          event-type: formula-update
+          client-payload: '{"version": "${{ github.event.release.tag_name || github.event.inputs.version }}"}'
+      
+      - name: Report success
+        if: success()
+        run: |
+          echo "✅ Successfully triggered Homebrew formula update!"
+          echo "📦 Version: ${{ github.event.release.tag_name || github.event.inputs.version }}"
+          echo "🔄 Check progress at: https://github.com/fspv/homebrew-apps/actions"
+          echo ""
+          echo "The homebrew-apps repository will:"
+          echo "1. Download the release binaries"
+          echo "2. Calculate SHA256 checksums"
+          echo "3. Update the formula"
+          echo "4. Create a pull request"
+          echo "5. Run tests on macOS and Linux"
+      
+      - name: Report failure
+        if: failure()
+        run: |
+          echo "❌ Failed to trigger Homebrew formula update"
+          echo "Please check:"
+          echo "1. HOMEBREW_GITHUB_TOKEN secret is set correctly"
+          echo "2. Token has 'repo' and 'workflow' permissions"
+          echo "3. Token hasn't expired"
