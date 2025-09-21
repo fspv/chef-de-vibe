@@ -1675,9 +1675,6 @@ html, body {
 }
 
 .scroll-to-bottom-btn {
-  position: fixed;
-  bottom: 80px;
-  right: 30px;
   width: 48px;
   height: 48px;
   border-radius: 50%;
@@ -1689,7 +1686,6 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
   transition: all 0.2s ease;
 }
 
@@ -1800,7 +1796,6 @@ html, body {
 .system-message {
   border-left: 3px solid #6c757d;
   padding-left: 1rem;
-  background-color: #f1f3f4;
 }
 
 .streaming-message {
@@ -1811,7 +1806,6 @@ html, body {
 .compact-boundary {
   border-left: 3px solid #6f42c1;
   padding-left: 1rem;
-  background-color: #f8f9fa;
 }
 
 .message-role {
@@ -2371,71 +2365,62 @@ html, body {
   word-wrap: break-word;
 }
 
-/* Todo List Styles */
+/* Todo List Styles - simplified */
 .todo-list {
-  background-color: #f8f9fa;
-  border: 1px solid #dee2e6;
-  border-radius: 6px;
   margin: 0.5rem 0;
-  overflow: hidden;
 }
 
 .todo-list-header {
-  background-color: #e9ecef;
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 0;
   border-bottom: 1px solid #dee2e6;
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
   gap: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
 .todo-list-header h4 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
   color: #495057;
 }
 
 .todo-stats {
   display: flex;
-  gap: 0.75rem;
-  font-size: 0.8rem;
+  gap: 0.5rem;
+  font-size: 0.75rem;
   flex-wrap: wrap;
 }
 
 .todo-stats .stat {
-  background-color: #6c757d;
-  color: white;
-  padding: 0.25rem 0.5rem;
-  border-radius: 12px;
+  color: #6c757d;
   font-weight: 500;
 }
 
 .todo-stats .stat.pending {
-  background-color: #ffc107;
-  color: #000;
+  color: #856404;
 }
 
 .todo-stats .stat.in-progress {
-  background-color: #17a2b8;
+  color: #0c5460;
 }
 
 .todo-stats .stat.completed {
-  background-color: #28a745;
+  color: #155724;
 }
 
 .todo-items {
-  padding: 0.5rem;
+  /* Remove padding */
 }
 
 .todo-item {
-  background-color: white;
-  border: 1px solid #e9ecef;
-  border-radius: 4px;
-  padding: 0.5rem 0.75rem;
+  border-left: 3px solid #e9ecef;
+  padding: 0.4rem 0 0.4rem 0.75rem;
   margin-bottom: 0.25rem;
-  transition: box-shadow 0.2s;
+  transition: opacity 0.2s;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -2447,20 +2432,20 @@ html, body {
 }
 
 .todo-item:hover {
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  opacity: 0.9;
 }
 
 .todo-item.pending {
-  border-left: 3px solid #ffc107;
+  border-left-color: #ffc107;
 }
 
 .todo-item.in_progress {
-  border-left: 3px solid #17a2b8;
+  border-left-color: #17a2b8;
 }
 
 .todo-item.completed {
-  border-left: 3px solid #28a745;
-  opacity: 0.8;
+  border-left-color: #28a745;
+  opacity: 0.7;
 }
 
 .todo-status {
@@ -2663,37 +2648,27 @@ html, body {
     white-space: pre-wrap !important;
   }
   
-  /* Todo layout fixes for mobile */
+  /* Todo layout fixes for mobile - keep items in single row */
   .todo-item {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 0.25rem !important;
-    padding: 0.75rem !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    padding: 0.4rem 0.5rem !important;
   }
   
   .todo-content {
-    width: 100% !important;
-    margin-top: 0.25rem !important;
+    flex: 1 !important;
   }
   
-  /* Todo metadata row on mobile */
-  .todo-item > :not(.todo-content) {
-    display: inline-block !important;
-    margin-right: 0.5rem !important;
-    margin-bottom: 0.25rem !important;
-  }
-  
-  /* Stack todo header stats vertically */
+  /* Keep todo stats in single row */
   .todo-stats {
-    flex-direction: column !important;
-    gap: 0.25rem !important;
-    align-items: flex-start !important;
+    flex-direction: row !important;
+    gap: 0.5rem !important;
+    flex-wrap: nowrap !important;
   }
   
-  .todo-list-header {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 0.75rem !important;
+  .todo-stats .stat {
+    white-space: nowrap !important;
   }
 }
 

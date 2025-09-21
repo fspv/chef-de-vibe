@@ -38,6 +38,7 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
   const [currentMode, setCurrentMode] = useState<PermissionMode>(initialModeFromNav || 'default');
   const [hasSetInitialMode, setHasSetInitialMode] = useState(false);
   const messageListRef = useRef<MessageListRef>(null);
+  const [inputHeight, setInputHeight] = useState(140); // Default height
   const [loadingLogs, setLoadingLogs] = useState<LogEntry[]>([]);
   const [loadingOperation, setLoadingOperation] = useState<'creating' | 'resuming' | 'loading'>('loading');
   const [isSessionLoading, setIsSessionLoading] = useState(false);
@@ -560,6 +561,7 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
           onApprove={handleApprove}
           onDeny={handleDeny}
           onModeChange={handleModeChange}
+          inputHeight={inputHeight}
         />
       </div>
 
@@ -573,6 +575,7 @@ export function ChatWindow({ sessionId, onCreateSession, createLoading, navigate
           isLoading={isResumingSession}
           initialValue={pendingMessage || ''}
           currentMode={currentMode}
+          onHeightChange={setInputHeight}
         />
       </div>
       

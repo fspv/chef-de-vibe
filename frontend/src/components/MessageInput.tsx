@@ -11,6 +11,7 @@ interface MessageInputProps {
   initialValue?: string;
   currentMode?: PermissionMode;
   onSendMessages?: (messages: string[]) => void;
+  onHeightChange?: (height: number) => void;
 }
 
 export function MessageInput({ 
@@ -21,7 +22,8 @@ export function MessageInput({
   isLoading = false, 
   initialValue = '',
   currentMode = 'default',
-  onSendMessages
+  onSendMessages,
+  onHeightChange
 }: MessageInputProps) {
   const [input, setInput] = useState(initialValue);
   const [isMobile, setIsMobile] = useState(false);
@@ -46,6 +48,15 @@ export function MessageInput({
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // Notify parent about height changes
+  useEffect(() => {
+    if (onHeightChange) {
+      // Total height = textarea height + resize handle (8px) + any padding
+      // Adding some extra space for the input area wrapper
+      onHeightChange(textareaHeight + 20);
+    }
+  }, [textareaHeight, onHeightChange]);
 
   // Handle resize drag (mouse and touch)
   useEffect(() => {

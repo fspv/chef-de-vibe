@@ -202,8 +202,11 @@ export function SessionList({ selectedSessionId, onSessionSelect, onNewChat, dir
   };
 
   const truncateSummary = (text: string, maxLength: number = 60): string => {
-    if (!text || text.length <= maxLength) return text;
-    return text.slice(0, maxLength) + '...';
+    if (!text) return text;
+    // Remove line breaks and normalize whitespace
+    const normalized = text.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (normalized.length <= maxLength) return normalized;
+    return normalized.slice(0, maxLength) + '...';
   };
 
   return (

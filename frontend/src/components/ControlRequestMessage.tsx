@@ -128,20 +128,29 @@ export function ControlRequestMessage({ message, timestamp, onApprove, onDeny }:
   
   // Only show tool approval UI for can_use_tool requests
   if (message.request.subtype !== 'can_use_tool' || !tool_name || !input) {
+    // For set_permission_mode requests, show minimal grey text
+    if (message.request.subtype === 'set_permission_mode') {
+      const mode = (message.request as { mode?: string }).mode;
+      return (
+        <div className="control-response-message">
+          <span className="response-id">→ Mode: {mode || 'unknown'}</span>
+        </div>
+      );
+    }
+    
+    // For interrupt requests, show minimal grey text
+    if (message.request.subtype === 'interrupt') {
+      return (
+        <div className="control-response-message">
+          <span className="response-id">→ Interrupt</span>
+        </div>
+      );
+    }
+    
+    // For other control requests, show minimal info
     return (
-      <div className="control-request-message">
-        <div className="message-role">
-          ⚠️ Control Request
-          {timestamp && (
-            <span className="message-timestamp">
-              {new Date(timestamp).toLocaleTimeString()}
-            </span>
-          )}
-        </div>
-        <div className="control-request-content">
-          <div className="control-subtype">Type: {message.request.subtype}</div>
-          <pre>{JSON.stringify(message.request, null, 2)}</pre>
-        </div>
+      <div className="control-response-message">
+        <span className="response-id">→ {message.request.subtype}</span>
       </div>
     );
   }

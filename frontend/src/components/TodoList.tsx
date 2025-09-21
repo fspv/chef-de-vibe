@@ -49,9 +49,8 @@ function TodoItemComponent({ todo }: { todo: AnyTodoItem }) {
   } else {
     // Official format with activeForm
     return (
-      <div className={`todo-item ${todo.status}`}>
+      <div className={`todo-item ${todo.status}`} title={(todo as OfficialTodoItem).activeForm}>
         <span className="todo-status">{statusIcon}</span>
-        <span className="todo-form">{(todo as OfficialTodoItem).activeForm}</span>
         <span className="todo-content">{todo.content}</span>
       </div>
     );
@@ -70,11 +69,10 @@ export function TodoList({ todos }: TodoListProps) {
   return (
     <div className="todo-list">
       <div className="todo-list-header">
-        <h4>📋 Todo List</h4>
         <div className="todo-stats">
-          <span className="stat pending">{pendingCount} pending</span>
-          <span className="stat in-progress">{inProgressCount} in progress</span>
-          <span className="stat completed">{completedCount} completed</span>
+          <span className="stat pending" title="Pending">⏳ {pendingCount}</span>
+          <span className="stat in-progress" title="In Progress">🔄 {inProgressCount}</span>
+          <span className="stat completed" title="Completed">✅ {completedCount}</span>
         </div>
       </div>
       

@@ -12,13 +12,14 @@ interface MessageListProps {
   onApprove?: (requestId: string, input: ToolInputSchemas, permissionUpdates?: PermissionUpdate[]) => void;
   onDeny?: (requestId: string) => void;
   onModeChange?: (mode: PermissionMode) => void;
+  inputHeight?: number;
 }
 
 export interface MessageListRef {
   toggleAutoScroll: () => void;
 }
 
-export const MessageList = forwardRef<MessageListRef, MessageListProps>(({ sessionMessages, webSocketMessages, debugMode, onApprove, onDeny, onModeChange }, ref) => {
+export const MessageList = forwardRef<MessageListRef, MessageListProps>(({ sessionMessages, webSocketMessages, debugMode, onApprove, onDeny, onModeChange, inputHeight = 140 }, ref) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -191,7 +192,7 @@ export const MessageList = forwardRef<MessageListRef, MessageListProps>(({ sessi
           title="Scroll to bottom"
           style={{
             position: 'fixed',
-            bottom: '120px',
+            bottom: `${inputHeight + 20}px`,
             right: '30px',
             zIndex: 1000
           }}

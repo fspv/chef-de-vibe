@@ -518,10 +518,10 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeC
                     <div className="tool-result-header-inline">
                       <span className="result-icon">✓</span>
                       <span className="result-label">Result</span>
-                      {block.tool_use_id && (
+                      {typeof block.tool_use_id === 'string' && (
                         <ToolInfoButton 
                           toolName="Tool Result" 
-                          toolId={String(block.tool_use_id)}
+                          toolId={block.tool_use_id}
                         />
                       )}
                     </div>
