@@ -101,7 +101,7 @@ interface ControlRequestMessageProps {
   onModeChange?: (mode: PermissionMode) => void; // Still passed but not used for "Approve for Session"
 }
 
-export function ControlRequestMessage({ message, timestamp, onApprove, onDeny }: ControlRequestMessageProps) {
+export function ControlRequestMessage({ message, timestamp, onApprove, onDeny, onModeChange }: ControlRequestMessageProps) {
   // Check for setMode permission and extract it
   const setModePermission = message.request.permission_suggestions?.find(
     (perm: PermissionUpdate) => (perm as { type?: string; destination?: string }).type === 'setMode' && (perm as { type?: string; destination?: string }).destination === 'session'
@@ -201,8 +201,16 @@ export function ControlRequestMessage({ message, timestamp, onApprove, onDeny }:
           await onApprove(message.request_id, finalInput, permissionsToSend);
           setIsProcessed(true);
           
-          // Don't trigger onModeChange here - the mode change will happen
-          // on the backend when it processes the setMode permission
+          // For ExitPlanMode, immediately update the UI to show mode change
+          if (tool_name === 'ExitPlanMode') {
+            onModeChange?.('default');
+          } else if (includeSetMode && setModePermission) {
+            // For "Approve for Session", update the mode based on the permission
+            const mode = (setModePermission as { mode?: string }).mode;
+            if (mode) {
+              onModeChange?.(mode as PermissionMode);
+            }
+          }
         } catch (error) {
           setSendError(`Failed to send approval: ${error instanceof Error ? error.message : 'Unknown error'}`);
         } finally {
