@@ -18,6 +18,7 @@ import { TodoList } from './TodoList';
 import { EditDiff } from './DiffViewer';
 import { ControlRequestMessage } from './ControlRequestMessage';
 import { MessageInfoButton } from './MessageInfoButton';
+import { ToolInfoButton } from './ToolInfoButton';
 import { MarkdownContent } from './MarkdownContent';
 import type { 
   ToolInputSchemas, 
@@ -513,12 +514,16 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeC
                   />
                 )}
                 {block.type === 'tool_result' && (
-                  <div className="tool-result-content">
-                    <div className="tool-result-header">
-                      🔧 Tool Result
-                      {block.tool_use_id ? (
-                        <span className="tool-use-id">ID: {String(block.tool_use_id)}</span>
-                      ) : null}
+                  <div className="tool-result-simple">
+                    <div className="tool-result-header-inline">
+                      <span className="result-icon">✓</span>
+                      <span className="result-label">Result</span>
+                      {block.tool_use_id && (
+                        <ToolInfoButton 
+                          toolName="Tool Result" 
+                          toolId={String(block.tool_use_id)}
+                        />
+                      )}
                     </div>
                     <CollapsibleContent 
                       content={(() => {
@@ -539,16 +544,22 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeC
                         // Fallback to JSON stringification
                         return JSON.stringify(block.content, null, 2);
                       })()}
-                      className="tool-result-text"
+                      className="tool-result-text-simple"
                       maxLines={15}
                       isCode={true}
                     />
                   </div>
                 )}
                 {block.type === 'tool_use' && (
-                  <div className="tool-use-content">
-                    <div className="tool-name">🛠️ {String(block.name)}</div>
-                    <div className="tool-id">ID: {String(block.id)}</div>
+                  <div className="tool-use-simple">
+                    <div className="tool-header-inline">
+                      <span className="tool-icon">🛠️</span>
+                      <span className="tool-name-inline">{String(block.name)}</span>
+                      <ToolInfoButton 
+                        toolName={String(block.name)} 
+                        toolId={String(block.id)}
+                      />
+                    </div>
                     {String(block.name) === 'TodoWrite' ? (
                       (() => {
                         const todos = parseTodosFromToolUse(block.input);
@@ -557,7 +568,7 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeC
                         ) : (
                           <CollapsibleContent 
                             content={JSON.stringify(block.input, null, 2)}
-                            className="tool-input"
+                            className="tool-input-simple"
                             maxLines={10}
                             isCode={true}
                           />
@@ -566,11 +577,19 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeC
                     ) : String(block.name) === "Edit" ? (
                       <EditDiff toolInput={block.input as FileEditInput} />
                     ) : String(block.name) === "Write" ? (
-                      <WriteToolDisplay input={block.input as FileWriteInput} />
+                      <div className="tool-write-simple">
+                        <div className="file-path-inline">📄 {(block.input as FileWriteInput).file_path}</div>
+                        <CollapsibleContent 
+                          content={(block.input as FileWriteInput).content}
+                          className="file-content-simple"
+                          maxLines={20}
+                          isCode={true}
+                        />
+                      </div>
                     ) : (
                       <CollapsibleContent 
                         content={JSON.stringify(block.input, null, 2)}
-                        className="tool-input"
+                        className="tool-input-simple"
                         maxLines={10}
                         isCode={true}
                       />
@@ -627,9 +646,15 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeC
                 />
               )}
               {block.type === 'tool_use' && (
-                <div className="tool-use-content">
-                  <div className="tool-name">🛠️ {String(block.name)}</div>
-                  <div className="tool-id">ID: {String(block.id)}</div>
+                <div className="tool-use-simple">
+                  <div className="tool-header-inline">
+                    <span className="tool-icon">🛠️</span>
+                    <span className="tool-name-inline">{String(block.name)}</span>
+                    <ToolInfoButton 
+                      toolName={String(block.name)} 
+                      toolId={String(block.id)}
+                    />
+                  </div>
                   {String(block.name) === 'TodoWrite' ? (
                     (() => {
                       const todos = parseTodosFromToolUse(block.input);
@@ -638,7 +663,7 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeC
                       ) : (
                         <CollapsibleContent 
                           content={JSON.stringify(block.input, null, 2)}
-                          className="tool-input"
+                          className="tool-input-simple"
                           maxLines={10}
                           isCode={true}
                         />
@@ -647,41 +672,60 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeC
                   ) : String(block.name) === "Edit" ? (
                     <EditDiff toolInput={block.input as FileEditInput} />
                   ) : String(block.name) === "Write" ? (
-                    <WriteToolDisplay input={block.input as FileWriteInput} />
+                    <div className="tool-write-simple">
+                      <div className="file-path-inline">📄 {(block.input as FileWriteInput).file_path}</div>
+                      <CollapsibleContent 
+                        content={(block.input as FileWriteInput).content}
+                        className="file-content-simple"
+                        maxLines={20}
+                        isCode={true}
+                      />
+                    </div>
                   ) : String(block.name) === "Task" ? (
-                    <AgentToolDisplay input={block.input as AgentInput} />
+                    <div className="tool-task-simple">
+                      <div className="agent-info-inline">Agent: {(block.input as AgentInput).subagent_type} - {(block.input as AgentInput).description}</div>
+                      <CollapsibleContent 
+                        content={(block.input as AgentInput).prompt}
+                        className="agent-prompt-simple"
+                        maxLines={15}
+                      />
+                    </div>
                   ) : String(block.name) === "Bash" ? (
-                    <BashToolDisplay input={block.input as BashInput} />
-                  ) : String(block.name) === "BashOutput" ? (
-                    <BashOutputToolDisplay input={block.input as BashOutputInput} />
-                  ) : String(block.name) === "ExitPlanMode" ? (
-                    <ExitPlanModeToolDisplay input={block.input as ExitPlanModeInput} />
-                  ) : String(block.name) === "MultiEdit" ? (
-                    <FileMultiEditToolDisplay input={block.input as FileMultiEditInput} />
+                    <div className="tool-bash-simple">
+                      {(block.input as BashInput).description && <div className="bash-desc-inline">{(block.input as BashInput).description}</div>}
+                      <CollapsibleContent 
+                        content={(block.input as BashInput).command}
+                        className="bash-command-simple"
+                        maxLines={10}
+                        isCode={true}
+                      />
+                    </div>
                   ) : String(block.name) === "Read" ? (
-                    <FileReadToolDisplay input={block.input as FileReadInput} />
+                    <div className="file-path-inline">📖 {(block.input as FileReadInput).file_path}</div>
                   ) : String(block.name) === "Glob" ? (
-                    <GlobToolDisplay input={block.input as GlobInput} />
+                    <div className="search-pattern-inline">🔍 Pattern: {(block.input as GlobInput).pattern}</div>
                   ) : String(block.name) === "Grep" ? (
-                    <GrepToolDisplay input={block.input as GrepInput} />
-                  ) : String(block.name) === "KillShell" ? (
-                    <KillShellToolDisplay input={block.input as KillShellInput} />
-                  ) : String(block.name) === "ListMcpResources" ? (
-                    <ListMcpResourcesToolDisplay input={block.input as ListMcpResourcesInput} />
-                  ) : String(block.name) === "Mcp" ? (
-                    <McpToolDisplay input={block.input as McpInput} />
-                  ) : String(block.name) === "NotebookEdit" ? (
-                    <NotebookEditToolDisplay input={block.input as NotebookEditInput} />
-                  ) : String(block.name) === "ReadMcpResource" ? (
-                    <ReadMcpResourceToolDisplay input={block.input as ReadMcpResourceInput} />
+                    <div className="search-pattern-inline">🔎 Search: {(block.input as GrepInput).pattern}</div>
+                  ) : String(block.name) === "MultiEdit" ? (
+                    <div className="tool-multiedit-simple">
+                      <div className="file-path-inline">📄 {(block.input as FileMultiEditInput).file_path} ({(block.input as FileMultiEditInput).edits.length} edits)</div>
+                      {(block.input as FileMultiEditInput).edits.map((edit, index) => (
+                        <EditDiff key={index} toolInput={{
+                          file_path: (block.input as FileMultiEditInput).file_path,
+                          old_string: edit.old_string,
+                          new_string: edit.new_string,
+                          replace_all: edit.replace_all
+                        } as FileEditInput} />
+                      ))}
+                    </div>
                   ) : String(block.name) === "WebFetch" ? (
-                    <WebFetchToolDisplay input={block.input as WebFetchInput} />
+                    <div className="web-url-inline">🌐 {(block.input as WebFetchInput).url}</div>
                   ) : String(block.name) === "WebSearch" ? (
-                    <WebSearchToolDisplay input={block.input as WebSearchInput} />
+                    <div className="search-query-inline">🔍 Query: {(block.input as WebSearchInput).query}</div>
                   ) : (
                     <CollapsibleContent 
                       content={JSON.stringify(block.input, null, 2)}
-                      className="tool-input"
+                      className="tool-input-simple"
                       maxLines={10}
                       isCode={true}
                     />

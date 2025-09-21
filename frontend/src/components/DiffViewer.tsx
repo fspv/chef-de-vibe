@@ -89,18 +89,24 @@ export function EditDiff({ toolInput }: { toolInput: FileEditInput }) {
   const { file_path, old_string, new_string } = toolInput;
   
   return (
-    <div className="edit-diff">
-      <div className="edit-diff-header">
-        <h4>📝 File Changes</h4>
+    <div className="edit-diff-simple">
+      <div className="edit-diff-header-simple">
+        <span className="edit-file-path">{file_path}</span>
         {toolInput.replace_all && (
-          <span className="replace-all-indicator">Replace All</span>
+          <span className="replace-all-badge">Replace All</span>
         )}
       </div>
-      <DiffViewer 
-        oldString={old_string}
-        newString={new_string}
-        fileName={file_path}
-      />
+      <div className="diff-content-simple">
+        <Diff 
+          viewType="unified" 
+          diffType="modify"
+          hunks={parseDiff(createUnifiedDiff(old_string, new_string, file_path))[0]?.hunks || []}
+        >
+          {(hunks) => hunks.map((hunk) => (
+            <Hunk key={hunk.content} hunk={hunk} />
+          ))}
+        </Diff>
+      </div>
     </div>
   );
 }
