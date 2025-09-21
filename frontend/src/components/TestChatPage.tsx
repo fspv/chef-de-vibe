@@ -815,7 +815,7 @@ export function TestChatPage() {
       <button 
         className={`sidebar-toggle ${sidebarCollapsed ? 'collapsed' : ''}`}
         onClick={toggleSidebar}
-        title={sidebarCollapsed ? 'Show Sessions' : 'Hide Sessions'}
+        title={sidebarCollapsed ? 'Show Chats' : 'Hide Chats'}
       ></button>
       
       <div className="app-main">

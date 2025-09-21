@@ -28,7 +28,7 @@ export function HomePage({ onNewChat, sidebarCollapsed }: HomePageProps) {
           </div>
           
           <div className="info-section">
-            <h3>Recent Sessions</h3>
+            <h3>Recent Chats</h3>
             <p>{sidebarCollapsed ? 'Open the sidebar to view' : 'View'} your recent chat sessions and resume previous conversations.</p>
           </div>
         </div>
