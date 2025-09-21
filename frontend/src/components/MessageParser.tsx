@@ -659,7 +659,7 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeC
               {block.type === 'tool_use' && (
                 <div className="tool-use-simple">
                   <div className="tool-header-inline">
-                    <span className="tool-icon">🛠️</span>
+                    <span className="tool-icon">Tool: </span>
                     <span className="tool-name-inline">{String(block.name)}</span>
                     <ToolInfoButton 
                       toolName={String(block.name)} 
@@ -865,7 +865,7 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeC
     if (isSuccess && response.response && 'mode' in response.response) {
       return (
         <div className={`control-response-message success`}>
-          <span className="response-id">Mode: {(response.response as { mode?: string }).mode}</span>
+          <span className="response-id">New mode: {(response.response as { mode?: string }).mode}</span>
         </div>
       );
     }

@@ -133,7 +133,7 @@ export function ControlRequestMessage({ message, timestamp, onApprove, onDeny, o
       const mode = (message.request as { mode?: string }).mode;
       return (
         <div className="control-response-message">
-          <span className="response-id">→ Mode: {mode || 'unknown'}</span>
+          <span className="response-id">Set mode: {mode || 'unknown'}</span>
         </div>
       );
     }
