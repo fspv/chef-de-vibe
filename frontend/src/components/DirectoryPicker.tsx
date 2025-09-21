@@ -15,7 +15,7 @@ interface DirectoryOption {
 }
 
 export function DirectoryPicker({ value, onChange, placeholder = "Select or type a directory...", className = "" }: DirectoryPickerProps) {
-  const { sessions } = useSessions();
+  const { sessions, loading } = useSessions();
   const [isOpen, setIsOpen] = useState(false);
   const [filterText, setFilterText] = useState(value);
   const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -243,7 +243,11 @@ export function DirectoryPicker({ value, onChange, placeholder = "Select or type
       
       {isOpen && (
         <div ref={dropdownRef} className="directory-picker-dropdown">
-          {filteredOptions.length === 0 ? (
+          {loading ? (
+            <div className="directory-picker-option empty">
+              <span className="loading-indicator">Loading directories...</span>
+            </div>
+          ) : filteredOptions.length === 0 ? (
             <div className="directory-picker-option empty">
               {filterText ? `No directories match "${filterText}"` : 'No recent directories found'}
             </div>
