@@ -8,9 +8,11 @@ import {
   isSDKCompactBoundaryMessage,
   isSDKControlRequestMessage,
   isSDKControlResponseMessage,
+  isSDKSummaryMessage,
   isLikelyClaudeCodeMessage,
   type ExtendedSDKMessage,
-  type AnyTodoItem
+  type AnyTodoItem,
+  type SDKSummaryMessage
 } from '../types/claude-messages';
 import type { PermissionUpdate, PermissionMode } from '@anthropic-ai/claude-code/sdk';
 import { CollapsibleContent } from './CollapsibleContent';
@@ -396,6 +398,9 @@ function getMessageTypeDescription(message: ExtendedSDKMessage): string {
   }
   if (isSDKControlResponseMessage(message)) {
     return 'Control Response';
+  }
+  if (isSDKSummaryMessage(message)) {
+    return 'Summary Generated';
   }
   return 'Unknown Message';
 }
@@ -862,6 +867,14 @@ function FormattedClaudeMessage({ message, timestamp, onApprove, onDeny, onModeC
             <span className="control-response-details">{response.error}</span>
           </span>
         )}
+      </div>
+    );
+  }
+
+  if (isSDKSummaryMessage(message)) {
+    return (
+      <div className="summary-message">
+        <span className="summary-text">📝 Generated summary for message {message.leafUuid}: {message.summary}</span>
       </div>
     );
   }

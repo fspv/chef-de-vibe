@@ -20,11 +20,12 @@ export type {
   SDKResultMessage,
   SDKSystemMessage,
   SDKPartialAssistantMessage,
-  SDKCompactBoundaryMessage
+  SDKCompactBoundaryMessage,
+  SDKSummaryMessage
 };
 
-// Extended SDKMessage type to include control requests and responses
-export type ExtendedSDKMessage = SDKMessage | SDKControlRequestMessage | SDKControlResponseMessage;
+// Extended SDKMessage type to include control requests, responses, and summaries
+export type ExtendedSDKMessage = SDKMessage | SDKControlRequestMessage | SDKControlResponseMessage | SDKSummaryMessage;
 
 // Extended todo types to handle actual usage patterns
 export interface TodoItem {
@@ -99,7 +100,7 @@ export function isSDKCompactBoundaryMessage(message: unknown): message is SDKCom
          message.subtype === 'compact_boundary';
 }
 
-export function isSDKMessage(message: unknown): message is SDKMessage | SDKControlRequestMessage | SDKControlResponseMessage {
+export function isSDKMessage(message: unknown): message is SDKMessage | SDKControlRequestMessage | SDKControlResponseMessage | SDKSummaryMessage {
   return isSDKUserMessage(message) ||
          isSDKAssistantMessage(message) ||
          isSDKResultMessage(message) ||
@@ -107,7 +108,8 @@ export function isSDKMessage(message: unknown): message is SDKMessage | SDKContr
          isSDKPartialAssistantMessage(message) ||
          isSDKCompactBoundaryMessage(message) ||
          isSDKControlRequestMessage(message) ||
-         isSDKControlResponseMessage(message);
+         isSDKControlResponseMessage(message) ||
+         isSDKSummaryMessage(message);
 }
 
 // Control request message type (for approval requests and other control operations)
@@ -135,6 +137,13 @@ export interface SDKControlResponseMessage {
   };
 }
 
+// Summary message type (for generated summaries)
+export interface SDKSummaryMessage {
+  type: 'summary';
+  leafUuid: string;
+  summary: string;
+}
+
 // Type guard for control request messages
 export function isSDKControlRequestMessage(message: unknown): message is SDKControlRequestMessage {
   if (typeof message !== 'object' || message === null) {
@@ -148,6 +157,21 @@ export function isSDKControlRequestMessage(message: unknown): message is SDKCont
     typeof obj.request === 'object' &&
     obj.request !== null &&
     typeof (obj.request as Record<string, unknown>).subtype === 'string'
+  );
+}
+
+// Type guard for summary messages
+export function isSDKSummaryMessage(message: unknown): message is SDKSummaryMessage {
+  if (typeof message !== 'object' || message === null) {
+    return false;
+  }
+  
+  const obj = message as Record<string, unknown>;
+  
+  return (
+    obj.type === 'summary' &&
+    typeof obj.leafUuid === 'string' &&
+    typeof obj.summary === 'string'
   );
 }
 
@@ -173,13 +197,14 @@ export function isLikelyClaudeCodeMessage(data: unknown): boolean {
   // Check for key indicators of Claude Code messages
   return (
     'type' in obj &&
-    ('session_id' in obj || 'sessionId' in obj || obj.type === 'control_request' || obj.type === 'control_response') &&
+    ('session_id' in obj || 'sessionId' in obj || obj.type === 'control_request' || obj.type === 'control_response' || obj.type === 'summary') &&
     (obj.type === 'user' || 
      obj.type === 'assistant' || 
      obj.type === 'result' || 
      obj.type === 'system' ||
      obj.type === 'stream_event' ||
      obj.type === 'control_request' ||
-     obj.type === 'control_response')
+     obj.type === 'control_response' ||
+     obj.type === 'summary')
   );
 }
