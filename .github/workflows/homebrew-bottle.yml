@@ -1,0 +1,68 @@
+name: Build Homebrew Bottles
+
+on:
+  workflow_dispatch:
+  release:
+    types: [created]
+
+jobs:
+  bottle:
+    strategy:
+      matrix:
+        os: [macos-12, macos-13, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+        
+      - name: Install build dependencies
+        run: |
+          brew install rust node pkg-config openssl@3
+          
+      - name: Get version from tag
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION="0.1.0"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          
+      - name: Update formula version
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          sed -i.bak "s|url \".*\"|url \"https://github.com/fspv/chef-de-vibe/archive/refs/tags/${VERSION}.tar.gz\"|" Formula/chef-de-vibe.rb
+          
+      - name: Build bottle
+        run: |
+          brew install --build-bottle ./Formula/chef-de-vibe.rb
+          brew bottle --json --root-url="https://github.com/fspv/chef-de-vibe/releases/download/${{ steps.version.outputs.version }}" chef-de-vibe
+          
+      - name: Upload bottle
+        uses: actions/upload-artifact@v4
+        with:
+          name: bottle-${{ matrix.os }}
+          path: "*.bottle.*"
+          
+  upload-bottles:
+    needs: bottle
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download all bottles
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bottle-*
+          merge-multiple: true
+          
+      - name: Upload bottles to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: "*.bottle.*"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
