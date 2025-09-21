@@ -55,15 +55,6 @@ nix run github:fspv/chef-de-vibe
 Precompiled binaries for different platforms are available on the releases
 page.
 
-## Using Homebrew
-
-You can install directly from this repository using Homebrew:
-
-```sh
-# Install from the master branch
-brew install --HEAD --build-from-source https://raw.githubusercontent.com/fspv/chef-de-vibe/master/Formula/chef-de-vibe.rb
-```
-
 ## Using docker compose
 
 ```yaml
