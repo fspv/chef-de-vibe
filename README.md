@@ -1,3 +1,14 @@
+⚠️ **CRITICAL SECURITY WARNING** ⚠️
+
+**NEVER expose this application directly to the internet!** Chef De Vibe provides unrestricted command execution on your host machine. Exposing it publicly would give attackers complete control over your server. 
+
+**Only access this application through:**
+- Private VPN tunnels (e.g., Tailscale, WireGuard)
+- SSH port forwarding
+- Other secure, authenticated private networks
+
+---
+
 Claude in your pocket. Got a brilliant coding idea while away from your laptop? Don't wait - start coding immediately from your phone. Chef De Vibe runs persistent AI coding sessions on your server that you can access from anywhere - phone, tablet, laptop, or any browser. Never lose momentum on great ideas again.
 
 Chef De Vibe is flexible enough to run Claude instances however you prefer - directly on your system for simplicity, or in containers for security and isolation. Need to protect your server from potential AI mishaps? The included [claude-container](/claude-container) wrapper makes containerized execution effortless.
@@ -22,10 +33,10 @@ Then build and run backend (will embed frontend files inside)
 cargo run
 ```
 
-Then you can access it via ngrok
-```sh
-ngrok http 3000
-```
+Then you can access it via:
+- Tailscale (recommended for private access)
+- ngrok (use with authentication)
+- Cloudflare Tunnel (use with authentication)
 
 ## Using Nix
 
