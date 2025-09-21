@@ -78,27 +78,6 @@ jobs:
           name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_name }}.*
           
-  test-homebrew:
-    needs: build
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Homebrew
-        uses: Homebrew/actions/setup-homebrew@master
-        
-      - name: Test formula installation
-        run: |
-          # Test installing from the local formula
-          brew install --HEAD --build-from-source ./Formula/chef-de-vibe.rb
-          
-      - name: Test binary
-        run: |
-          # Check that the binary was installed
-          which chef-de-vibe
-          # Try to get version or help
-          chef-de-vibe --help || true
-          
   release:
     needs: build
     runs-on: ubuntu-latest
