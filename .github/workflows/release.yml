@@ -18,10 +18,14 @@ jobs:
       matrix:
         target:
           - x86_64-unknown-linux-gnu
+          - x86_64-unknown-linux-musl
           - x86_64-apple-darwin
           - aarch64-apple-darwin
         include:
           - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: false
+          - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             cross: false
           - target: x86_64-apple-darwin
@@ -50,6 +54,10 @@ jobs:
       run: npm run build
       working-directory: frontend
       
+    - name: Install musl tools (Linux musl only)
+      if: matrix.target == 'x86_64-unknown-linux-musl'
+      run: sudo apt-get update && sudo apt-get install -y musl-tools
+        
     - name: Setup Rust
       uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
@@ -62,7 +70,9 @@ jobs:
       
     - name: Build binary
       run: |
-        if [[ "${{ matrix.cross }}" == "true" ]]; then
+        if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-musl" ]]; then
+          RUSTFLAGS='-C target-feature=+crt-static' cargo build --release --target ${{ matrix.target }}
+        elif [[ "${{ matrix.cross }}" == "true" ]]; then
           cross build --release --target ${{ matrix.target }}
         else
           cargo build --release --target ${{ matrix.target }}
@@ -159,6 +169,7 @@ jobs:
         Pre-compiled binaries are available for multiple platforms:
         
         - **Linux (x86_64)**: \`chef-de-vibe-x86_64-unknown-linux-gnu\`
+        - **Linux (x86_64, static/musl)**: \`chef-de-vibe-x86_64-unknown-linux-musl\` - Works on any Linux without GLIBC dependency
         - **macOS (Intel)**: \`chef-de-vibe-x86_64-apple-darwin\`
         - **macOS (Apple Silicon)**: \`chef-de-vibe-aarch64-apple-darwin\`
         
@@ -192,6 +203,7 @@ jobs:
         Pre-compiled binaries are available for multiple platforms:
         
         - **Linux (x86_64)**: \`chef-de-vibe-x86_64-unknown-linux-gnu\`
+        - **Linux (x86_64, static/musl)**: \`chef-de-vibe-x86_64-unknown-linux-musl\` - Works on any Linux without GLIBC dependency
         - **macOS (Intel)**: \`chef-de-vibe-x86_64-apple-darwin\`
         - **macOS (Apple Silicon)**: \`chef-de-vibe-aarch64-apple-darwin\`
         
