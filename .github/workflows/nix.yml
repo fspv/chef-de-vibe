@@ -3,8 +3,12 @@ name: Nix Build
 on:
   push:
     branches: [ master, main ]
+    paths-ignore:
+      - '**/*.md'
   pull_request:
     branches: [ master, main ]
+    paths-ignore:
+      - '**/*.md'
 
 jobs:
   nix-build:
