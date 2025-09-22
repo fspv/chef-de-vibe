@@ -26,12 +26,12 @@
         # Frontend build using buildNpmPackage
         frontend = pkgs.buildNpmPackage {
           pname = "chef-de-vibe-frontend";
-          version = "0.2.2";
+          version = "0.2.3";
           
           src = ./frontend;
           
           # This hash will need to be updated - build once with wrong hash to get correct one
-          npmDepsHash = "sha256-BK/t2dOaSjL7zm/W+iv281Q1iyT7Bm5PVBUy8cwN+aM=";
+          npmDepsHash = "sha256-sHNUf6VvMybWCmefZo+gsyw5eAoGYwz3dkTwpJq9muI=";
           
           # Use nodejs 22
           nodejs = pkgs.nodejs_22;
