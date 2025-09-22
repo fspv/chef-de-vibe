@@ -8,6 +8,7 @@ interface SessionListProps {
   onNewChat: () => void;
   directoryPopup?: string | null;
   onDirectoryPathClick?: (directory: string | null) => void;
+  onRefetchSessions?: (refetch: () => Promise<void>) => void;
 }
 
 interface SessionGroup {
@@ -19,7 +20,7 @@ interface SessionGroup {
 const COLLAPSED_DIRS_KEY = 'chef-de-vibe-collapsed-dirs';
 const SESSIONS_PER_PAGE = 5;
 
-export function SessionList({ selectedSessionId, onSessionSelect, onNewChat, directoryPopup: externalDirectoryPopup, onDirectoryPathClick }: SessionListProps) {
+export function SessionList({ selectedSessionId, onSessionSelect, onNewChat, directoryPopup: externalDirectoryPopup, onDirectoryPathClick, onRefetchSessions }: SessionListProps) {
   const { sessions, loading, error, refetch } = useSessions();
   const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(new Set());
   const [showMoreCounts, setShowMoreCounts] = useState<Record<string, number>>({});
@@ -47,6 +48,13 @@ export function SessionList({ selectedSessionId, onSessionSelect, onNewChat, dir
   useEffect(() => {
     localStorage.setItem(COLLAPSED_DIRS_KEY, JSON.stringify(Array.from(collapsedDirs)));
   }, [collapsedDirs]);
+
+  // Pass refetch function to parent component
+  useEffect(() => {
+    if (onRefetchSessions) {
+      onRefetchSessions(refetch);
+    }
+  }, [onRefetchSessions, refetch]);
 
   // Group sessions by working directory and sort
   const groupedSessions = useMemo(() => {

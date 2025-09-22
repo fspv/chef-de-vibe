@@ -24,6 +24,7 @@ function SessionView() {
   const [showNewChatDialog, setShowNewChatDialog] = useState(false);
   const [directoryPopup, setDirectoryPopup] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
+  const [refetchSessions, setRefetchSessions] = useState<(() => Promise<void>) | null>(null);
 
   // Load sidebar state from localStorage on mount
   useEffect(() => {
@@ -553,6 +554,11 @@ function SessionView() {
 
     const response = await createSession(request);
     if (response) {
+      // Refetch sessions to update the list
+      if (refetchSessions) {
+        await refetchSessions();
+      }
+      
       // Only close dialog and navigate on success
       setShowNewChatDialog(false);
       
@@ -666,6 +672,7 @@ function SessionView() {
           onNewChat={handleNewChat}
           directoryPopup={directoryPopup}
           onDirectoryPathClick={handleDirectoryPathClick}
+          onRefetchSessions={(refetch) => setRefetchSessions(() => refetch)}
         />
         {isDesktop && !sidebarCollapsed && (
           <div 
