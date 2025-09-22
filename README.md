@@ -17,26 +17,12 @@ https://github.com/user-attachments/assets/26104cc3-6043-49bb-9aec-c6bb9aa2d9a7
 
 # Run
 
-## From source
-
-First build frontend
+## Using Brew
 
 ```sh
-cd frontend
-npm install
-npm run build
+brew install fspv/apps/chef-de-vibe
+chef-de-vibe
 ```
-
-Then build and run backend (will embed frontend files inside)
-
-```sh
-cargo run
-```
-
-Then you can access it via:
-- Tailscale (recommended for private access)
-- ngrok (use with authentication)
-- Cloudflare Tunnel (use with authentication)
 
 ## Using Nix
 
@@ -101,3 +87,24 @@ services:
   #     - ./tailscale/config:/config
   #   restart: unless-stopped
 ```
+
+## From source
+
+First build frontend
+
+```sh
+cd frontend
+npm install
+npm run build
+```
+
+Then build and run backend (will embed frontend files inside)
+
+```sh
+cargo run
+```
+
+Then you can access it via:
+- Tailscale (recommended for private access)
+- ngrok (use with authentication)
+- Cloudflare Tunnel (use with authentication)
