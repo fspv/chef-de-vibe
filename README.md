@@ -108,3 +108,7 @@ Then you can access it via:
 - Tailscale (recommended for private access)
 - ngrok (use with authentication)
 - Cloudflare Tunnel (use with authentication)
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.

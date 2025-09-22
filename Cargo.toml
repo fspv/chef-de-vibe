@@ -2,6 +2,7 @@
 name = "chef-de-vibe"
 version = "0.2.3"
 edition = "2021"
+license = "GPL-3.0"
 
 [lints.clippy]
 all = "warn"
