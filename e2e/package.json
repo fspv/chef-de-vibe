@@ -1,0 +1,16 @@
+{
+  "name": "chef-de-vibe-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "E2E tests for Chef de Vibe",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "test:headed": "playwright test --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^22.0.0"
+  }
+}

@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    tmpfs:
+      - /root/.claude/projects
+    security_opt:
+      - seccomp=unconfined
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  playwright:
+    build:
+      context: .
+      dockerfile: e2e.Dockerfile
+    environment:
+      - BASE_URL=http://localhost:3000
+      - CI=1
+    network_mode: "service:app"
+    security_opt:
+      - seccomp=unconfined
+    depends_on:
+      app:
+        condition: service_healthy
+    volumes:
+      - ./test-results:/tests/test-results
+      - ./playwright-report:/tests/playwright-report

@@ -63,8 +63,11 @@ RUN apk add --no-cache \
     podman \
     python3 \
     py3-pip \
-    curl && \
-    pip3 install --break-system-packages podman-compose
+    curl \
+    nodejs \
+    npm && \
+    pip3 install --break-system-packages podman-compose && \
+    npm install -g @anthropic-ai/claude-code
 
 # Copy the built static binary for the appropriate architecture
 ARG TARGETARCH

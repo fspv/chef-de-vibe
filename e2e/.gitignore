@@ -1,4 +1,5 @@
-target
 node_modules/
 test-results/
 playwright-report/
+.cache/
+package-lock.json
