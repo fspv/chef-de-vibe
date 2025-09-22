@@ -21,13 +21,20 @@ RUN npm run build
 FROM base AS backend-builder
 WORKDIR /app
 
-# Install Rust toolchain and musl target for static linking
+# Install Rust toolchain
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
-RUN rustup target add x86_64-unknown-linux-musl
 
-# Install musl-gcc for static linking
-RUN apk add --no-cache musl-dev
+# Detect architecture and add appropriate musl target
+ARG TARGETARCH
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+        rustup target add x86_64-unknown-linux-musl; \
+    elif [ "$TARGETARCH" = "arm64" ]; then \
+        rustup target add aarch64-unknown-linux-musl; \
+    fi
+
+# Install build dependencies
+RUN apk add --no-cache musl-dev gcc
 
 # Copy Cargo files
 COPY Cargo.toml Cargo.lock ./
@@ -38,9 +45,14 @@ COPY src/ ./src/
 # Copy built frontend from frontend-builder stage
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-# Build the backend as a static binary
+# Build the backend as a static binary for the appropriate architecture
 ENV RUSTFLAGS='-C target-feature=+crt-static'
-RUN cargo build --release --target x86_64-unknown-linux-musl
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+        export TARGET="x86_64-unknown-linux-musl"; \
+    elif [ "$TARGETARCH" = "arm64" ]; then \
+        export TARGET="aarch64-unknown-linux-musl"; \
+    fi && \
+    cargo build --release --target $TARGET
 
 # Final runtime stage
 FROM base AS runtime
@@ -54,8 +66,16 @@ RUN apk add --no-cache \
     curl && \
     pip3 install --break-system-packages podman-compose
 
-# Copy the built static binary
-COPY --from=backend-builder /app/target/x86_64-unknown-linux-musl/release/chef-de-vibe ./
+# Copy the built static binary for the appropriate architecture
+ARG TARGETARCH
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+        export TARGET_DIR="x86_64-unknown-linux-musl"; \
+    elif [ "$TARGETARCH" = "arm64" ]; then \
+        export TARGET_DIR="aarch64-unknown-linux-musl"; \
+    fi && \
+    echo "TARGET_DIR=$TARGET_DIR" > /tmp/target_dir
+
+COPY --from=backend-builder /app/target/*/release/chef-de-vibe ./
 
 # Copy the claude-container script to /bin
 COPY claude-container /bin/claude-container
