@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useSessions } from '../hooks/useApi';
+import { directoryCache } from '../services/directoryCache';
 import type { Session } from '../types/api';
 
 interface SessionListProps {
@@ -55,6 +56,14 @@ export function SessionList({ selectedSessionId, onSessionSelect, onNewChat, dir
       onRefetchSessions(refetch);
     }
   }, [onRefetchSessions, refetch]);
+
+  // Update directory cache whenever sessions are fetched
+  useEffect(() => {
+    if (sessions && sessions.length > 0) {
+      // Trigger cache update in the background
+      directoryCache.forceRefresh();
+    }
+  }, [sessions]);
 
   // Group sessions by working directory and sort
   const groupedSessions = useMemo(() => {

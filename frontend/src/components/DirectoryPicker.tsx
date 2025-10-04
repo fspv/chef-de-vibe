@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useSessions } from '../hooks/useApi';
+import { directoryCache, type DirectoryOption } from '../services/directoryCache';
 
 interface DirectoryPickerProps {
   value: string;
@@ -8,19 +8,70 @@ interface DirectoryPickerProps {
   className?: string;
 }
 
-interface DirectoryOption {
-  path: string;
-  lastUsed: string | null;
-  sessionCount: number;
-}
 
 export function DirectoryPicker({ value, onChange, placeholder = "Select or type a directory...", className = "" }: DirectoryPickerProps) {
-  const { sessions, loading } = useSessions();
+  const [directoryOptions, setDirectoryOptions] = useState<DirectoryOption[]>([]);
+  const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [filterText, setFilterText] = useState(value);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [isInteracting, setIsInteracting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const backgroundRefreshCompleted = useRef(false);
+
+  // Load directories from cache immediately on mount and trigger background refresh
+  useEffect(() => {
+    // Load cached data immediately
+    const cached = directoryCache.getCachedDirectories();
+    if (cached.length > 0) {
+      setDirectoryOptions(cached);
+    }
+
+    // Start background refresh
+    setLoading(true);
+    directoryCache.getDirectoriesWithBackgroundRefresh()
+      .then(({ directories, isFromCache, refreshPromise }) => {
+        if (isFromCache && directories.length > 0) {
+          // Already set from cache above, but update if needed
+          setDirectoryOptions(directories);
+        } else if (!isFromCache) {
+          // Fresh data, update immediately
+          setDirectoryOptions(directories);
+          setLoading(false);
+        }
+
+        // Handle background refresh if it exists
+        if (refreshPromise) {
+          refreshPromise
+            .then(() => {
+              // Store the new directories for later use
+              backgroundRefreshCompleted.current = true;
+              setLoading(false);
+            })
+            .catch((error) => {
+              console.error('Background refresh failed:', error);
+              setLoading(false);
+            });
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to get directories:', error);
+        setLoading(false);
+      });
+
+    // Subscribe to directory updates
+    const unsubscribe = directoryCache.subscribe(() => {
+      // Store updates for later application
+      backgroundRefreshCompleted.current = true;
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []); // Only run on mount
 
   // Sync filterText with value prop when it changes externally
   useEffect(() => {
@@ -29,47 +80,17 @@ export function DirectoryPicker({ value, onChange, placeholder = "Select or type
     }
   }, [value, isOpen]);
 
-
-  // Get unique directories with metadata, sorted by recent usage
-  const directoryOptions = useMemo(() => {
-    if (!sessions) return [];
-
-    // Group sessions by directory and collect metadata
-    const directoryMap = sessions.reduce<Record<string, DirectoryOption>>((acc, session) => {
-      const dir = session.working_directory;
-      if (!acc[dir]) {
-        acc[dir] = {
-          path: dir,
-          lastUsed: null,
-          sessionCount: 0
-        };
+  // Apply deferred updates when interaction ends and no search filter is active
+  useEffect(() => {
+    if (!isInteracting && !filterText.trim() && backgroundRefreshCompleted.current) {
+      // Get fresh data from cache
+      const cached = directoryCache.getCachedDirectories();
+      if (cached.length > 0) {
+        setDirectoryOptions(cached);
       }
-      
-      acc[dir].sessionCount++;
-      
-      // Track most recent usage
-      const sessionDate = session.latest_message_date || session.earliest_message_date || null;
-      if (sessionDate && (!acc[dir].lastUsed || sessionDate > acc[dir].lastUsed)) {
-        acc[dir].lastUsed = sessionDate;
-      }
-      
-      return acc;
-    }, {});
-
-    // Convert to array and sort by last used (most recent first), then by session count
-    return Object.values(directoryMap).sort((a, b) => {
-      // First sort by whether they have been used (used directories first)
-      if (a.lastUsed && !b.lastUsed) return -1;
-      if (!a.lastUsed && b.lastUsed) return 1;
-      if (!a.lastUsed && !b.lastUsed) {
-        // If neither has been used, sort by session count
-        return b.sessionCount - a.sessionCount;
-      }
-      
-      // Both have been used, sort by last used date
-      return (b.lastUsed || '').localeCompare(a.lastUsed || '');
-    });
-  }, [sessions]);
+      backgroundRefreshCompleted.current = false;
+    }
+  }, [isInteracting, filterText]);
 
   // Filter directories based on fuzzy matching
   const filteredOptions = useMemo(() => {
@@ -94,6 +115,7 @@ export function DirectoryPicker({ value, onChange, placeholder = "Select or type
   // Handle input focus
   const handleFocus = () => {
     setIsOpen(true);
+    setIsInteracting(true);
     setFilterText(value);
     setSelectedIndex(-1);
   };
@@ -102,6 +124,7 @@ export function DirectoryPicker({ value, onChange, placeholder = "Select or type
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setFilterText(newValue);
+    setIsInteracting(true);
     onChange(newValue);
     setSelectedIndex(-1);
     if (!isOpen) setIsOpen(true);
@@ -114,6 +137,7 @@ export function DirectoryPicker({ value, onChange, placeholder = "Select or type
       onChange(trimmedValue);
     }
     setIsOpen(false);
+    setIsInteracting(false);
   };
 
   // Handle option selection
@@ -121,6 +145,7 @@ export function DirectoryPicker({ value, onChange, placeholder = "Select or type
     setFilterText(directory);
     onChange(directory);
     setIsOpen(false);
+    setIsInteracting(false);
     setSelectedIndex(-1);
     if (inputRef.current) {
       inputRef.current.blur();
@@ -159,6 +184,7 @@ export function DirectoryPicker({ value, onChange, placeholder = "Select or type
             onChange(trimmedValue);
           }
           setIsOpen(false);
+          setIsInteracting(false);
           if (inputRef.current) {
             inputRef.current.blur();
           }
@@ -166,6 +192,7 @@ export function DirectoryPicker({ value, onChange, placeholder = "Select or type
         break;
       case 'Escape':
         setIsOpen(false);
+        setIsInteracting(false);
         setFilterText(value);
         if (inputRef.current) {
           inputRef.current.blur();
@@ -190,6 +217,7 @@ export function DirectoryPicker({ value, onChange, placeholder = "Select or type
           setFilterText(value);
         }
         setIsOpen(false);
+        setIsInteracting(false);
       }
     };
 
