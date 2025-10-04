@@ -150,6 +150,11 @@ function SessionView() {
       
       const target = e.target as HTMLElement;
       
+      // Don't interfere with fullscreen diff viewers or content viewers
+      if (target.closest('.diff-fullscreen, .content-fullscreen')) {
+        return;
+      }
+      
       // Don't interfere with clicks on interactive elements
       if (target.closest('.session-item, .group-header, button, a, input, textarea, .show-more-button')) {
         return;

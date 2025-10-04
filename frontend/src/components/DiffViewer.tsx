@@ -1,3 +1,4 @@
+import { useState, useEffect, useCallback } from 'react';
 import { parseDiff, Diff, Hunk } from 'react-diff-view';
 import 'react-diff-view/style/index.css';
 import type { FileEditInput } from '@anthropic-ai/claude-code/sdk-tools';
@@ -45,11 +46,39 @@ function createUnifiedDiff(oldString: string, newString: string, fileName = 'fil
 // Note: Syntax highlighting will be handled by the library's default behavior
 
 export function DiffViewer({ oldString, newString, fileName = 'file' }: DiffViewerProps) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   // Create unified diff
   const diffText = createUnifiedDiff(oldString, newString, fileName);
   
   // Parse the diff
   const files = parseDiff(diffText);
+  
+  // Handle ESC key to exit fullscreen
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+
+    if (isFullscreen) {
+      document.addEventListener('keydown', handleEsc);
+      // Prevent body scroll when fullscreen
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEsc);
+      document.body.style.overflow = '';
+    };
+  }, [isFullscreen]);
+
+  const toggleFullscreen = useCallback(() => {
+    setIsFullscreen(!isFullscreen);
+  }, [isFullscreen]);
   
   if (files.length === 0) {
     return (
@@ -65,48 +94,95 @@ export function DiffViewer({ oldString, newString, fileName = 'file' }: DiffView
   const hunks = file.hunks;
   
   return (
-    <div className="diff-viewer-container">
-      <div className="diff-file-header">
-        <span className="diff-file-name">{fileName}</span>
+    <>
+      <div className={`diff-viewer-container ${isFullscreen ? 'diff-fullscreen' : ''}`}>
+        <div className="diff-file-header">
+          <span className="diff-file-name">{fileName}</span>
+          <button 
+            className="diff-fullscreen-btn"
+            onClick={toggleFullscreen}
+            title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+          >
+            {isFullscreen ? '✕' : '⛶'}
+          </button>
+        </div>
+        <div className="diff-content">
+          <Diff 
+            viewType="unified" 
+            diffType={file.type}
+            hunks={hunks}
+          >
+            {(hunks) => hunks.map((hunk) => (
+              <Hunk key={hunk.content} hunk={hunk} />
+            ))}
+          </Diff>
+        </div>
       </div>
-      <div className="diff-content">
-        <Diff 
-          viewType="unified" 
-          diffType={file.type}
-          hunks={hunks}
-        >
-          {(hunks) => hunks.map((hunk) => (
-            <Hunk key={hunk.content} hunk={hunk} />
-          ))}
-        </Diff>
-      </div>
-    </div>
+      {isFullscreen && <div className="diff-fullscreen-backdrop" onClick={toggleFullscreen} />}
+    </>
   );
 }
 
 // Component specifically for Edit tool usage
 export function EditDiff({ toolInput }: { toolInput: FileEditInput }) {
   const { file_path, old_string, new_string } = toolInput;
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Handle ESC key to exit fullscreen
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+
+    if (isFullscreen) {
+      document.addEventListener('keydown', handleEsc);
+      // Prevent body scroll when fullscreen
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEsc);
+      document.body.style.overflow = '';
+    };
+  }, [isFullscreen]);
+
+  const toggleFullscreen = useCallback(() => {
+    setIsFullscreen(!isFullscreen);
+  }, [isFullscreen]);
   
   return (
-    <div className="edit-diff-simple">
-      <div className="edit-diff-header-simple">
-        <span className="edit-file-path">{file_path}</span>
-        {toolInput.replace_all && (
-          <span className="replace-all-badge">Replace All</span>
-        )}
+    <>
+      <div className={`edit-diff-simple ${isFullscreen ? 'diff-fullscreen' : ''}`}>
+        <div className="edit-diff-header-simple">
+          <span className="edit-file-path">{file_path}</span>
+          {toolInput.replace_all && (
+            <span className="replace-all-badge">Replace All</span>
+          )}
+          <button 
+            className="diff-fullscreen-btn"
+            onClick={toggleFullscreen}
+            title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+          >
+            {isFullscreen ? '✕' : '⛶'}
+          </button>
+        </div>
+        <div className="diff-content-simple">
+          <Diff 
+            viewType="unified" 
+            diffType="modify"
+            hunks={parseDiff(createUnifiedDiff(old_string, new_string, file_path))[0]?.hunks || []}
+          >
+            {(hunks) => hunks.map((hunk) => (
+              <Hunk key={hunk.content} hunk={hunk} />
+            ))}
+          </Diff>
+        </div>
       </div>
-      <div className="diff-content-simple">
-        <Diff 
-          viewType="unified" 
-          diffType="modify"
-          hunks={parseDiff(createUnifiedDiff(old_string, new_string, file_path))[0]?.hunks || []}
-        >
-          {(hunks) => hunks.map((hunk) => (
-            <Hunk key={hunk.content} hunk={hunk} />
-          ))}
-        </Diff>
-      </div>
-    </div>
+      {isFullscreen && <div className="diff-fullscreen-backdrop" onClick={toggleFullscreen} />}
+    </>
   );
 }
