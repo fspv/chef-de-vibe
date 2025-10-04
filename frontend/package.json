@@ -5,10 +5,11 @@
   "type": "module",
   "license": "GPL-3.0",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
+    "dev": "NODE_ENV=development vite",
+    "build": "NODE_ENV=production tsc -b && vite build",
+    "lint": "NODE_ENV=development eslint .",
+    "preview": "vite preview",
+    "postinstall": "NODE_ENV=development echo 'Dependencies installed in development mode'"
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "^1.0.110",
@@ -37,7 +38,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.3.0",
-    "typescript": "~5.8.3",
+    "typescript": "^5.8.3",
     "typescript-eslint": "^8.39.1",
     "vite": "^7.1.2"
   }
