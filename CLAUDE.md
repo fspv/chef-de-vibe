@@ -1,1 +1,5 @@
 - Run linter with `cargo clippy --all-targets --all-features`
+- Run tests with `cargo nextest run` for parallel execution (much faster than `cargo test`)
+  - Install nextest first with: `cargo install cargo-nextest --locked`
+  - Tests run in isolated processes, avoiding environment variable conflicts
+  - Use `cargo nextest run --no-fail-fast` to run all tests even if some fail

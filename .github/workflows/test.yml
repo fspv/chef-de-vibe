@@ -49,8 +49,11 @@ jobs:
     - name: Run clippy
       run: cargo clippy --all-targets --all-features -- -D warnings
       
-    - name: Run tests with single thread
-      run: cargo test -- --test-threads=1
+    - name: Install cargo-nextest
+      uses: taiki-e/install-action@nextest
+      
+    - name: Run tests in parallel with nextest
+      run: cargo nextest run --no-fail-fast
 
   frontend-build:
     runs-on: ubuntu-latest
