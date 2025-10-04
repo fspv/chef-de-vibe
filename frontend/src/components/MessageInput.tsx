@@ -37,6 +37,9 @@ export function MessageInput({
   const sendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const resizeHandleRef = useRef<HTMLDivElement>(null);
+  const inputAreaRef = useRef<HTMLDivElement>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const currentHeightRef = useRef<number>(120); // Track current height for DOM manipulation
   
   // Update input when initialValue changes (for restoring on error)
   useEffect(() => {
@@ -86,8 +89,18 @@ export function MessageInput({
     }
   }, [textareaHeight, onHeightChange]);
 
-  // Handle resize drag (mouse and touch)
+  // Handle resize drag (mouse and touch) with optimizations
   useEffect(() => {
+    const updateHeight = (newHeight: number) => {
+      // Apply height directly to DOM during resize to avoid React re-renders
+      if (inputAreaRef.current && isResizing) {
+        // Remove transition during active resizing
+        inputAreaRef.current.style.transition = 'none';
+        inputAreaRef.current.style.height = `${newHeight}px`;
+        currentHeightRef.current = newHeight;
+      }
+    };
+
     const handleMove = (clientY: number) => {
       if (!isResizing || !textareaRef.current) return;
       
@@ -97,7 +110,16 @@ export function MessageInput({
       const newHeight = containerRect.bottom - clientY;
       // Constrain between min and max heights
       const constrainedHeight = Math.max(60, Math.min(400, newHeight));
-      setTextareaHeight(constrainedHeight);
+      
+      // Cancel any pending animation frame
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      
+      // Use requestAnimationFrame to throttle updates
+      animationFrameRef.current = requestAnimationFrame(() => {
+        updateHeight(constrainedHeight);
+      });
     };
 
     const handleMouseMove = (e: MouseEvent) => {
@@ -116,6 +138,19 @@ export function MessageInput({
       document.body.style.userSelect = '';
       document.body.style.cursor = '';
       document.body.style.touchAction = ''; // Reset touch-action
+      
+      // Cancel any pending animation frame
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      
+      // Update React state only when resize ends
+      if (inputAreaRef.current) {
+        // Restore transition
+        inputAreaRef.current.style.transition = '';
+        setTextareaHeight(currentHeightRef.current);
+      }
     };
 
     if (isResizing) {
@@ -139,6 +174,11 @@ export function MessageInput({
       document.removeEventListener('touchmove', handleTouchMove);
       document.removeEventListener('touchend', handleEnd);
       document.removeEventListener('touchcancel', handleEnd);
+      
+      // Cleanup animation frame on unmount
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
     };
   }, [isResizing]);
 
@@ -232,7 +272,7 @@ export function MessageInput({
            title="Drag to resize">
         <div className="resize-handle-bar"></div>
       </div>
-      <div className="input-area" style={{ height: `${textareaHeight}px` }}>
+      <div className="input-area" ref={inputAreaRef} style={{ height: `${textareaHeight}px` }}>
         <textarea
           ref={textareaRef}
           value={input}

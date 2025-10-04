@@ -2226,6 +2226,7 @@ html, body {
   background-color: transparent;
   padding: 0;
   transition: height 0.1s ease-out;
+  will-change: height;
 }
 
 .input-area textarea {
