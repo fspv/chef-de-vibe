@@ -405,6 +405,8 @@ Summary: "Minimalist System Message Design for Chat Interface"
 - **Sessions without summaries**: Both active sessions and some completed sessions may not have summaries. For all such sessions, the backend extracts the first user message as a fallback "summary"
 - **Multiple summaries in a file**: A single file may contain summaries pointing to different sessions (the relationship between files and sessions is not 1:1)
 - **Orphaned summaries**: Some summaries might reference messages that no longer exist in the project files
+- **Duplicate summaries**: When multiple summaries point to the same UUID, the last one encountered wins (HashMap behavior)
+- **Session ID mismatch**: Files where the filename doesn't match the internal `sessionId` are skipped during session discovery
 
 #### Minimal Working Example
 
@@ -487,7 +489,7 @@ For GET /sessions/{session_id}:
 
 2. **Server validates** request:
    - Parse JSON (if fails → return 400 with `INVALID_REQUEST`)
-   - Check required fields present (session_id, working_dir, resume, bootstrap_messages)
+   - Check required fields present (session_id, working_dir, resume, bootstrap_messages) (if missing → return 422 Unprocessable Entity)
    - Check if session already exists in memory
      - If exists and running → return 200 with existing WebSocket URL immediately
      - If exists but not running → continue to step 3
@@ -869,7 +871,7 @@ Return combined list
 | Error Condition | Detection Point | Response | Recovery |
 |-----------------|-----------------|----------|----------|
 | Invalid JSON in HTTP request | Request parsing | HTTP 400 with `INVALID_REQUEST` | None |
-| Missing required field | Request validation | HTTP 400 with `INVALID_REQUEST` | None |
+| Missing required field | Request validation | HTTP 422 (Unprocessable Entity) | None |
 | Session file not found | GET /sessions/{id} | HTTP 404 with `SESSION_NOT_FOUND` | None |
 | Corrupted session file | File parsing | HTTP 400 with `FILE_PARSE_ERROR` | None |
 | Session ID mismatch | File validation | HTTP 400 with `FILE_PARSE_ERROR` | None |
