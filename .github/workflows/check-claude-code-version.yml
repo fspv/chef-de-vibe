@@ -40,14 +40,14 @@ jobs:
     - name: Get latest Claude Code version
       id: latest
       run: |
-        # Try to get the latest release from Claude Code repo
-        RESPONSE=$(curl -s "https://api.github.com/repos/anthropics/claude-code/releases/latest")
+        # Try to get the latest version from npm
+        RESPONSE=$(curl -s "https://registry.npmjs.org/@anthropic-ai/claude-code/latest")
         
-        # Extract tag name (version)
-        LATEST_VERSION=$(echo "$RESPONSE" | jq -r '.tag_name // empty' | sed 's/^v//')
+        # Extract version
+        LATEST_VERSION=$(echo "$RESPONSE" | jq -r '.version // empty')
         
         if [[ -z "$LATEST_VERSION" ]]; then
-          echo "Failed to fetch Claude Code version"
+          echo "Failed to fetch Claude Code version from npm"
           exit 1
         fi
         
