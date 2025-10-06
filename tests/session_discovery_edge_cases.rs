@@ -1,9 +1,7 @@
 mod helpers;
 
 use chef_de_vibe::{
-    api::handlers::AppState,
-    config::Config,
-    models::ListSessionsResponse,
+    api::handlers::AppState, config::Config, models::ListSessionsResponse,
     session_manager::SessionManager,
 };
 use helpers::logging::init_logging;
@@ -136,11 +134,7 @@ async fn test_orphaned_summaries_with_multiple_scenarios() {
     let body: ListSessionsResponse = response.json().await.unwrap();
 
     // Should find valid-session and circular-session, ignore pure orphans
-    let session_ids: Vec<String> = body
-        .sessions
-        .iter()
-        .map(|s| s.session_id.clone())
-        .collect();
+    let session_ids: Vec<String> = body.sessions.iter().map(|s| s.session_id.clone()).collect();
 
     assert!(session_ids.contains(&"valid-session".to_string()));
     assert!(session_ids.contains(&"circular-session".to_string()));
@@ -224,11 +218,7 @@ async fn test_corrupted_uuid_references() {
     let body: ListSessionsResponse = response.json().await.unwrap();
 
     // All sessions should be found despite corrupted UUID references
-    let session_ids: Vec<String> = body
-        .sessions
-        .iter()
-        .map(|s| s.session_id.clone())
-        .collect();
+    let session_ids: Vec<String> = body.sessions.iter().map(|s| s.session_id.clone()).collect();
 
     assert!(session_ids.contains(&"session-malformed".to_string()));
     assert!(session_ids.contains(&"session-empty".to_string()));
@@ -243,7 +233,10 @@ async fn test_corrupted_uuid_references() {
         .find(|s| s.session_id == "session-duplicate");
     assert!(dup_session.is_some());
     // The last summary in the file should be used due to HashMap overwriting
-    assert_eq!(dup_session.unwrap().summary, Some("Third Summary".to_string()));
+    assert_eq!(
+        dup_session.unwrap().summary,
+        Some("Third Summary".to_string())
+    );
 }
 
 #[tokio::test]
@@ -300,11 +293,7 @@ async fn test_complex_uuid_chain_resolution() {
     assert_eq!(response.status(), 200);
     let body: ListSessionsResponse = response.json().await.unwrap();
 
-    let session_ids: Vec<String> = body
-        .sessions
-        .iter()
-        .map(|s| s.session_id.clone())
-        .collect();
+    let session_ids: Vec<String> = body.sessions.iter().map(|s| s.session_id.clone()).collect();
 
     // Chain session should be found - but summary only works for direct UUID matches
     assert!(session_ids.contains(&"chain-session".to_string()));
@@ -315,7 +304,10 @@ async fn test_complex_uuid_chain_resolution() {
     assert!(chain_session.is_some());
     // System doesn't follow UUID chains, only direct matches
     // Since uuid-3 doesn't match uuid-1, falls back to user message
-    assert_eq!(chain_session.unwrap().summary, Some("End of chain".to_string()));
+    assert_eq!(
+        chain_session.unwrap().summary,
+        Some("End of chain".to_string())
+    );
 
     // Broken session should be found but without the broken chain summary
     assert!(session_ids.contains(&"broken-session".to_string()));
@@ -410,11 +402,7 @@ async fn test_uuid_reference_edge_cases() {
     assert_eq!(response.status(), 200);
     let body: ListSessionsResponse = response.json().await.unwrap();
 
-    let session_ids: Vec<String> = body
-        .sessions
-        .iter()
-        .map(|s| s.session_id.clone())
-        .collect();
+    let session_ids: Vec<String> = body.sessions.iter().map(|s| s.session_id.clone()).collect();
 
     // All valid sessions should be found
     assert!(session_ids.contains(&"special-session".to_string()));
@@ -466,11 +454,7 @@ async fn test_summary_without_uuid_field() {
     let body: ListSessionsResponse = response.json().await.unwrap();
 
     // Should still find the session despite malformed summaries
-    let session_ids: Vec<String> = body
-        .sessions
-        .iter()
-        .map(|s| s.session_id.clone())
-        .collect();
+    let session_ids: Vec<String> = body.sessions.iter().map(|s| s.session_id.clone()).collect();
 
     assert!(session_ids.contains(&"incomplete-session".to_string()));
 }

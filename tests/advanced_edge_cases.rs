@@ -15,7 +15,7 @@ use std::fs;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
-use tokio::time::{timeout, sleep};
+use tokio::time::{sleep, timeout};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use url::Url;
 
@@ -116,22 +116,19 @@ async fn test_claude_timeout_simulation_with_long_processing() {
     fs::create_dir_all(&working_dir).unwrap();
 
     // Create session
-    let session_file_path = server
-        .mock
-        .projects_dir
-        .join("timeout-session.jsonl");
+    let session_file_path = server.mock.projects_dir.join("timeout-session.jsonl");
     let session_content = format!(
         r#"{{"sessionId": "timeout-session", "cwd": "{}", "type": "start"}}"#,
         working_dir.display()
     );
-    
+
     let create_file_command = serde_json::json!({
         "control": "write_file",
         "path": session_file_path.to_string_lossy(),
         "content": session_content
     })
     .to_string();
-    
+
     // Command that makes mock Claude sleep (simulating timeout)
     let sleep_command = serde_json::json!({
         "control": "sleep",
@@ -168,10 +165,13 @@ async fn test_claude_timeout_simulation_with_long_processing() {
 
         // Try to get response with timeout - should timeout since Claude is sleeping
         let response = timeout(Duration::from_secs(2), ws.next()).await;
-        
+
         // We expect this to timeout since Claude is sleeping
-        assert!(response.is_err() || response.is_ok(), "System handles timeout gracefully");
-        
+        assert!(
+            response.is_err() || response.is_ok(),
+            "System handles timeout gracefully"
+        );
+
         let _ = ws.close(None).await;
     }
 }
@@ -186,10 +186,7 @@ async fn test_write_queue_clears_on_process_death() {
     fs::create_dir_all(&working_dir).unwrap();
 
     // Create session
-    let session_file_path = server
-        .mock
-        .projects_dir
-        .join("queue-clear-session.jsonl");
+    let session_file_path = server.mock.projects_dir.join("queue-clear-session.jsonl");
     let session_content = format!(
         r#"{{"sessionId": "queue-clear-session", "cwd": "{}", "type": "start"}}"#,
         working_dir.display()
@@ -233,9 +230,11 @@ async fn test_write_queue_clears_on_process_death() {
     sleep(Duration::from_millis(100)).await;
 
     // Kill the Claude process
-    ws.send(Message::Text(r#"{"control": "exit", "code": 1}"#.to_string()))
-        .await
-        .unwrap();
+    ws.send(Message::Text(
+        r#"{"control": "exit", "code": 1}"#.to_string(),
+    ))
+    .await
+    .unwrap();
 
     // Wait for process death and WebSocket closure
     let closed = timeout(Duration::from_secs(5), async {
@@ -299,7 +298,7 @@ async fn test_write_queue_strict_fifo_ordering() {
     // Connect multiple WebSocket clients
     let ws_url = format!("{}{}", server.ws_url, session_data.websocket_url);
     let url = Url::parse(&ws_url).unwrap();
-    
+
     let mut clients = Vec::new();
     for i in 0..3 {
         let (ws, _) = connect_async(url.clone()).await.unwrap();
@@ -311,13 +310,10 @@ async fn test_write_queue_strict_fifo_ordering() {
     for (client_id, ws) in &mut clients {
         for msg_num in 0..5 {
             let message_id = format!("C{client_id}M{msg_num}");
-            let message = format!(
-                r#"{{"role": "user", "content": "{}"}}"#,
-                message_id
-            );
+            let message = format!(r#"{{"role": "user", "content": "{}"}}"#, message_id);
             ws.send(Message::Text(message)).await.unwrap();
             send_order.push(message_id);
-            
+
             // Small delay between messages to ensure ordering
             sleep(Duration::from_millis(10)).await;
         }
@@ -326,7 +322,7 @@ async fn test_write_queue_strict_fifo_ordering() {
     // Collect echoed messages from first client to verify FIFO order
     let mut received_order = Vec::new();
     let (_, mut ws) = clients.into_iter().next().unwrap();
-    
+
     let collection_result = timeout(Duration::from_secs(5), async {
         while received_order.len() < send_order.len() {
             if let Some(Ok(Message::Text(text))) = ws.next().await {
@@ -357,7 +353,7 @@ async fn test_write_queue_strict_fifo_ordering() {
                 .iter()
                 .position(|id| id == received_id)
                 .expect("Received unknown message ID");
-            
+
             assert!(
                 current_index >= last_index,
                 "Messages received out of FIFO order: {} came before {}",
@@ -396,7 +392,7 @@ async fn test_extremely_large_bootstrap_messages() {
 
     // Create a very large bootstrap message array
     let mut bootstrap_messages = vec![create_file_command];
-    
+
     // Add 10 large bootstrap messages to test handling
     for i in 0..10 {
         let large_message = format!(
@@ -425,25 +421,28 @@ async fn test_extremely_large_bootstrap_messages() {
     // System should handle large bootstrap arrays
     // It might return 200 (success), 413 (payload too large), or 400 (bad request)
     let status = response.status();
-    
+
     if status == 200 {
         // If successful, verify session was created
         let session_data: CreateSessionResponse = response.json().await.unwrap();
         assert!(!session_data.websocket_url.is_empty());
-        
+
         // Try to connect and verify session is functional
         let ws_url = format!("{}{}", server.ws_url, session_data.websocket_url);
         let url = Url::parse(&ws_url).unwrap();
         let connect_result = connect_async(url).await;
-        
-        assert!(connect_result.is_ok(), "Should be able to connect to session");
-        
+
+        assert!(
+            connect_result.is_ok(),
+            "Should be able to connect to session"
+        );
+
         if let Ok((mut ws, _)) = connect_result {
             // Send a regular message to verify session works
             let test_msg = r#"{"role": "user", "content": "Test after bootstrap"}"#;
             let send_result = ws.send(Message::Text(test_msg.to_string())).await;
             assert!(send_result.is_ok(), "Should be able to send messages");
-            
+
             let _ = ws.close(None).await;
         }
     } else if status == 413 {
@@ -508,7 +507,7 @@ async fn test_bootstrap_messages_with_invalid_json_handling() {
     // The system should reject invalid JSON in bootstrap messages with 500
     // since it tries to spawn Claude with invalid JSON and fails
     let status = response.status();
-    
+
     assert_eq!(
         status, 500,
         "Should return 500 when bootstrap messages contain invalid JSON"
@@ -525,10 +524,7 @@ async fn test_session_id_placeholder_cleanup_on_resume() {
     fs::create_dir_all(&working_dir).unwrap();
 
     // Create an initial session that we'll resume
-    let original_session_file = server
-        .mock
-        .projects_dir
-        .join("original-session.jsonl");
+    let original_session_file = server.mock.projects_dir.join("original-session.jsonl");
     let original_content = format!(
         r#"{{"sessionId": "original-session", "cwd": "{}", "type": "start"}}
 {{"uuid": "msg1", "sessionId": "original-session", "type": "user", "message": {{"role": "user", "content": "Original message"}}}}"#,
@@ -555,30 +551,39 @@ async fn test_session_id_placeholder_cleanup_on_resume() {
 
     if response.status() == 200 {
         let session_data: CreateSessionResponse = response.json().await.unwrap();
-        
+
         // The placeholder should be replaced with the actual session ID
         assert_ne!(
-            session_data.session_id,
-            "resume-placeholder-{{SESSION_ID}}",
+            session_data.session_id, "resume-placeholder-{{SESSION_ID}}",
             "Placeholder should be replaced"
         );
-        
+
         // Verify the session is accessible by its actual ID
         let get_response = client
-            .get(format!("{}/api/v1/sessions/{}", server.base_url, session_data.session_id))
+            .get(format!(
+                "{}/api/v1/sessions/{}",
+                server.base_url, session_data.session_id
+            ))
             .send()
             .await
             .unwrap();
-        
-        assert_eq!(get_response.status(), 200, "Session should be accessible by actual ID");
-        
+
+        assert_eq!(
+            get_response.status(),
+            200,
+            "Session should be accessible by actual ID"
+        );
+
         // Verify the placeholder ID is not accessible
         let placeholder_response = client
-            .get(format!("{}/api/v1/sessions/resume-placeholder-{{{{SESSION_ID}}}}", server.base_url))
+            .get(format!(
+                "{}/api/v1/sessions/resume-placeholder-{{{{SESSION_ID}}}}",
+                server.base_url
+            ))
             .send()
             .await
             .unwrap();
-        
+
         assert_eq!(
             placeholder_response.status(),
             404,

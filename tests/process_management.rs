@@ -244,9 +244,11 @@ async fn test_websocket_close_code_1011_on_process_death() {
     let (mut ws, _) = connect_async(url).await.unwrap();
 
     // Establish connection
-    ws.send(Message::Text(r#"{"role": "user", "content": "Hello"}"#.to_string()))
-        .await
-        .unwrap();
+    ws.send(Message::Text(
+        r#"{"role": "user", "content": "Hello"}"#.to_string(),
+    ))
+    .await
+    .unwrap();
 
     // Small delay to ensure message is processed
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -274,7 +276,10 @@ async fn test_websocket_close_code_1011_on_process_death() {
     })
     .await;
 
-    assert!(timeout_result.is_ok(), "WebSocket should close within timeout");
+    assert!(
+        timeout_result.is_ok(),
+        "WebSocket should close within timeout"
+    );
 
     // According to Journey 6.7, we expect status 1011 (Internal Error)
     // However, the current implementation might not send this specific code yet
@@ -344,7 +349,10 @@ async fn test_claude_process_death_complete_journey() {
     assert_eq!(get_response.status(), 200);
     let initial_get: serde_json::Value = get_response.json().await.unwrap();
     assert!(initial_get.get("websocket_url").is_some());
-    assert!(initial_get["websocket_url"].as_str().unwrap().contains("/claude_ws"));
+    assert!(initial_get["websocket_url"]
+        .as_str()
+        .unwrap()
+        .contains("/claude_ws"));
 
     // Connect to WebSocket using URL from API response
     let ws_url = format!("{}{}", server.ws_url, session_data.websocket_url);
@@ -386,7 +394,10 @@ async fn test_claude_process_death_complete_journey() {
     .await;
 
     // Verify WebSocket closed (we expect it to close but may not get status 1011 in current impl)
-    assert!(close_result.is_ok(), "WebSocket should close after process death");
+    assert!(
+        close_result.is_ok(),
+        "WebSocket should close after process death"
+    );
 
     // Give server time to clean up after process death
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -401,13 +412,13 @@ async fn test_claude_process_death_complete_journey() {
     // Session should still exist in files but not be active
     assert_eq!(get_after_death.status(), 200);
     let final_get: serde_json::Value = get_after_death.json().await.unwrap();
-    
+
     // After process death, WebSocket URL should not be present
     // (According to Journey 6.7: "GET requests will now return without WebSocket URL")
     assert!(
-        final_get.get("websocket_url").is_none() || 
-        final_get["websocket_url"].is_null() ||
-        final_get["websocket_url"].as_str().unwrap_or("").is_empty(),
+        final_get.get("websocket_url").is_none()
+            || final_get["websocket_url"].is_null()
+            || final_get["websocket_url"].as_str().unwrap_or("").is_empty(),
         "WebSocket URL should not be present after process death"
     );
 
@@ -419,7 +430,9 @@ async fn test_claude_process_death_complete_journey() {
             // If connection succeeds, it should close immediately
             if let Ok((mut ws2, _)) = new_ws_attempt {
                 // Try to send a message - should fail or close immediately
-                let send_result = ws2.send(Message::Text(r#"{"test": "msg"}"#.to_string())).await;
+                let send_result = ws2
+                    .send(Message::Text(r#"{"test": "msg"}"#.to_string()))
+                    .await;
                 send_result.is_err() || {
                     // Check if WebSocket closes immediately
                     let close_check = timeout(Duration::from_millis(500), ws2.next()).await;
