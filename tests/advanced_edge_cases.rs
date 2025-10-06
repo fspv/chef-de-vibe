@@ -310,7 +310,7 @@ async fn test_write_queue_strict_fifo_ordering() {
     for (client_id, ws) in &mut clients {
         for msg_num in 0..5 {
             let message_id = format!("C{client_id}M{msg_num}");
-            let message = format!(r#"{{"role": "user", "content": "{}"}}"#, message_id);
+            let message = format!(r#"{{"role": "user", "content": "{message_id}"}}"#);
             ws.send(Message::Text(message)).await.unwrap();
             send_order.push(message_id);
 
@@ -451,7 +451,7 @@ async fn test_extremely_large_bootstrap_messages() {
     } else if status == 400 {
         // Bad request is also acceptable for extremely large arrays
     } else {
-        panic!("Unexpected status code: {}", status);
+        panic!("Unexpected status code: {status}");
     }
 }
 

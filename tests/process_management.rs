@@ -270,7 +270,7 @@ async fn test_websocket_close_code_1011_on_process_death() {
                     break;
                 }
                 Err(_) => break, // Connection error also means closure
-                _ => continue,
+                _ => {}
             }
         }
     })
@@ -289,8 +289,7 @@ async fn test_websocket_close_code_1011_on_process_death() {
         assert_eq!(
             code,
             CloseCode::Error,
-            "Expected close code 1011 (Internal Error) on process death, got {:?}",
-            code
+            "Expected close code 1011 (Internal Error) on process death, got {code:?}"
         );
     } else {
         // If no close code received, the test should note this for fixing
@@ -385,7 +384,7 @@ async fn test_claude_process_death_complete_journey() {
                     }
                     return None;
                 }
-                Ok(_) => continue,
+                Ok(_) => {}
                 Err(_) => return None,
             }
         }
@@ -436,7 +435,7 @@ async fn test_claude_process_death_complete_journey() {
                 send_result.is_err() || {
                     // Check if WebSocket closes immediately
                     let close_check = timeout(Duration::from_millis(500), ws2.next()).await;
-                    matches!(close_check, Ok(Some(Ok(Message::Close(_)))) | Ok(None))
+                    matches!(close_check, Ok(Some(Ok(Message::Close(_))) | None))
                 }
             } else {
                 true

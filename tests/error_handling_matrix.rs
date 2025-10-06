@@ -164,7 +164,7 @@ async fn test_session_id_mismatch_between_filename_and_content() {
 
             // Verify it's not marked as active (since it's malformed)
             assert_eq!(
-                session.get("active").and_then(|a| a.as_bool()),
+                session.get("active").and_then(serde_json::Value::as_bool),
                 Some(false),
                 "Mismatched session should not be active"
             );
@@ -326,35 +326,29 @@ async fn test_malformed_json_from_claude_causes_websocket_closure() {
         let ws_url = format!("{}{}", server.ws_url, session_data.websocket_url);
         let url = Url::parse(&ws_url).unwrap();
 
-        match connect_async(url).await {
-            Ok((mut ws, _)) => {
-                // Send a message that might trigger malformed response
-                let _ = ws
-                    .send(Message::Text(
-                        r#"{"role": "user", "content": "Test"}"#.to_string(),
-                    ))
-                    .await;
+        if let Ok((mut ws, _)) = connect_async(url).await {
+            // Send a message that might trigger malformed response
+            let _ = ws
+                .send(Message::Text(
+                    r#"{"role": "user", "content": "Test"}"#.to_string(),
+                ))
+                .await;
 
-                // Wait for potential error or close
-                let result = timeout(Duration::from_secs(2), ws.next()).await;
+            // Wait for potential error or close
+            let result = timeout(Duration::from_secs(2), ws.next()).await;
 
-                // If we get malformed JSON, the connection should close or error
-                match result {
-                    Ok(Some(Ok(Message::Close(_)))) => {
-                        // Good - connection closed due to malformed JSON
-                    }
-                    Ok(Some(Err(_))) => {
-                        // Good - error due to malformed JSON
-                    }
-                    _ => {
-                        // Connection might still be open but in error state
-                        let _ = ws.close(None).await;
-                    }
+            // If we get malformed JSON, the connection should close or error
+            match result {
+                Ok(Some(Ok(Message::Close(_)) | Err(_))) => {
+                    // Good - connection closed or errored due to malformed JSON
+                }
+                _ => {
+                    // Connection might still be open but in error state
+                    let _ = ws.close(None).await;
                 }
             }
-            Err(_) => {
-                // Connection failed - acceptable for malformed JSON scenario
-            }
+        } else {
+            // Connection failed - acceptable for malformed JSON scenario
         }
     }
 }
@@ -468,8 +462,7 @@ async fn test_client_sends_invalid_json_via_websocket() {
         // According to error matrix: "Client sends invalid JSON" should "Ignore message, log error" and "Continue"
         assert!(
             send_result.is_ok(),
-            "Should be able to send invalid JSON: {}",
-            invalid_json
+            "Should be able to send invalid JSON: {invalid_json}"
         );
     }
 
@@ -539,7 +532,7 @@ async fn test_concurrent_writes_to_same_session() {
     let url = Url::parse(&ws_url).unwrap();
 
     let mut clients = Vec::new();
-    for i in 0..5 {
+    for i in 0..5u32 {
         let (ws, _) = connect_async(url.clone()).await.unwrap();
         clients.push((i, ws));
     }
@@ -551,20 +544,17 @@ async fn test_concurrent_writes_to_same_session() {
         let handle = tokio::spawn(async move {
             for msg_num in 0..10 {
                 let message = format!(
-                    r#"{{"role": "user", "content": "Client {} message {}"}}"#,
-                    client_id, msg_num
+                    r#"{{"role": "user", "content": "Client {client_id} message {msg_num}"}}"#
                 );
 
                 let result = ws.send(Message::Text(message)).await;
                 assert!(
                     result.is_ok(),
-                    "Client {} failed to send message {}",
-                    client_id,
-                    msg_num
+                    "Client {client_id} failed to send message {msg_num}"
                 );
 
                 // Small random delay to create race conditions
-                tokio::time::sleep(Duration::from_millis(10 + (client_id as u64 * 3))).await;
+                tokio::time::sleep(Duration::from_millis(10 + (u64::from(client_id) * 3))).await;
             }
 
             // Close connection

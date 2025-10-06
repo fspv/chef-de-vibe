@@ -359,9 +359,8 @@ async fn test_uuid_reference_edge_cases() {
     fs::write(
         &long_uuid_file,
         format!(
-            r#"{{"type":"summary","summary":"Long UUID","leafUuid":"{}"}}
-{{"uuid":"{}","sessionId":"long-session","type":"user","message":{{"role":"user","content":"Long"}},"cwd":"/home/long"}}"#,
-            long_uuid, long_uuid
+            r#"{{"type":"summary","summary":"Long UUID","leafUuid":"{long_uuid}"}}
+{{"uuid":"{long_uuid}","sessionId":"long-session","type":"user","message":{{"role":"user","content":"Long"}},"cwd":"/home/long"}}"#
         ),
     )
     .unwrap();
