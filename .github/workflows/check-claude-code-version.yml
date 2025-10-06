@@ -1,0 +1,147 @@
+name: Check Claude Code Version and Release
+
+on:
+  schedule:
+    # Run daily at midnight UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Force a new release even if version unchanged'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Get current stored Claude Code version
+      id: current
+      run: |
+        if [[ -f .claude-code-version ]]; then
+          CURRENT_VERSION=$(cat .claude-code-version)
+        else
+          CURRENT_VERSION="0.0.0"
+        fi
+        echo "version=${CURRENT_VERSION}" >> $GITHUB_OUTPUT
+        echo "Current stored version: ${CURRENT_VERSION}"
+        
+    - name: Get latest Claude Code version
+      id: latest
+      run: |
+        # Try to get the latest release from Claude Code repo
+        RESPONSE=$(curl -s "https://api.github.com/repos/anthropics/claude-code/releases/latest")
+        
+        # Extract tag name (version)
+        LATEST_VERSION=$(echo "$RESPONSE" | jq -r '.tag_name // empty' | sed 's/^v//')
+        
+        if [[ -z "$LATEST_VERSION" ]]; then
+          echo "Failed to fetch Claude Code version"
+          exit 1
+        fi
+        
+        echo "version=${LATEST_VERSION}" >> $GITHUB_OUTPUT
+        echo "Latest Claude Code version: ${LATEST_VERSION}"
+        
+    - name: Compare versions and determine if update needed
+      id: compare
+      run: |
+        CURRENT="${{ steps.current.outputs.version }}"
+        LATEST="${{ steps.latest.outputs.version }}"
+        FORCE="${{ github.event.inputs.force_release }}"
+        
+        if [[ "$CURRENT" != "$LATEST" ]] || [[ "$FORCE" == "true" ]]; then
+          echo "update_needed=true" >> $GITHUB_OUTPUT
+          echo "Version update needed: $CURRENT -> $LATEST (Force: $FORCE)"
+        else
+          echo "update_needed=false" >> $GITHUB_OUTPUT
+          echo "No version update needed"
+        fi
+        
+    - name: Get app version from Cargo.toml
+      if: steps.compare.outputs.update_needed == 'true'
+      id: app_version
+      run: |
+        APP_VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+        echo "version=${APP_VERSION}" >> $GITHUB_OUTPUT
+        echo "App version: ${APP_VERSION}"
+        
+    - name: Update Claude Code version file
+      if: steps.compare.outputs.update_needed == 'true'
+      run: |
+        echo "${{ steps.latest.outputs.version }}" > .claude-code-version
+        
+    - name: Commit version update
+      if: steps.compare.outputs.update_needed == 'true'
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add .claude-code-version
+        git commit -m "[chore]: Update Claude Code version to ${{ steps.latest.outputs.version }}"
+        
+    - name: Push version file update
+      if: steps.compare.outputs.update_needed == 'true'
+      run: |
+        git push origin HEAD:${{ github.ref }}
+        
+    - name: Create git tag for chef-de-vibe version
+      if: steps.compare.outputs.update_needed == 'true'
+      id: tag
+      run: |
+        # Create a regular semver tag for chef-de-vibe
+        TAG_NAME="v${{ steps.app_version.outputs.version }}"
+        echo "name=${TAG_NAME}" >> $GITHUB_OUTPUT
+        
+        # Check if tag already exists
+        if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+          echo "Tag $TAG_NAME already exists"
+          # Get the next patch version
+          CURRENT_VERSION="${{ steps.app_version.outputs.version }}"
+          IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
+          NEW_PATCH=$((patch + 1))
+          TAG_NAME="v${major}.${minor}.${NEW_PATCH}"
+          echo "Creating new tag: $TAG_NAME"
+          echo "name=${TAG_NAME}" >> $GITHUB_OUTPUT
+          echo "exists=false" >> $GITHUB_OUTPUT
+          
+          # Also update Cargo.toml with new version
+          sed -i "s/^version = \".*\"/version = \"${major}.${minor}.${NEW_PATCH}\"/" Cargo.toml
+          git add Cargo.toml
+          git commit -m "[chore]: Bump version to ${major}.${minor}.${NEW_PATCH} for Claude Code ${{ steps.latest.outputs.version }}"
+          git push origin HEAD:${{ github.ref }}
+        else
+          echo "Creating tag: $TAG_NAME"
+          echo "exists=false" >> $GITHUB_OUTPUT
+        fi
+        
+        git tag "$TAG_NAME"
+        git push origin "$TAG_NAME"
+        
+    - name: Trigger release workflow
+      if: steps.compare.outputs.update_needed == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          // Trigger the release workflow which will build and push Docker images
+          // with the Claude Code version in the Docker tag
+          await github.rest.actions.createWorkflowDispatch({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            workflow_id: 'release.yml',
+            ref: '${{ steps.tag.outputs.name }}',
+            inputs: {
+              claude_code_version: '${{ steps.latest.outputs.version }}'
+            }
+          });
+          console.log('Triggered release workflow for tag: ${{ steps.tag.outputs.name }} with Claude Code version: ${{ steps.latest.outputs.version }}');

@@ -6,13 +6,25 @@ on:
     tags: [ 'v*' ]
     paths-ignore:
       - '**/*.md'
+  workflow_dispatch:
+    inputs:
+      claude_code_version:
+        description: 'Claude Code version for the release'
+        required: false
+        type: string
 
 jobs:
+  # Run tests first as a quality gate
+  test:
+    uses: ./.github/workflows/test.yml
+    
   build-docker:
     uses: ./.github/workflows/docker-build-push.yml
+    needs: [test]
     secrets: inherit
     
   build-binaries:
+    needs: [test]
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -120,15 +132,35 @@ jobs:
         echo "message=$(git log -1 --pretty=%B | head -n1)" >> $GITHUB_OUTPUT
         echo "date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_OUTPUT
         
+    - name: Get Claude Code version
+      id: claude_version
+      run: |
+        # Get from workflow input or from tag name
+        if [[ -n "${{ github.event.inputs.claude_code_version }}" ]]; then
+          echo "version=${{ github.event.inputs.claude_code_version }}" >> $GITHUB_OUTPUT
+        elif [[ "$GITHUB_REF" == refs/tags/*-claude-* ]]; then
+          # Extract Claude version from tag like v0.2.3-claude-1.0.108
+          CLAUDE_VERSION=$(echo "${GITHUB_REF#refs/tags/}" | sed 's/.*-claude-//')
+          echo "version=${CLAUDE_VERSION}" >> $GITHUB_OUTPUT
+        elif [[ -f .claude-code-version ]]; then
+          echo "version=$(cat .claude-code-version)" >> $GITHUB_OUTPUT
+        else
+          echo "version=unknown" >> $GITHUB_OUTPUT
+        fi
+        
     - name: Check if tag
       id: check_tag
       run: |
         if [[ $GITHUB_REF == refs/tags/* ]]; then
           echo "is_tag=true" >> $GITHUB_OUTPUT
-          echo "tag_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+          # Also set Docker tag with Claude version
+          echo "docker_tag=${TAG_NAME}-claude-${{ steps.claude_version.outputs.version }}" >> $GITHUB_OUTPUT
         else
           echo "is_tag=false" >> $GITHUB_OUTPUT
           echo "tag_name=pre-${{ steps.commit.outputs.sha }}" >> $GITHUB_OUTPUT
+          echo "docker_tag=pre-${{ steps.commit.outputs.sha }}" >> $GITHUB_OUTPUT
         fi
         
     - name: Generate release notes
@@ -148,13 +180,20 @@ jobs:
         fi
         
         if [[ "${{ steps.check_tag.outputs.is_tag }}" == "true" ]]; then
-          DOCKER_IMAGE="nuhotetotniksvoboden/chef-de-vibe:${{ steps.check_tag.outputs.tag_name }}"
+          DOCKER_IMAGE="nuhotetotniksvoboden/chef-de-vibe:${{ steps.check_tag.outputs.docker_tag }}"
         else
           DOCKER_IMAGE="nuhotetotniksvoboden/chef-de-vibe:pre-${{ steps.commit.outputs.sha }}"
         fi
         
+        CLAUDE_VERSION="${{ steps.claude_version.outputs.version }}"
+        
         if [[ "${{ steps.check_tag.outputs.is_tag }}" == "true" ]]; then
           cat << EOF > release_notes.md
+        ## 📦 Release Information
+        
+        - **Chef de Vibe Version:** ${{ steps.check_tag.outputs.tag_name }}
+        - **Claude Code Version:** ${CLAUDE_VERSION}
+        
         ## 🐳 Docker Image
         
         \`\`\`bash
@@ -183,9 +222,14 @@ jobs:
         EOF
         else
           cat << EOF > release_notes.md
+        ## 📦 Pre-Release Information
+        
+        - **Claude Code Version:** ${CLAUDE_VERSION}
+        - **Commit:** [\`${{ steps.commit.outputs.sha }}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+        
         ## 🐳 Docker Image
         
-        This pre-release contains the latest development build from commit [\`${{ steps.commit.outputs.sha }}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }}).
+        This pre-release contains the latest development build.
         
         ### Quick Start
         \`\`\`bash
