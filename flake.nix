@@ -31,7 +31,7 @@
           src = ./frontend;
           
           # This hash will need to be updated - build once with wrong hash to get correct one
-          npmDepsHash = "sha256-rg3UYF0pyHVllUhkYoQAo6VnAZ14QAgDQh84CMC7bXE=";
+          npmDepsHash = "sha256-/IJDlwk49XYgHZ+Ev17Nv+QbLvflZUkvTbzs26Mos4Q=";
           
           # Use nodejs 22
           nodejs = pkgs.nodejs_22;
