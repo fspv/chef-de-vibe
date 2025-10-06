@@ -3949,3 +3949,230 @@ pre,
   font-size: 11px;
   word-break: break-all;
 }
+
+/* Diff Fullscreen Styles */
+.diff-fullscreen-btn {
+  background: transparent;
+  border: 1px solid #dee2e6;
+  color: #6c757d;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 1rem;
+  line-height: 1;
+  transition: all 0.2s ease;
+  margin-left: auto;
+}
+
+.diff-fullscreen-btn:hover {
+  background-color: #f8f9fa;
+  border-color: #adb5bd;
+  color: #495057;
+}
+
+.diff-fullscreen-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9998;
+}
+
+.diff-viewer-container.diff-fullscreen,
+.edit-diff-simple.diff-fullscreen {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  right: 20px;
+  bottom: 20px;
+  z-index: 9999;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  max-width: none !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  touch-action: none !important;
+}
+
+.diff-fullscreen .diff-file-header,
+.diff-fullscreen .edit-diff-header-simple {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: white;
+  border-radius: 8px 8px 0 0;
+  flex-shrink: 0;
+}
+
+.diff-fullscreen .diff-content,
+.diff-fullscreen .diff-content-simple {
+  flex: 1;
+  overflow: auto !important;
+  padding: 1rem;
+  min-height: 0;
+  touch-action: pan-x pan-y !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+/* Override react-diff-view table styles in fullscreen */
+.diff-fullscreen .diff {
+  overflow: visible !important;
+  width: max-content !important;
+  min-width: 100% !important;
+}
+
+.diff-fullscreen table.diff {
+  table-layout: auto !important;
+  width: max-content !important;
+  min-width: 100% !important;
+  border-collapse: collapse;
+}
+
+/* Prevent line wrapping and ensure horizontal scroll */
+.diff-fullscreen .diff-code-col {
+  width: auto !important;
+  max-width: none !important;
+}
+
+.diff-fullscreen .diff-code {
+  white-space: pre !important;
+  word-wrap: normal !important;
+  word-break: normal !important;
+  overflow: visible !important;
+  display: block !important;
+}
+
+.diff-fullscreen .diff-line {
+  white-space: pre !important;
+  overflow: visible !important;
+  word-wrap: normal !important;
+  word-break: normal !important;
+}
+
+.diff-fullscreen td {
+  white-space: pre !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+  overflow: visible !important;
+}
+
+/* Ensure gutter columns don't stretch */
+.diff-fullscreen .diff-gutter-col {
+  width: 20px !important;
+  min-width: 20px !important;
+  max-width: 20px !important;
+  flex-shrink: 0;
+}
+
+/* Mobile adjustments for fullscreen */
+@media (max-width: 768px) {
+  .diff-viewer-container.diff-fullscreen,
+  .edit-diff-simple.diff-fullscreen {
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 0;
+  }
+  
+  .diff-fullscreen .diff-file-header,
+  .diff-fullscreen .edit-diff-header-simple {
+    border-radius: 0;
+  }
+}
+
+/* Content Fullscreen Styles (for tool results) */
+.content-fullscreen-btn {
+  background: transparent;
+  border: 1px solid #dee2e6;
+  color: #6c757d;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 1rem;
+  line-height: 1;
+  transition: all 0.2s ease;
+}
+
+.content-fullscreen-btn:hover {
+  background-color: #f8f9fa;
+  border-color: #adb5bd;
+  color: #495057;
+}
+
+.content-fullscreen-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9998;
+}
+
+.content-fullscreen {
+  position: fixed !important;
+  top: 20px;
+  left: 20px;
+  right: 20px;
+  bottom: 20px;
+  z-index: 9999;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 1rem !important;
+  overflow: hidden !important;
+  touch-action: none !important;
+}
+
+.content-fullscreen-body {
+  flex: 1;
+  overflow: auto !important;
+  min-height: 0;
+  touch-action: pan-x pan-y !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+/* Ensure proper scrolling for code blocks in fullscreen */
+.content-fullscreen pre {
+  white-space: pre !important;
+  word-wrap: normal !important;
+  word-break: normal !important;
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  max-height: 100%;
+  width: max-content !important;
+  min-width: 100%;
+}
+
+.content-fullscreen .collapsible-content pre {
+  padding: 1rem;
+  margin: 0;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+/* Hide collapse toggle in fullscreen */
+.content-fullscreen .collapse-toggle {
+  display: none;
+}
+
+/* Mobile adjustments for content fullscreen */
+@media (max-width: 768px) {
+  .content-fullscreen {
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 0;
+  }
+}
