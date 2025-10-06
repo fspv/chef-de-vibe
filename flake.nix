@@ -26,7 +26,7 @@
         # Frontend build using buildNpmPackage
         frontend = pkgs.buildNpmPackage {
           pname = "chef-de-vibe-frontend";
-          version = "0.2.3";
+          version = "0.2.4";
           
           src = ./frontend;
           
@@ -57,7 +57,7 @@
         # Rust application with embedded frontend
         chef-de-vibe = pkgs.rustPlatform.buildRustPackage {
           pname = "chef-de-vibe";
-          version = "0.2.2";
+          version = "0.2.4";
           
           src = ./.;
           
