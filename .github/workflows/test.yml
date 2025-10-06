@@ -23,7 +23,7 @@ jobs:
     - name: Download frontend build artifacts
       uses: actions/download-artifact@v4
       with:
-        name: frontend-dist
+        name: frontend-dist-${{ github.sha }}
         path: frontend/dist/
       
     - name: Setup Rust
@@ -80,3 +80,10 @@ jobs:
     - name: Build frontend
       run: npm run build
       working-directory: frontend
+      
+    - name: Upload frontend build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: frontend-dist-${{ github.sha }}
+        path: frontend/dist/
+        retention-days: 7

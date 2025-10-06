@@ -15,7 +15,8 @@
       "Bash(cargo clippy:*)",
       "Bash(npx tsc:*)",
       "Bash(cargo check:*)",
-      "Bash(cargo nextest run:*)"
+      "Bash(cargo nextest run:*)",
+      "Bash(find:*)"
     ],
     "deny": []
   },
