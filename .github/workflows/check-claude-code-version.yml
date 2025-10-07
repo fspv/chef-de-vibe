@@ -87,16 +87,41 @@ jobs:
       run: |
         git push origin HEAD:${{ github.ref }}
         
-    - name: Trigger Docker build workflow
+    - name: Get app version from Cargo.toml
+      if: steps.compare.outputs.update_needed == 'true'
+      id: app_version
+      run: |
+        APP_VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+        echo "version=${APP_VERSION}" >> $GITHUB_OUTPUT
+        echo "App version: ${APP_VERSION}"
+        
+    - name: Create and push release tag
+      if: steps.compare.outputs.update_needed == 'true'
+      run: |
+        TAG_NAME="v${{ steps.app_version.outputs.version }}-claude-code-v${{ steps.latest.outputs.version }}"
+        echo "Creating tag: ${TAG_NAME}"
+        
+        # Create annotated tag with message
+        git tag -a "${TAG_NAME}" -m "Release with Claude Code v${{ steps.latest.outputs.version }}"
+        
+        # Push the tag
+        git push origin "${TAG_NAME}"
+        
+    - name: Trigger release workflow
       if: steps.compare.outputs.update_needed == 'true'
       uses: actions/github-script@v7
       with:
         script: |
-          // Trigger the Docker build workflow directly without creating a new git tag
+          // Trigger the release workflow with the new tag
+          const tagName = `v${{ steps.app_version.outputs.version }}-claude-code-v${{ steps.latest.outputs.version }}`;
+          
           await github.rest.actions.createWorkflowDispatch({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            workflow_id: 'docker-build-push.yml',
-            ref: '${{ github.ref }}'
+            workflow_id: 'release.yml',
+            ref: `refs/tags/${tagName}`,
+            inputs: {
+              claude_code_version: '${{ steps.latest.outputs.version }}'
+            }
           });
-          console.log('Triggered Docker build workflow for Claude Code version: ${{ steps.latest.outputs.version }}');
+          console.log(`Triggered release workflow for tag: ${tagName}`);

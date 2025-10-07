@@ -139,8 +139,8 @@ jobs:
         if [[ -n "${{ github.event.inputs.claude_code_version }}" ]]; then
           echo "version=${{ github.event.inputs.claude_code_version }}" >> $GITHUB_OUTPUT
         elif [[ "$GITHUB_REF" == refs/tags/*-claude-* ]]; then
-          # Extract Claude version from tag like v0.2.3-claude-1.0.108
-          CLAUDE_VERSION=$(echo "${GITHUB_REF#refs/tags/}" | sed 's/.*-claude-//')
+          # Extract Claude version from tag like v0.2.3-claude-code-v1.0.108
+          CLAUDE_VERSION=$(echo "${GITHUB_REF#refs/tags/}" | sed 's/.*-claude-code-v//')
           echo "version=${CLAUDE_VERSION}" >> $GITHUB_OUTPUT
         elif [[ -f .claude-code-version ]]; then
           echo "version=$(cat .claude-code-version)" >> $GITHUB_OUTPUT
@@ -156,7 +156,8 @@ jobs:
           TAG_NAME="${GITHUB_REF#refs/tags/}"
           echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
           # Also set Docker tag with Claude version
-          echo "docker_tag=${TAG_NAME}-claude-${{ steps.claude_version.outputs.version }}" >> $GITHUB_OUTPUT
+          # For new tag format, docker tag should not duplicate claude version
+          echo "docker_tag=${TAG_NAME}" >> $GITHUB_OUTPUT
         else
           echo "is_tag=false" >> $GITHUB_OUTPUT
           echo "tag_name=pre-${{ steps.commit.outputs.sha }}" >> $GITHUB_OUTPUT
@@ -267,7 +268,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ steps.check_tag.outputs.tag_name }}
-        name: "Pre-release ${{ steps.commit.outputs.sha }}"
+        name: "Pre-release ${{ steps.commit.outputs.sha }} (Claude Code v${{ steps.claude_version.outputs.version }})"
         body_path: release_notes.md
         files: binaries/*
         prerelease: true
@@ -278,7 +279,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ steps.check_tag.outputs.tag_name }}
-        name: "Release ${{ steps.check_tag.outputs.tag_name }}"
+        name: "Release ${{ steps.check_tag.outputs.tag_name }} (Claude Code v${{ steps.claude_version.outputs.version }})"
         body_path: release_notes.md
         files: binaries/*
         prerelease: false

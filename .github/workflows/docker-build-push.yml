@@ -63,7 +63,8 @@ jobs:
         tags: |
           type=ref,event=branch,prefix=pre-
           type=ref,event=pr
-          type=raw,value={{version}}-claude-${{ steps.claude_version.outputs.version }},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+          type=raw,value={{version}},enable=${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-claude-code-') }}
+          type=raw,value={{version}}-claude-${{ steps.claude_version.outputs.version }},enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-claude-code-') }}
           type=raw,value={{major}}.{{minor}}-claude-${{ steps.claude_version.outputs.version }},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
           type=raw,value=${{ steps.app_version.outputs.version }}-claude-${{ steps.claude_version.outputs.version }},enable=${{ !startsWith(github.ref, 'refs/tags/') && github.ref == 'refs/heads/master' }}
           type=sha,prefix=pre-
@@ -147,7 +148,8 @@ jobs:
         tags: |
           type=ref,event=branch,prefix=pre-
           type=ref,event=pr
-          type=raw,value={{version}}-claude-${{ steps.claude_version.outputs.version }},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+          type=raw,value={{version}},enable=${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-claude-code-') }}
+          type=raw,value={{version}}-claude-${{ steps.claude_version.outputs.version }},enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-claude-code-') }}
           type=raw,value={{major}}.{{minor}}-claude-${{ steps.claude_version.outputs.version }},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
           type=raw,value=${{ steps.app_version.outputs.version }}-claude-${{ steps.claude_version.outputs.version }},enable=${{ !startsWith(github.ref, 'refs/tags/') && github.ref == 'refs/heads/master' }}
           type=sha,prefix=pre-
