@@ -26,12 +26,12 @@
         # Frontend build using buildNpmPackage
         frontend = pkgs.buildNpmPackage {
           pname = "chef-de-vibe-frontend";
-          version = "0.2.4";
+          version = "0.2.5";
           
           src = ./frontend;
           
           # This hash will need to be updated - build once with wrong hash to get correct one
-          npmDepsHash = "sha256-/IJDlwk49XYgHZ+Ev17Nv+QbLvflZUkvTbzs26Mos4Q=";
+          npmDepsHash = "sha256-loTRqseY2T3wOdVWmylQtM6KNnQpdRcxxqSci5PMNlE=";
           
           # Use nodejs 22
           nodejs = pkgs.nodejs_22;
@@ -57,7 +57,7 @@
         # Rust application with embedded frontend
         chef-de-vibe = pkgs.rustPlatform.buildRustPackage {
           pname = "chef-de-vibe";
-          version = "0.2.4";
+          version = "0.2.5";
           
           src = ./.;
           
