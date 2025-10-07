@@ -138,10 +138,6 @@ jobs:
         # Get from workflow input or from tag name
         if [[ -n "${{ github.event.inputs.claude_code_version }}" ]]; then
           echo "version=${{ github.event.inputs.claude_code_version }}" >> $GITHUB_OUTPUT
-        elif [[ "$GITHUB_REF" == refs/tags/*-claude-* ]]; then
-          # Extract Claude version from tag like v0.2.3-claude-code-v1.0.108
-          CLAUDE_VERSION=$(echo "${GITHUB_REF#refs/tags/}" | sed 's/.*-claude-code-v//')
-          echo "version=${CLAUDE_VERSION}" >> $GITHUB_OUTPUT
         elif [[ -f .claude-code-version ]]; then
           echo "version=$(cat .claude-code-version)" >> $GITHUB_OUTPUT
         else
