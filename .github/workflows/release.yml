@@ -156,8 +156,8 @@ jobs:
           echo "docker_tag=${TAG_NAME}" >> $GITHUB_OUTPUT
         else
           echo "is_tag=false" >> $GITHUB_OUTPUT
-          echo "tag_name=pre-${{ steps.commit.outputs.sha }}" >> $GITHUB_OUTPUT
-          echo "docker_tag=pre-${{ steps.commit.outputs.sha }}" >> $GITHUB_OUTPUT
+          echo "tag_name=dev-${{ steps.commit.outputs.sha }}" >> $GITHUB_OUTPUT
+          echo "docker_tag=dev-${{ steps.commit.outputs.sha }}" >> $GITHUB_OUTPUT
         fi
         
     - name: Generate release notes
@@ -165,7 +165,7 @@ jobs:
       run: |
         if [[ "${{ steps.check_tag.outputs.is_tag }}" == "true" ]]; then
           # For tagged releases, get changes since last tag
-          LAST_TAG=$(git tag --sort=-version:refname | grep -v "^pre-" | head -n2 | tail -n1 || echo "")
+          LAST_TAG=$(git tag --sort=-version:refname | grep -v "^dev-" | head -n2 | tail -n1 || echo "")
           if [[ -n "$LAST_TAG" ]]; then
             CHANGES=$(git log --pretty=format:"- %s (%h)" ${LAST_TAG}..HEAD)
           else
@@ -179,7 +179,7 @@ jobs:
         if [[ "${{ steps.check_tag.outputs.is_tag }}" == "true" ]]; then
           DOCKER_IMAGE="nuhotetotniksvoboden/chef-de-vibe:${{ steps.check_tag.outputs.docker_tag }}"
         else
-          DOCKER_IMAGE="nuhotetotniksvoboden/chef-de-vibe:pre-${{ steps.commit.outputs.sha }}"
+          DOCKER_IMAGE="nuhotetotniksvoboden/chef-de-vibe:dev-${{ steps.commit.outputs.sha }}"
         fi
         
         CLAUDE_VERSION="${{ steps.claude_version.outputs.version }}"
