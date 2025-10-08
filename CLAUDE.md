@@ -3,3 +3,12 @@
   - Install nextest first with: `cargo install cargo-nextest --locked`
   - Tests run in isolated processes, avoiding environment variable conflicts
   - Use `cargo nextest run --no-fail-fast` to run all tests even if some fail
+- To create a new app version
+  - update Cargo.toml
+  - update frontend/package.json
+  - update version in `flake.nix`
+  - run `CLAUDE_BINARY_PATH=missing nix run` and update hash in `flake.nix` if needed (it is fine if it fails with binary not found, it means it has been built correctly)
+  - run builds to update any lock files if needed
+  - commit a change
+  - create a git tag with the version, for example v0.2.3
+
