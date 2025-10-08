@@ -132,6 +132,12 @@ jobs:
         echo "message=$(git log -1 --pretty=%B | head -n1)" >> $GITHUB_OUTPUT
         echo "date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_OUTPUT
         
+    - name: Get app version from Cargo.toml
+      id: app_version
+      run: |
+        APP_VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*= *"\(.*\)"/\1/')
+        echo "version=${APP_VERSION}" >> $GITHUB_OUTPUT
+        
     - name: Get Claude Code version
       id: claude_version
       run: |
@@ -147,17 +153,20 @@ jobs:
     - name: Check if tag
       id: check_tag
       run: |
+        APP_VERSION="${{ steps.app_version.outputs.version }}"
+        CLAUDE_VERSION="${{ steps.claude_version.outputs.version }}"
+        
         if [[ $GITHUB_REF == refs/tags/* ]]; then
           echo "is_tag=true" >> $GITHUB_OUTPUT
-          TAG_NAME="${GITHUB_REF#refs/tags/}"
-          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
-          # Also set Docker tag with Claude version
-          # For new tag format, docker tag should not duplicate claude version
-          echo "docker_tag=${TAG_NAME}" >> $GITHUB_OUTPUT
+          # Use app version from Cargo.toml for tag name
+          echo "tag_name=v${APP_VERSION}" >> $GITHUB_OUTPUT
+          # Docker tag format: <app version>-claude-<claude code version>
+          echo "docker_tag=${APP_VERSION}-claude-${CLAUDE_VERSION}" >> $GITHUB_OUTPUT
         else
           echo "is_tag=false" >> $GITHUB_OUTPUT
           echo "tag_name=dev-${{ steps.commit.outputs.sha }}" >> $GITHUB_OUTPUT
-          echo "docker_tag=dev-${{ steps.commit.outputs.sha }}" >> $GITHUB_OUTPUT
+          # For dev builds, include commit sha in docker tag
+          echo "docker_tag=${APP_VERSION}-dev-${{ steps.commit.outputs.sha }}-claude-${CLAUDE_VERSION}" >> $GITHUB_OUTPUT
         fi
         
     - name: Generate release notes
@@ -176,11 +185,8 @@ jobs:
           CHANGES="- ${{ steps.commit.outputs.message }} (${{ steps.commit.outputs.sha }})"
         fi
         
-        if [[ "${{ steps.check_tag.outputs.is_tag }}" == "true" ]]; then
-          DOCKER_IMAGE="nuhotetotniksvoboden/chef-de-vibe:${{ steps.check_tag.outputs.docker_tag }}"
-        else
-          DOCKER_IMAGE="nuhotetotniksvoboden/chef-de-vibe:dev-${{ steps.commit.outputs.sha }}"
-        fi
+        # Always use the docker_tag from check_tag step
+        DOCKER_IMAGE="nuhotetotniksvoboden/chef-de-vibe:${{ steps.check_tag.outputs.docker_tag }}"
         
         CLAUDE_VERSION="${{ steps.claude_version.outputs.version }}"
         
@@ -235,7 +241,7 @@ jobs:
         \`\`\`
         
         ### 🔗 Links
-        - **📦 [View on Docker Hub](https://hub.docker.com/r/nuhotetotniksvoboden/chef-de-vibe/tags?name=pre-${{ steps.commit.outputs.sha }})**
+        - **📦 [View on Docker Hub](https://hub.docker.com/r/nuhotetotniksvoboden/chef-de-vibe/tags?name=${{ steps.check_tag.outputs.docker_tag }})**
         - **🏷️ [All Tags](https://hub.docker.com/r/nuhotetotniksvoboden/chef-de-vibe/tags)**
         - **💻 [Source Code](https://github.com/${{ github.repository }}/tree/${{ github.sha }})**
         
