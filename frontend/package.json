@@ -12,7 +12,7 @@
     "postinstall": "NODE_ENV=development echo 'Dependencies installed in development mode'"
   },
   "dependencies": {
-    "@anthropic-ai/claude-code": "^1.0.110",
+    "@anthropic-ai/claude-code": "^2.0.65",
     "@types/react-router-dom": "^5.3.3",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/uuid": "^10.0.0",
